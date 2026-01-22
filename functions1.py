@@ -515,8 +515,8 @@ class LEC_Opt_spot_fcrn_fcrd():
                 charge_point_calendar_cost = sum(getattr(model, f'{charge_point.name}_S{charge_point.session_id[ev_index]}_CalCost')[t] for ev_index in range(charge_point.num_evs))
                 return calendar_cost == charge_point_calendar_cost
             setattr(self.model, f'{charge_point.name}_calendar_cost_constraint', pyo.Constraint(self.model.T, rule=calendar_cost))
-        
-        #Building constraints:
+            
+        #Building constraints         
         for building in self.buildings:
             setattr(self.model, f'{building.name}_P', pyo.Var(self.model.T, within=pyo.Reals, bounds=(-1000000, 1000000)))
             setattr(self.model, f'{building.name}_bess_Pbid_fcrn', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, 1000000*self.fcrn_on*building.bess_capacity)))
@@ -636,6 +636,8 @@ class LEC_Opt_spot_fcrn_fcrd():
                 bess_Pbid_fcrn = getattr(model, f'{building.name}_bess_Pbid_fcrn')[t]
                 bess_Pbid_fcrdu = getattr(model, f'{building.name}_bess_Pbid_fcrdu')[t]
                 bess_soc = getattr(model, f'{building.name}_bess_soc')[t]
+                if building.bess_capacity == 0:
+                    return pyo.Constraint.Skip
                 return bess_soc >= 0.2 + ((1.34 * bess_Pbid_fcrn + bess_Pbid_fcrdu) * building.efficiency) / building.bess_capacity / self.resolution
             setattr(self.model, f'{building.name}_bess_fcrn_tech_req_up_constraint', pyo.Constraint(self.model.T, rule = building_bess_fcr_tech_req_up))
 
@@ -643,6 +645,8 @@ class LEC_Opt_spot_fcrn_fcrd():
                 bess_Pbid_fcrn = getattr(model, f'{building.name}_bess_Pbid_fcrn')[t]
                 bess_Pbid_fcrdd = getattr(model, f'{building.name}_bess_Pbid_fcrdd')[t]
                 bess_soc = getattr(model, f'{building.name}_bess_soc')[t]
+                if building.bess_capacity == 0:
+                    return pyo.Constraint.Skip
                 return bess_soc <= 1 - ((1.34 * bess_Pbid_fcrn + bess_Pbid_fcrdd) / building.efficiency) / building.bess_capacity / self.resolution
             setattr(self.model, f'{building.name}_bess_fcrn_tech_req_down_constraint', pyo.Constraint(self.model.T, rule = building_bess_fcr_tech_req_down))
 
@@ -664,6 +668,8 @@ class LEC_Opt_spot_fcrn_fcrd():
                 cyclic_aging = getattr(model, f'{building.name}_bess_CycAg')[t]
                 bess_ch = (getattr(model, f'{building.name}_bess_ch')[t] + getattr(model, f'{building.name}_bess_Pch_fcrn')[t] + getattr(model, f'{building.name}_bess_Pch_fcrd')[t]) / self.resolution
                 bess_ds = (getattr(model, f'{building.name}_bess_ds')[t] + getattr(model, f'{building.name}_bess_Pds_fcrn')[t] + getattr(model, f'{building.name}_bess_Pds_fcrd')[t]) / self.resolution
+                if building.bess_capacity == 0:
+                    return cyclic_aging == 0
                 return cyclic_aging == (0.01*(((0.0000086*(self.temperature[t]**2)-0.0051*self.temperature[t]+0.763)*\
                                                       (67.15*bess_ch+67.15*bess_ds-2.94))/(building.bess_BatVol*building.bess_capacity)))
             setattr(self.model, f'{building.name}_bess_cyclic_aging_constraint', pyo.Constraint(self.model.T, rule = building_bess_cyclic_aging))
