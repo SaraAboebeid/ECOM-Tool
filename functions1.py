@@ -1024,7 +1024,7 @@ class LEC_Opt_spot_fcrn_fcrd():
         results['FCRD returns'] = [pyo.value(self.model.fcrd_returns[t]) for t in self.model.T]
         return pd.DataFrame(results)
 
-def optimization_function_lec(charging_point_data, building_data, prices, temperature, activation, start_date, days, horizon_hours = 36, store_hours = 24, building_on = 0, previous_monthly_peak = 0, current_month = 1, initial_bess_soc = 0.5):
+def optimization_function_lec(charging_point_data, building_data, prices, temperature, activation, start_date, days, horizon_hours = 36, fcrn_on=0, fcrdd_on=0, fcrdu_on=0, aging=0, v2g_on=0, dc=False, store_hours = 24, building_on = 1, previous_monthly_peak = 0, current_month = 1, initial_bess_soc = 0.5, pv_on = 1, bess_on = 1):
     previous_soc = pd.DataFrame(index=range(1), columns=list(building_data.keys()))
     previous_soc.iloc[:, :] = initial_bess_soc
     unfeasible_days = []
@@ -1050,7 +1050,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
         print("=" * 40)
         print(f"🔄 Day {day + 1} Optimization ({horizon_hours}h Horizon)")
 
-        resolution = 3600/(prices['Spot prices'].index[1] - prices['Spot prices'].index[0]).total_seconds()
+        resolution = int(3600/(prices['Spot prices'].index[1] - prices['Spot prices'].index[0]).total_seconds())
         if resolution == 1:
             freq_index = '60min'
         elif resolution == 4:
@@ -1071,13 +1071,13 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                 
                 load = building_data[name].loc[start_time:end_time - timedelta(hours=1), 'electricity_load']
                 load = load[~load.index.duplicated(keep='first')]
-                load = load.reindex(full_index, method = 'ffill') / 4
+                load = load.reindex(full_index, method = 'ffill') / resolution
 
                 pv = building_data[name].loc[start_time:end_time - timedelta(hours=1), 'pv_production']
-                pv = pv[~pv.index.duplicated(keep='first')]
-                pv = pv.reindex(full_index, method = 'ffill') / 4
+                pv = pv[~pv.index.duplicated(keep='first')] * pv_on
+                pv = pv.reindex(full_index, method = 'ffill') / resolution
 
-                bess_capacity = building_data[name]['bess_capacity'].iloc[0]
+                bess_capacity = building_data[name]['bess_capacity'].iloc[0] * bess_on
                 bess_max_power = building_data[name]['bess_power'].iloc[0]
 
                 print(f"  - Building {name} with initial SOC {previous_soc[name].iloc[0]}")
@@ -1107,7 +1107,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
             print("   ↪ Checking ongoing sessions from previous day")
             for idx, session in enumerate(ongoing_sessions[cp_name]):
                 if session['departure_time'] > start_time:
-                    dep_time = int((session['departure_time'] - start_time).total_seconds() // 900)
+                    dep_time = int((session['departure_time'] - start_time).total_seconds() // (60 * 60 / resolution))
                     ev_index = len(capacities)
                     session['ev_index'] = ev_index
                     capacities.append(session['capacity'])
@@ -1123,7 +1123,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                     session_ids.append(session['session_id'])
 
                     print(f"     ✅ Continued EV{session['ev_id']}: dep_time_slot={dep_time}, SOC={session['last_soc']}")
-                    if session['departure_time'] > end_time:
+                    if session['departure_time'] > opt_end_time:
                         new_ongoing_sessions[cp_name].append(session)
 
             # b) Add new sessions that start in first 24 hours
@@ -1134,8 +1134,8 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
             ]
 
             for idx, row in today_sessions.iterrows():
-                arrival_time = int((row['Arrival'] - start_time).total_seconds() // 900)
-                departure_time = int((row['Departure'] - start_time).total_seconds() // 900)
+                arrival_time = int((row['Arrival'] - start_time).total_seconds() // (60 * 60 / resolution))
+                departure_time = int((row['Departure'] - start_time).total_seconds() // (60 * 60 / resolution))
 
                 capacities.append(row['Capacity'])
                 max_powers.append(row['Max_Power'])
@@ -1144,8 +1144,8 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                 if row['Departure'] > end_time:
                     connected_time = departure_time - arrival_time
                     slope_linear = (row['Desired SOC'] - row['Arrival SOC']) / connected_time
-                    linear_requested = slope_linear * (horizon_hours * 4 - arrival_time)
-                    departures.append(horizon_hours * 4) #need to fix if they connect just before the end of horizon then what should be desired soc?
+                    linear_requested = slope_linear * (horizon_hours * resolution - arrival_time)
+                    departures.append(horizon_hours * resolution) #need to fix if they connect just before the end of horizon then what should be desired soc?
                     session = {
                         'capacity': row['Capacity'],
                         'max_power': row['Max_Power'],
@@ -1176,6 +1176,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                         'ev_id': row['ev_id'],
                         'session_id': row['session_id']
                     }
+                    print(f"     ➕ New EV (spans days): arrival {arrival_time}, will depart next day at: {departure_time}")
                     new_ongoing_sessions[cp_name].append(session)
                     new_sessions_starting_tomorrow.append(session)
                 else:
@@ -1215,7 +1216,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
         
         opt_model = LEC_Opt_spot_fcrn_fcrd(charging_point_list, building_list, spot_prices, temperature=temperatures, fcrn_prices=fcrn_prices, fcrdu_prices=fcrdu_prices, fcrdd_prices=fcrdd_prices,
                                     reg_up=up_reg, reg_down=down_reg, act_fcrn_up=act_up_fcrn, act_fcrn_down=act_down_fcrn, 
-                                    act_fcrd_up=act_up_fcrd, act_fcrd_down=act_down_fcrd, fcrn_on=0, fcrdd_on=0, fcrdu_on=0, aging=0, resolution=resolution ,v2g_on=1, dc = False)
+                                    act_fcrd_up=act_up_fcrd, act_fcrd_down=act_down_fcrd, fcrn_on=fcrn_on, fcrdd_on=fcrdd_on, fcrdu_on=fcrdu_on, aging=aging, resolution=resolution ,v2g_on=v2g_on, dc = dc)
 
         results_df = opt_model.solve()
         if results_df.solver.termination_condition == TerminationCondition.maxTimeLimit:
@@ -1234,16 +1235,16 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
         print("   ✅ Optimization complete")
         for col in df.columns:
             if '_soc' in col:
-                print(col, "→", df[col].iloc[store_hours * 4 - 1])
+                print(col, "→", df[col].iloc[store_hours * resolution - 1])
         print("\n✅ Columns in results DataFrame:")
         print([col for col in df.columns if '_soc' in col])
 
         # Save first 24h of results
         print("Step 3: Saving 24h results to cumulative DataFrame")
-        rolling_results = pd.concat([rolling_results, df.iloc[:store_hours * 4]])
+        rolling_results = pd.concat([rolling_results, df.iloc[:store_hours * resolution]])
         opt_month = rolling_results.index[-1].month
         if current_month - opt_month == 0:
-            opt_peak = (df['P_import_all'].iloc[:24] - df['P_export_all'].iloc[:24]).max()   #needs to be from the opt
+            opt_peak = (df['P_import_all'].iloc[:store_hours * resolution] - df['P_export_all'].iloc[:store_hours * resolution]).max()   #needs to be from the opt
             if previous_monthly_peak < opt_peak:
                 previous_monthly_peak = opt_peak
         else:
@@ -1254,7 +1255,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
         if building_on == 1:
             print("Step 4: Updating building SOCs")
             for name in building_data.keys():
-                soc_val = df[f'{name}_bess_soc'].iloc[store_hours * 4 - 1]
+                soc_val = df[f'{name}_bess_soc'].iloc[store_hours * resolution - 1]
                 previous_soc[name].iloc[0] = soc_val
                 print(f"  🔋 {name} end-of-day SOC: {soc_val:.2f}")
         else:
@@ -1266,7 +1267,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
             for session in ongoing_sessions[cp_name]:
                 ev_name = f"{session['cp_name']}"
                 if ev_name + "_soc" in df.columns:
-                    session['last_soc'] = df[f'{ev_name}_soc'].iloc[store_hours * 4 - 1]
+                    session['last_soc'] = df[f'{ev_name}_soc'].iloc[store_hours * resolution - 1]
                     print(f"🔄 Updated {ev_name} SOC = {session['last_soc']:.2f}")
                 else:
                     print(f"⚠️ Warning: {ev_name}_soc not found in results")
@@ -1276,7 +1277,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
         for session in new_sessions_starting_tomorrow:
             ev_name = f"{session['cp_name']}"
             if f"{ev_name}_soc" in df.columns:
-                session['last_soc'] = float(df[f"{ev_name}_soc"].iloc[store_hours * 4 - 1])
+                session['last_soc'] = float(df[f"{ev_name}_soc"].iloc[store_hours * resolution - 1])
                 print(f"🚚 {ev_name}: SOC carried to next day = {session['last_soc']:.2f}")
             else:
                 print(f"⚠️ Could not update SOC for {ev_name}")
@@ -1297,6 +1298,5 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
     rolling_results['DSO cost'] = rolling_results['Transmission cost'] + rolling_results['Peak cost']
     rolling_results['Tax cost'] = 0.25 * (rolling_results['Supplier cost'] + rolling_results['DSO cost']) + 1.25 * 0.439 * (rolling_results['P_import_all'] - rolling_results['P_export_all']) / resolution
     rolling_results['Overall cost'] = rolling_results['DSO cost'] + rolling_results['Supplier cost'] + rolling_results['Tax cost'] - rolling_results['FCRN returns'] - rolling_results['FCRD returns']
-
     print(f'\n \n Overall simulation completed - number of unfesible days: {len(unfeasible_days)} and they are: {unfeasible_days}')
     return rolling_results
