@@ -1115,7 +1115,10 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                     arrivals.append(0)
                     departures.append(min(dep_time, horizon_hours * 4))
                     arrival_socs.append(session['last_soc'])
-                    desired_socs.append(session['desired_soc'])
+                    if session['departure_time'] < end_time:
+                        desired_socs.append(session['last_desired_soc'])
+                    else:
+                        desired_socs.append(session['last_desired_soc'])
                     ev_ids.append(session['ev_id'])
                     session_ids.append(session['session_id'])
 
@@ -1149,6 +1152,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                         'departure_time': row['Departure'],
                         'last_soc': None,
                         'desired_soc': row['Arrival SOC'] + linear_requested, #row['Desired SOC'],
+                        'last_desired_soc': row['Desired SOC'],
                         'cp_name': cp_name,
                         'ev_index': len(capacities) - 1,
                         'ev_id': row['ev_id'],
@@ -1166,6 +1170,7 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                         'departure_time': row['Departure'],
                         'last_soc': None,
                         'desired_soc': row['Desired SOC'],
+                        'last_desired_soc': row['Desired SOC'],
                         'cp_name': cp_name,
                         'ev_index': len(capacities) - 1,
                         'ev_id': row['ev_id'],
@@ -1292,6 +1297,6 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
     rolling_results['DSO cost'] = rolling_results['Transmission cost'] + rolling_results['Peak cost']
     rolling_results['Tax cost'] = 0.25 * (rolling_results['Supplier cost'] + rolling_results['DSO cost']) + 1.25 * 0.439 * (rolling_results['P_import_all'] - rolling_results['P_export_all']) / resolution
     rolling_results['Overall cost'] = rolling_results['DSO cost'] + rolling_results['Supplier cost'] + rolling_results['Tax cost'] - rolling_results['FCRN returns'] - rolling_results['FCRD returns']
-    
+
     print(f'\n \n Overall simulation completed - number of unfesible days: {len(unfeasible_days)} and they are: {unfeasible_days}')
     return rolling_results
