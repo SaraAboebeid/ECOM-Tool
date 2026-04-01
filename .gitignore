@@ -1,2 +1,3 @@
 # Ignore the folder "Individual tests"
 Individual tests/
+Data/.DS_Store
