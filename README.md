@@ -1,2 +1,3 @@
 # LEC-Opt
-By Araavind, Reza and Surya
+By Araavind, Reza, Surya and Mahan!
+
