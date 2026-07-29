@@ -6,6 +6,8 @@ interface TimelineProps {
   onHourChange: (hour: number) => void;
   onPlayPause: () => void;
   isSankeyOpen?: boolean;
+  /** Length of the dispatched period. Set by the analysis period, not fixed. */
+  totalHours?: number;
 }
 
 export const Timeline = ({
@@ -14,7 +16,9 @@ export const Timeline = ({
   onHourChange,
   onPlayPause,
   isSankeyOpen = false,
+  totalHours = 48,
 }: TimelineProps) => {
+  const hours = Math.max(1, totalHours);
   const [localHour, setLocalHour] = useState(currentHour);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -26,11 +30,11 @@ export const Timeline = ({
     let interval: number;
     if (isPlaying) {
       interval = window.setInterval(() => {
-        onHourChange((currentHour + 1) % 48);
+        onHourChange((currentHour + 1) % hours);
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, currentHour, onHourChange]);
+  }, [isPlaying, currentHour, onHourChange, hours]);
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newHour = parseInt(event.target.value, 10);
@@ -88,15 +92,15 @@ export const Timeline = ({
           <input
             type="range"
             min="0"
-            max="47"
-            value={localHour}
+            max={hours - 1}
+            value={Math.min(localHour, hours - 1)}
             onChange={handleSliderChange}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
           />
         </div>
 
         <span className="text-gray-500 dark:text-gray-400 text-sm">
-          Hour {localHour + 1}/48
+          Hour {Math.min(localHour, hours - 1) + 1}/{hours}
         </span>
       </div>
     </div>

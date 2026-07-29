@@ -1,12 +1,26 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Graph } from './components/Graph/';
 import { Timeline } from './components/Timeline';
 import { Legend } from './components/Legend';
 import { DashboardHeader } from './components/DashboardHeader';
 import { FpsCounter } from './components/FpsCounter';
 import { SankeyDrawer } from './components/SankeyDrawer';
+import { CommunityControls } from './components/CommunityControls';
 import { GraphData } from './types';
 import { COMPASS_ORIENTATION } from './utils/backgroundConfig';
+import {
+  ApiError,
+  CommunityDefinition,
+  DEFAULT_COMMUNITY,
+  DEMO_SCENARIO,
+  ScenarioSummary,
+  dispatchCommunity,
+  listScenarios,
+  loadScenario,
+} from './api/community';
+
+/** A dispatch takes ~2 s, so wait for the slider to settle before asking. */
+const DISPATCH_DEBOUNCE_MS = 400;
 
 function App() {
   const [data, setData] = useState<GraphData | null>(null);
@@ -20,46 +34,100 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [fitToViewFn, setFitToViewFn] = useState<(() => void) | null>(null);
   const [isSankeyOpen, setIsSankeyOpen] = useState(false);
+  const [definition, setDefinition] = useState<CommunityDefinition>(DEFAULT_COMMUNITY);
+  const [isComputing, setIsComputing] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ period: string; hours: number } | null>(null);
+  // Owners are seeded from the first successful response only; re-seeding on
+  // every dispatch would reset the user's filter selection mid-session.
+  const ownersSeeded = useRef(false);
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([DEMO_SCENARIO]);
+  const [activeScenario, setActiveScenario] = useState<string>(DEMO_SCENARIO.name);
 
+  // Saved definitions live on the backend; the built-in demo stays first so
+  // there is always something to fall back to if the API is unreachable.
   useEffect(() => {
-    fetch('/graph.json')
-      .then(res => res.json())
-      .then((fetchedData) => {
-        setData(fetchedData);
-        
-        // Initialize available owners and building types
-        if (fetchedData && fetchedData.nodes) {
-          const owners = new Set<string>();
-          
-          fetchedData.nodes.forEach((node: any) => {
-            // Collect from current owner field
-            if (node.owner) {
-              owners.add(node.owner);
-            }
-            // Also collect from VALID_OWNERS array if it exists
-            if (node.VALID_OWNERS && Array.isArray(node.VALID_OWNERS)) {
-              node.VALID_OWNERS.forEach((owner: string) => {
-                owners.add(owner);
-              });
-            }
-          });
-          
-          // Initialize all owners as active
-          setActiveOwners(new Set(owners));
-          
-          // Set capacity range based on actual data
-          const capacities = fetchedData.nodes
-            .filter((node: any) => node.capacity || node.installed_capacity)
-            .map((node: any) => node.capacity || node.installed_capacity || 0);
-          
-          if (capacities.length > 0) {
-            const maxCapacity = Math.max(...capacities);
-            setCapacityRange({ min: 0, max: Math.ceil(maxCapacity / 10) * 10 });
-          }
+    listScenarios()
+      .then((found) => {
+        setScenarios([DEMO_SCENARIO, ...found]);
+        // Prefer a real campus over the demo on first load.
+        const campus = found.find((s) => s.name.startsWith('campus'));
+        if (campus) {
+          setActiveScenario(campus.name);
         }
       })
-      .catch(console.error);
+      .catch(() => setScenarios([DEMO_SCENARIO]));
   }, []);
+
+  useEffect(() => {
+    if (activeScenario === DEMO_SCENARIO.name) {
+      setDefinition(DEFAULT_COMMUNITY);
+      return;
+    }
+    let cancelled = false;
+    loadScenario(activeScenario)
+      .then((loaded) => {
+        if (cancelled) return;
+        ownersSeeded.current = false;   // re-seed filters for the new community
+        setDefinition(loaded);
+      })
+      .catch((err) => {
+        if (!cancelled) setDispatchError(String(err.message ?? err));
+      });
+    return () => { cancelled = true; };
+  }, [activeScenario]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setIsComputing(true);
+      dispatchCommunity(definition, controller.signal)
+        .then((response) => {
+          setData(response);
+          setMeta({ period: response.meta.period, hours: response.meta.hours });
+          setDispatchError(null);
+
+          if (!ownersSeeded.current) {
+            ownersSeeded.current = true;
+            const owners = new Set<string>();
+            response.nodes.forEach((node: any) => {
+              if (node.owner) owners.add(node.owner);
+              if (Array.isArray(node.VALID_OWNERS)) {
+                node.VALID_OWNERS.forEach((o: string) => owners.add(o));
+              }
+            });
+            setActiveOwners(owners);
+
+            const capacities = response.nodes
+              .map((n: any) => n.capacity || n.installed_capacity || 0)
+              .filter((c: number) => c > 0);
+            if (capacities.length > 0) {
+              setCapacityRange({
+                min: 0,
+                max: Math.ceil(Math.max(...capacities) / 10) * 10,
+              });
+            }
+          }
+        })
+        .catch((err) => {
+          if (err.name === 'AbortError') return;   // superseded by a newer edit
+          setDispatchError(
+            err instanceof ApiError
+              ? err.message
+              : 'Could not reach the backend. Start it with:\n' +
+                'cd backend && python -m uvicorn app.main:app --reload --port 8000',
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsComputing(false);
+        });
+    }, DISPATCH_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [definition]);
 
   useEffect(() => {
     // Check localStorage first, then system preference
@@ -165,10 +233,29 @@ function App() {
     capacityRange
   }), [activeTypes, minFlow, activeOwners, v2gFilter, capacityRange]);
 
+  // Shrinking the period can leave the timeline past the end of the new flows.
+  useEffect(() => {
+    if (meta && currentHour >= meta.hours) {
+      setCurrentHour(Math.max(0, meta.hours - 1));
+    }
+  }, [meta, currentHour]);
+
   if (!data) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        {dispatchError ? (
+          <div className="max-w-lg p-4 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200">
+            <p className="font-semibold mb-2">The first dispatch failed</p>
+            <pre className="text-xs whitespace-pre-wrap font-mono">{dispatchError}</pre>
+          </div>
+        ) : (
+          <>
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Dispatching the community…
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -225,6 +312,17 @@ function App() {
           onFitToView={handleFitToView}
         />
 
+        <CommunityControls
+          definition={definition}
+          onChange={setDefinition}
+          isComputing={isComputing}
+          error={dispatchError}
+          meta={meta}
+          scenarios={scenarios}
+          activeScenario={activeScenario}
+          onScenarioChange={setActiveScenario}
+        />
+
         <Legend
           activeTypes={activeTypes}
           onToggleType={toggleNodeType}
@@ -261,6 +359,7 @@ function App() {
             onHourChange={setCurrentHour}
             onPlayPause={togglePlayPause}
             isSankeyOpen={isSankeyOpen}
+            totalHours={meta?.hours ?? 48}
           />
         </div>
         

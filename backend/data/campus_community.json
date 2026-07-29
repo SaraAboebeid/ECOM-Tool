@@ -1,0 +1,725 @@
+{
+  "name": "Chalmers Campus 2022",
+  "buildings": [
+    {
+      "name": "Fysik origo",
+      "owner": "Akademiska Hus",
+      "building_type": "College",
+      "footprint_area": 4051.8,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.01_Fysik_origo_2022.csv"
+      },
+      "location": {
+        "x": -372.43,
+        "y": 168.95
+      }
+    },
+    {
+      "name": "IT",
+      "owner": "Studentbostäder",
+      "building_type": "LargeDataCenterHighITE",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.05_IT_2022.csv"
+      },
+      "location": {
+        "x": -459.58,
+        "y": -557.23
+      }
+    },
+    {
+      "name": "Elkraftteknik",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 1900.8,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Elkraftteknik_2022.csv"
+      },
+      "location": {
+        "x": -258.81,
+        "y": -219.33
+      }
+    },
+    {
+      "name": "Idélära",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 485.6,
+      "number_of_floors": 2,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.18 Idelära\\electricity_2022.csv"
+      },
+      "location": {
+        "x": -316.94,
+        "y": -222.1
+      }
+    },
+    {
+      "name": "HC",
+      "owner": "Studentbostäder",
+      "building_type": "MidriseApartment",
+      "footprint_area": 1005.0,
+      "number_of_floors": 3,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.21_HC_2022.csv"
+      },
+      "location": {
+        "x": -218.04,
+        "y": -162.28
+      }
+    },
+    {
+      "name": "HA",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 1179.1,
+      "number_of_floors": 2,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.22_HA_2022.csv"
+      },
+      "location": {
+        "x": -225.83,
+        "y": 6.69
+      }
+    },
+    {
+      "name": "SB2",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 2642.1,
+      "number_of_floors": 7,
+      "pv_plants": [
+        "SB2-PV_1",
+        "SB2-PV_2"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.23_SB2_2022.csv"
+      },
+      "location": {
+        "x": -414.52,
+        "y": -168.88
+      }
+    },
+    {
+      "name": "Edit",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 4617.6,
+      "number_of_floors": 9,
+      "pv_plants": [
+        "Edit-PV_1",
+        "Edit-PV_2"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.24_Edit_2022.csv"
+      },
+      "location": {
+        "x": -280.63,
+        "y": -159.35
+      }
+    },
+    {
+      "name": "HB",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 1465.7,
+      "number_of_floors": 3,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.25_HB_2022.csv"
+      },
+      "location": {
+        "x": -221.88,
+        "y": -75.71
+      }
+    },
+    {
+      "name": "SB1",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 3055.5,
+      "number_of_floors": 9,
+      "pv_plants": [
+        "SB1-PV_1",
+        "SB1-PV_2"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.26_SB1_2022.csv"
+      },
+      "location": {
+        "x": -415.6,
+        "y": -117.07
+      }
+    },
+    {
+      "name": "SB3",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 7385.3,
+      "number_of_floors": 4,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.27_SB3_2022.csv"
+      },
+      "location": {
+        "x": -408.57,
+        "y": -288.99
+      }
+    },
+    {
+      "name": "Maskinteknik",
+      "owner": "Akademiska Hus",
+      "building_type": "College",
+      "footprint_area": 8329.0,
+      "number_of_floors": 7,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.28_Maskinteknik_2022.csv"
+      },
+      "location": {
+        "x": -280.76,
+        "y": -51.01
+      }
+    },
+    {
+      "name": "Gamla matte",
+      "owner": "Chalmersfastigheter",
+      "building_type": "College",
+      "footprint_area": 2346.7,
+      "number_of_floors": 5,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.40_Gamla_matte_2022.csv"
+      },
+      "location": {
+        "x": -184.99,
+        "y": -486.74
+      }
+    },
+    {
+      "name": "Lokalkontor",
+      "owner": "Studentbostäder",
+      "building_type": "LargeOffice",
+      "footprint_area": 2456.8,
+      "number_of_floors": 7,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.888_Lokalkontor_2022.csv"
+      },
+      "location": {
+        "x": -312.7,
+        "y": 13.38
+      }
+    },
+    {
+      "name": "CA-Huset",
+      "owner": "Studentbostäder",
+      "building_type": "LargeOffice",
+      "footprint_area": 221.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CA-Huset_2022.csv"
+      },
+      "location": {
+        "x": -463.72,
+        "y": 136.34
+      }
+    },
+    {
+      "name": "CSB Chabo",
+      "owner": "Studentbostäder",
+      "building_type": "LargeOffice",
+      "footprint_area": 2274.1,
+      "number_of_floors": 11,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CSB_Chabo_2022.csv"
+      },
+      "location": {
+        "x": -253.57,
+        "y": 298.39
+      }
+    },
+    {
+      "name": "CSB Gibraltarvallen guesthouse",
+      "owner": "Studentbostäder",
+      "building_type": "LargeOffice",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CSB_Gibraltarvallen_guesthouse_2022.csv"
+      },
+      "location": {
+        "x": -172.91,
+        "y": 40.59
+      }
+    },
+    {
+      "name": "CSB Holtermansgatan",
+      "owner": "Studentbostäder",
+      "building_type": "LargeOffice",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CSB_Holtermansgatan_2022.csv"
+      }
+    },
+    {
+      "name": "Emils kårhus",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Emils_kårhus_2022.csv"
+      },
+      "location": {
+        "x": -194.62,
+        "y": 192.11
+      }
+    },
+    {
+      "name": "JSP",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 2274.8,
+      "number_of_floors": 8,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\JSP_2022.csv"
+      },
+      "location": {
+        "x": -411.94,
+        "y": -416.34
+      }
+    },
+    {
+      "name": "Kårhus entré",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [
+        "Karhus-PV"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Kårhus_entré_2022.csv"
+      },
+      "location": {
+        "x": -485.19,
+        "y": 37.85
+      }
+    },
+    {
+      "name": "Kårresturangen",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Kårresturangen_2022.csv"
+      }
+    },
+    {
+      "name": "MC2",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 5982.3,
+      "number_of_floors": 9,
+      "pv_plants": [
+        "MC2-PV"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\MC2_2022.csv"
+      },
+      "location": {
+        "x": -365.75,
+        "y": 252.18
+      }
+    },
+    {
+      "name": "Nya Matte",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 2540.6,
+      "number_of_floors": 7,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Nya_Matte_2022.csv"
+      },
+      "location": {
+        "x": -297.7,
+        "y": 100.74
+      }
+    },
+    {
+      "name": "Reaktorfysik",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Reaktorfysik_2022.csv"
+      },
+      "location": {
+        "x": -355.23,
+        "y": 188.88
+      }
+    },
+    {
+      "name": "Teknikparken",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 4080.3,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Teknikparken_2022.csv"
+      },
+      "location": {
+        "x": -469.61,
+        "y": -481.45
+      }
+    },
+    {
+      "name": "Vasa 1",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 1834.1,
+      "number_of_floors": 5,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_1_2022.csv"
+      },
+      "location": {
+        "x": -333.35,
+        "y": 484.61
+      }
+    },
+    {
+      "name": "Vasa 4",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_4_2022.csv"
+      },
+      "location": {
+        "x": -352.73,
+        "y": 341.23
+      }
+    },
+    {
+      "name": "Vasa 7",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_7_2022.csv"
+      },
+      "location": {
+        "x": -354.8,
+        "y": 363.69
+      }
+    },
+    {
+      "name": "Vasa 8",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 1703.1,
+      "number_of_floors": 5,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_8_2022.csv"
+      },
+      "location": {
+        "x": -288.84,
+        "y": 394.56
+      }
+    },
+    {
+      "name": "Vasa 9",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 599.7,
+      "number_of_floors": 5,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_9_2022.csv"
+      },
+      "location": {
+        "x": -260.28,
+        "y": 362.09
+      }
+    },
+    {
+      "name": "Vasa 10",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 706.0,
+      "number_of_floors": 4,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_10_2022.csv"
+      },
+      "location": {
+        "x": -208.06,
+        "y": 400.01
+      }
+    },
+    {
+      "name": "Vasa 11",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_11_2022.csv"
+      }
+    },
+    {
+      "name": "Vasa 12",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 294.7,
+      "number_of_floors": 2,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_12_2022.csv"
+      },
+      "location": {
+        "x": -220.86,
+        "y": 442.32
+      }
+    },
+    {
+      "name": "Vasa 13",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_13_2022.csv"
+      },
+      "location": {
+        "x": -364.54,
+        "y": 427.53
+      }
+    },
+    {
+      "name": "Vasa 15",
+      "owner": "Studentbostäder",
+      "building_type": "College",
+      "footprint_area": 0.0,
+      "number_of_floors": 1,
+      "pv_plants": [],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_15_2022.csv"
+      },
+      "location": {
+        "x": -218.94,
+        "y": 265.44
+      }
+    }
+  ],
+  "pv_plants": [
+    {
+      "name": "SB2-PV_1",
+      "surface_area": 609.18,
+      "percentage": 93.0,
+      "system_loss": 14.0,
+      "slope": 6.212,
+      "azimuth": 159.029,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "SB2-PV_2",
+      "surface_area": 603.78,
+      "percentage": 93.0,
+      "system_loss": 14.0,
+      "slope": 6.286,
+      "azimuth": 249.029,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "Edit-PV_1",
+      "surface_area": 683.15,
+      "percentage": 70.0,
+      "system_loss": 14.0,
+      "slope": 0.0,
+      "azimuth": 0.0,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "Edit-PV_2",
+      "surface_area": 637.56,
+      "percentage": 70.0,
+      "system_loss": 14.0,
+      "slope": 0.0,
+      "azimuth": 180.0,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "SB1-PV_1",
+      "surface_area": 603.78,
+      "percentage": 50.0,
+      "system_loss": 14.0,
+      "slope": 6.286,
+      "azimuth": 249.029,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "SB1-PV_2",
+      "surface_area": 609.18,
+      "percentage": 50.0,
+      "system_loss": 14.0,
+      "slope": 6.212,
+      "azimuth": 159.029,
+      "lat": 57.68873,
+      "lon": 11.977887
+    },
+    {
+      "name": "Karhus-PV",
+      "surface_area": 1138.0,
+      "slope": 10.0,
+      "azimuth": 180.0,
+      "percentage": 70.0,
+      "system_loss": 14.0,
+      "module": {
+        "name": "Karhus 350W Panel",
+        "rating": 350.0,
+        "size_x": 1.0,
+        "size_y": 2.0,
+        "cost_per_kwp": 3100.0,
+        "embodied_co2_per_kwp": 615.0
+      }
+    },
+    {
+      "name": "MC2-PV",
+      "surface_area": 4785.6,
+      "slope": 10.0,
+      "azimuth": 180.0,
+      "percentage": 70.0,
+      "system_loss": 14.0,
+      "module": {
+        "name": "MC2 350W Panel",
+        "rating": 350.0,
+        "size_x": 1.0,
+        "size_y": 2.0,
+        "cost_per_kwp": 3100.0,
+        "embodied_co2_per_kwp": 615.0
+      }
+    },
+    {
+      "name": "community PV-Plant",
+      "surface_area": 375.7,
+      "percentage": 100.0,
+      "system_loss": 14.0,
+      "slope": 0.469,
+      "azimuth": 31.999,
+      "lat": 57.68873,
+      "lon": 11.977887
+    }
+  ],
+  "batteries": [
+    {
+      "name": "Battery-01",
+      "capacity": 54.0,
+      "cost_per_kwh": 10.0,
+      "embodied_co2_per_kwh": 10.0,
+      "efficiency": 20.0,
+      "lifespan": 10.0,
+      "degradation": 2.0,
+      "initial_soc_fraction": 0.0926
+    }
+  ],
+  "charge_points": [
+    {
+      "name": "CP",
+      "capacity": 61.0,
+      "charger_type": "A",
+      "is_v2g": true,
+      "owner": "Akademiska Hus",
+      "ev": {
+        "name": "CP-EV",
+        "capacity": 60.0,
+        "max_charging_power": 11.0,
+        "daily_distance": 40.0,
+        "v2g_enabled": true,
+        "availability": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    }
+  ],
+  "grid": {
+    "name": "SE3",
+    "buying_price": {
+      "fixed": 1.35
+    },
+    "selling_price": {
+      "fixed": 0.55
+    },
+    "carbon_intensity": {
+      "fixed": 41.0
+    }
+  },
+  "analysis_period": {
+    "start_month": 6,
+    "start_day": 1,
+    "start_hour": 0,
+    "end_month": 6,
+    "end_day": 2,
+    "end_hour": 23
+  },
+  "dispatch_mode": "community"
+}
