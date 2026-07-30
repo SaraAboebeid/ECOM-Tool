@@ -14,6 +14,8 @@ from typing import Annotated, Literal, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .common import Coordinates
+
 HOURS_PER_YEAR = 8760
 
 # What Grid uses when it has nothing better. Named so the trap is greppable.
@@ -151,6 +153,13 @@ class GridSpec(BaseModel):
 
     analysis_start_hour: Annotated[int, Field(ge=0, le=8759)] = 0
     analysis_end_hour: Annotated[int, Field(ge=0, le=8759)] = 8759
+
+    location: Optional[Coordinates] = Field(
+        default=None,
+        description="Map position of the grid connection point. Without it the "
+        "GRID node - which links to every building - floats, and the force "
+        "layout drags the whole graph around it.",
+    )
 
     @model_validator(mode="after")
     def _period_is_ordered(self) -> "GridSpec":

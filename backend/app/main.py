@@ -15,12 +15,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.builders.community import CommunityBuildError, build_community
 from app.schemas.community import CommunitySpec
 from app.services.dispatch import run_dispatch
 from app.services.nordpool import NordPoolClient, NordPoolUnavailable
+from app.services.jobs import runner
+from app.services.optimize import run_optimization, solver_status
 from app.services.pvgis_cache import PVGISCache, PVGISUnavailable
 
 CACHE_ROOT = Path(__file__).resolve().parents[1] / "cache"
@@ -150,6 +152,76 @@ def dispatch(spec: CommunitySpec) -> dict:
         raise HTTPException(status_code=422, detail=str(err)) from err
     except ValueError as err:
         raise HTTPException(status_code=422, detail=str(err)) from err
+
+
+class OptimizeRequest(BaseModel):
+    """A community plus the optimizer's own knobs."""
+
+    community: CommunitySpec
+    days: int | None = Field(
+        None, description="Days to optimise. Defaults to the analysis period. "
+        "Roughly 0.25 s per building-day.")
+    horizon_hours: int = Field(36, ge=2, le=72,
+                               description="Look-ahead window per rolling step.")
+    store_hours: int = Field(24, ge=1, le=48,
+                            description="Hours kept from each step before rolling on.")
+    aging: bool = Field(False, description="Include battery degradation cost.")
+    v2g: bool = Field(False, description="Allow vehicle-to-grid discharge.")
+    temperature_c: float = Field(18.0, description="Ambient temperature for aging.")
+
+
+@app.get("/api/optimize/solver")
+def optimizer_solver() -> dict:
+    """Whether the optimizer can run here, and with which solver."""
+    return solver_status()
+
+
+@app.post("/api/optimize")
+def start_optimization(request: OptimizeRequest) -> dict:
+    """Queue an optimization run and return its job id immediately.
+
+    Not synchronous: a full campus year takes about an hour. Poll
+    /api/optimize/{job_id} for status and results.
+    """
+    status = solver_status()
+    if not status["available"]:
+        raise HTTPException(status_code=503, detail=status["detail"])
+
+    spec = request.community
+
+    def work(report):
+        return run_optimization(
+            spec,
+            days=request.days,
+            horizon_hours=request.horizon_hours,
+            store_hours=request.store_hours,
+            aging=request.aging,
+            v2g=request.v2g,
+            temperature_c=request.temperature_c,
+            nordpool=nordpool,
+            progress=report,
+        )
+
+    job = runner.submit("optimize", work, meta={
+        "community": spec.name,
+        "buildings": len(spec.buildings),
+        "period": spec.analysis_period.label,
+        "days": request.days or max(1, spec.analysis_period.n_hours // 24),
+    })
+    return job.as_dict()
+
+
+@app.get("/api/optimize/{job_id}")
+def optimization_status(job_id: str) -> dict:
+    job = runner.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"no job {job_id!r}")
+    return job.as_dict()
+
+
+@app.get("/api/jobs")
+def list_jobs() -> dict:
+    return {"jobs": [j.as_dict(include_result=False) for j in runner.list()]}
 
 
 @app.post("/api/community/preview")

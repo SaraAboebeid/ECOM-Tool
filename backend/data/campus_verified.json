@@ -119,7 +119,11 @@
       "slope": 0.469,
       "azimuth": 31.999,
       "lat": 57.68873,
-      "lon": 11.977887
+      "lon": 11.977887,
+      "location": {
+        "x": -404.47,
+        "y": -479.89
+      }
     }
   ],
   "batteries": [
@@ -186,6 +190,10 @@
     },
     "carbon_intensity": {
       "fixed": 41.0
+    },
+    "location": {
+      "x": -402.44,
+      "y": 104.92
     }
   },
   "analysis_period": {

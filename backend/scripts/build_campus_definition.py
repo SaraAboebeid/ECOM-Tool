@@ -227,6 +227,17 @@ def load_epc() -> dict[str, dict]:
     return out
 
 
+def position_for(coords: dict, *names) -> dict | None:
+    """Map position for a non-building node, tried under several names."""
+    for name in names:
+        if not name:
+            continue
+        hit = coords.get(slug(name))
+        if hit:
+            return {"x": round(hit[0], 2), "y": round(hit[1], 2)}
+    return None
+
+
 def load_coordinates() -> dict[str, tuple[float, float]]:
     raw = json.loads(COORDS_JSON.read_text(encoding="utf-8"))
     positions = raw.get("nodePositions", raw)
@@ -294,6 +305,10 @@ def build(year: str, include_without_demand: bool,
             owner_name = node_id.rsplit("_PV_", 1)[0]
             pv_by_building.setdefault(owner_name, []).append(plant)
         else:
+            # Standalone arrays are their own map node, so they need a position.
+            where = position_for(coords, plant["name"], "PV-Plant")
+            if where:
+                plant["location"] = where
             community_pv.append(plant)
 
     # --- buildings ----------------------------------------------------------
@@ -450,7 +465,7 @@ def build(year: str, include_without_demand: bool,
                 f"implausibly low for a battery. Check the Grasshopper input."
             )
         soc_kwh = float(node.get("initial_soc") or 0.0)
-        batteries.append({
+        battery_entry = {
             "name": str(node.get("name") or node_id[4:]),
             "capacity": round(capacity, 2),
             "cost_per_kwh": round(float(node.get("cost_per_kwh") or 5000.0), 2),
@@ -460,13 +475,17 @@ def build(year: str, include_without_demand: bool,
             # graph.json stores the fraction already divided by 100.
             "degradation": round(float(node.get("degradation") or 0.02) * 100.0, 3),
             "initial_soc_fraction": round(min(1.0, soc_kwh / capacity), 4),
-        })
+        }
+        where = position_for(coords, node.get("name"), node_id, "Battery")
+        if where:
+            battery_entry["location"] = where
+        batteries.append(battery_entry)
 
     charge_points = []
     for node_id, node in nodes.items():
         if not node_id.startswith("CP_"):
             continue
-        charge_points.append({
+        cp_entry = {
             "name": str(node.get("name") or node_id[3:]),
             "capacity": round(float(node.get("capacity") or 22.0), 2),
             "charger_type": str(node.get("charger_type") or "AC Level 2"),
@@ -480,7 +499,11 @@ def build(year: str, include_without_demand: bool,
                 "v2g_enabled": bool(node.get("is_v2g")),
                 "availability": [1] * 7 + [0] * 11 + [1] * 6,
             },
-        })
+        }
+        where = position_for(coords, node.get("name"), node_id)
+        if where:
+            cp_entry["location"] = where
+        charge_points.append(cp_entry)
         notes.append(
             f"{node_id}: graph.json records no vehicle details, only that "
             f"{node.get('total_connected_evs', 0)} EV is connected. A 60 kWh "
@@ -498,6 +521,7 @@ def build(year: str, include_without_demand: bool,
             "buying_price": {"fixed": 1.35},
             "selling_price": {"fixed": 0.55},
             "carbon_intensity": {"fixed": 41.0},
+            **({"location": grid_where} if (grid_where := position_for(coords, "GRID")) else {}),
         },
         "analysis_period": {
             "start_month": 6, "start_day": 1, "start_hour": 0,

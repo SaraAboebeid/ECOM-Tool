@@ -82,7 +82,7 @@ def build_community(
 
     # --- grid ---
     grid = build_grid(spec.grid, nordpool=nordpool)
-    node_kinds["GRID"] = "grid"
+    remember("GRID", "grid", spec.grid.location)
 
     community = EnergyCommunity(
         building=buildings,

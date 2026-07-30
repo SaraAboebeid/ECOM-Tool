@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import math
 from typing import Any, Optional
 
 import numpy as np
@@ -39,6 +40,7 @@ def run_dispatch(
     spec: CommunitySpec,
     nordpool: Optional[NordPoolClient] = None,
     capture_log: bool = True,
+    include_idle_links: bool = False,
 ) -> dict:
     """Build, dispatch and serialise. Returns the dashboard graph payload."""
     built = build_community(spec, nordpool=nordpool)
@@ -57,7 +59,7 @@ def run_dispatch(
         )
         dispatcher.run()
 
-    payload = serialise_graph(dispatcher, built)
+    payload = serialise_graph(dispatcher, built, include_idle_links=include_idle_links)
     payload["meta"] = {
         "community": spec.name,
         "period": spec.analysis_period.label,
@@ -67,7 +69,8 @@ def run_dispatch(
     return payload
 
 
-def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity) -> dict:
+def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity,
+                    include_idle_links: bool = False) -> dict:
     spec = built.spec
     by_name = {
         "building": {b.name: b for b in spec.buildings},
@@ -137,18 +140,67 @@ def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity) -> dict:
 
         nodes.append(node)
 
+    _anchor_pv_nodes(nodes)
+
     links = []
+    dropped = 0
     for source, target, data in dispatcher.G.edges(data=True):
         flow = [_f(v) for v in data.get("flow", [])]
+        total = _f(sum(flow))
+        # The dispatcher creates an edge for every possible peer-to-peer pair,
+        # so a 36-building community has ~1,260 building-to-building edges of
+        # which a handful ever carry energy. Drawing them all buries the real
+        # flows. Only edges that actually moved energy are emitted.
+        if total <= 0 and not include_idle_links:
+            dropped += 1
+            continue
         links.append({
             "source": source,
             "target": target,
             "type": data.get("type", "energy"),
             "flow": flow,
-            "total": _f(sum(flow)),
+            "total": total,
         })
 
-    return {"nodes": nodes, "links": links, "kpis": _kpis(dispatcher)}
+    return {
+        "nodes": nodes,
+        "links": links,
+        "kpis": _kpis(dispatcher),
+        "idle_links_omitted": dropped,
+    }
+
+
+# Building-mounted arrays are drawn just outside their building. The offset is
+# in the same units as the map coordinates.
+PV_ORBIT_RADIUS = 34.0
+
+
+def _anchor_pv_nodes(nodes: list[dict]) -> None:
+    """Place PV nodes beside the building they sit on.
+
+    A rooftop array has no coordinates of its own, so without this the force
+    layout drifts it away from its building and the graph reads as if the PV
+    belonged to nothing.
+    """
+    positions = {n["id"]: (n["x"], n["y"])
+                 for n in nodes if n.get("x") is not None and n.get("y") is not None}
+
+    per_parent: dict[str, list[dict]] = {}
+    for node in nodes:
+        if node["type"] != "pv" or node.get("x") is not None:
+            continue
+        parent = node["id"].split("_PV_", 1)[0] if "_PV_" in node["id"] else None
+        if parent in positions:
+            per_parent.setdefault(parent, []).append(node)
+
+    for parent, arrays in per_parent.items():
+        px, py = positions[parent]
+        # Fan several arrays around the building rather than stacking them.
+        for index, node in enumerate(arrays):
+            angle = (2 * math.pi * index) / len(arrays) - math.pi / 2
+            node["x"] = round(px + PV_ORBIT_RADIUS * math.cos(angle), 2)
+            node["y"] = round(py + PV_ORBIT_RADIUS * math.sin(angle), 2)
+            node["anchored_to"] = parent
 
 
 def _find(plants: dict, node_id: str, prefixes: tuple[str, ...]):
