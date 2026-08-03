@@ -961,31 +961,40 @@ class ECOMDispatcher:
 
         # Grid metrics for analysis period
         grid = getattr(self.community, "grid", None)
-        if grid and hasattr(grid, "hourly_import") and hasattr(grid, "hourly_export"):
-            # Carbon intensity and price
-            if hasattr(grid, "carbon_intensity") and hasattr(grid, "buying_price"):
-                df_carbon = getattr(grid, "carbon_intensity", None)
-                df_price = getattr(grid, "buying_price", None)
-                if isinstance(df_carbon, HourlyData):
-                    df = df_carbon.df
-                    mask = df["hoy"].isin(hours_set)
-                    total_grid_carbon_intensity = df.loc[mask, "value"].mean()
-                if isinstance(df_price, HourlyData):
-                    df = df_price.df
-                    mask = df["hoy"].isin(hours_set)
-                    total_grid_price_import = df.loc[mask, "value"].mean()
+        if grid is not None:
+            # Grid names these electricity_market_buying_price and
+            # electricity_market_carbon_intensity. This block used to look for
+            # grid.buying_price and grid.carbon_intensity, which are never set,
+            # so it was unreachable and all three grid KPIs below stayed at 0.
+            # The short names are still accepted in case anything supplies them.
+            df_price = getattr(grid, "electricity_market_buying_price",
+                               getattr(grid, "buying_price", None))
+            df_carbon = getattr(grid, "electricity_market_carbon_intensity",
+                                getattr(grid, "carbon_intensity", None))
 
-            # Grid import carbon cost
-            if hasattr(grid, "hourly_import") and isinstance(grid.hourly_import, HourlyData):
-                df_import = grid.hourly_import.df
-                mask = df_import["hoy"].isin(hours_set)
-                import_vals = df_import.loc[mask, "value"]
-                if hasattr(grid, "carbon_intensity") and isinstance(grid.carbon_intensity, HourlyData):
-                    df_carbon = grid.carbon_intensity.df
-                    mask_carbon = df_carbon["hoy"].isin(hours_set)
-                    carbon_vals = df_carbon.loc[mask_carbon, "value"]
-                    # Align indexes
-                    total_grid_carbon_import = np.sum(import_vals.values * carbon_vals.values[:len(import_vals)])
+            carbon_vals = None
+            if isinstance(df_carbon, HourlyData):
+                df = df_carbon.df
+                carbon_series = df.loc[df["hoy"].isin(hours_set), "value"]
+                total_grid_carbon_intensity = carbon_series.mean()
+                carbon_vals = carbon_series.values
+
+            if isinstance(df_price, HourlyData):
+                df = df_price.df
+                total_grid_price_import = df.loc[df["hoy"].isin(hours_set), "value"].mean()
+
+            # grid.hourly_import is initialised to zeros and never written by
+            # the dispatch, so multiplying by it always gave zero. Take the
+            # imported energy from the dispatched flows instead, using the same
+            # GRID -> building edges that total_grid_import is summed from.
+            if carbon_vals is not None:
+                import_by_hour = np.zeros(self.n_hours, dtype=float)
+                for building in self.community.building:
+                    if self.G.has_edge("GRID", building.name):
+                        flow = np.asarray(self.G.edges["GRID", building.name]["flow"], dtype=float)
+                        import_by_hour[:len(flow)] += flow[:self.n_hours]
+                n = min(len(import_by_hour), len(carbon_vals))
+                total_grid_carbon_import = float(np.sum(import_by_hour[:n] * carbon_vals[:n]))
 
         self.kpis = KPIResult(
             total_demand=total_demand,

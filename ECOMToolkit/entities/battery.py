@@ -1,4 +1,7 @@
-import Rhino.Geometry as rg
+try:
+    import Rhino.Geometry as rg
+except ImportError:
+    rg = None
 
 class Battery:
     """A Battery object for Grasshopper use (ECOM4Future)."""
@@ -6,7 +9,7 @@ class Battery:
     def __init__(self, name, capacity, point, cost, embodied_co2, efficiency, lifespan, degradation, initial_soc=None):
         self.name = str(name)
         self.capacity = float(capacity)  # kWh (initial capacity)
-        self.point = point if isinstance(point, rg.Point3d) else None
+        self.point = point if (rg and isinstance(point, rg.Point3d)) else None
         self.cost_per_kwh = float(cost)  # SEK/kWh
         self.embodied_co2_per_kwh = float(embodied_co2)  # kgCO2e/kWh
         self.efficiency = float(efficiency)  # %

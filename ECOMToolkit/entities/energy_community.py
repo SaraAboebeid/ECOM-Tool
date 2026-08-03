@@ -25,13 +25,13 @@ class EnergyCommunity:
                     standalone_pv_count,
                     len(self.battery),
                     len(self.charge_point),
-                    self.grid.name if self.grid else "None"
+                    getattr(self.grid, "name", "Grid") if self.grid else "None"
                 ))
 
     def __repr__(self):
         lines = [
             f"Energy Community Summary:",
-            f"  Grid: {self.grid.name if self.grid and hasattr(self.grid, 'name') else 'None'}",
+            f"  Grid: {getattr(self.grid, 'name', 'Grid') if self.grid else 'None'}",
             f"  Buildings: {len(self.building)}",
         ]
         for i, b in enumerate(self.building, 1):

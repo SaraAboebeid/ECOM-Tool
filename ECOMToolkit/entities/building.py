@@ -131,8 +131,17 @@ class Building:
         self.area = 0.0
 
         self.name = clean_ep_string(name)
+        # Accept a plain number as an explicit footprint area in m2, so the class
+        # is usable outside Rhino where there is no geometry to measure. It is
+        # multiplied by number_of_floors exactly like a measured footprint.
+        self._explicit_footprint_area = None
+        if isinstance(footprints, (int, float)) and not isinstance(footprints, bool):
+            self._explicit_footprint_area = float(footprints)
+
         # Accept single or list for footprints
-        if rg:
+        if self._explicit_footprint_area is not None:
+            self.footprints = []
+        elif rg:
             if isinstance(footprints, (rg.Brep, rg.Surface, rg.Curve)):
                 self.footprints = [footprints]
             elif isinstance(footprints, list):
@@ -158,7 +167,11 @@ class Building:
             self.breps = []
 
         self.number_of_floors = number_of_floors
-        self.area = self._calc_area_from_footprints(self.footprints, self.number_of_floors)
+        if self._explicit_footprint_area is not None:
+            floors = number_of_floors if isinstance(number_of_floors, (int, float)) and number_of_floors else 1
+            self.area = self._explicit_footprint_area * float(floors)
+        else:
+            self.area = self._calc_area_from_footprints(self.footprints, self.number_of_floors)
 
         self.building_type = self._validate_building_type(building_type)
         self.occupancy_schedule = self._validate_schedule(occupancy_schedule, convert_schedule_to_df)
@@ -172,7 +185,7 @@ class Building:
         self.total_energy_demand = self._calc_total_energy_demand()
         self.total_pv_capacity = self._calc_total_pv_capacity()
         self.total_installed_capacity = self.total_pv_capacity
-        self.point = point if isinstance(point, rg.Point3d) else None
+        self.point = point if (rg and isinstance(point, rg.Point3d)) else None
         self.x = self.point.X if self.point else None
         self.y = self.point.Y if self.point else None
 

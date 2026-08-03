@@ -1,12 +1,25 @@
 #! python3
 # r: pandas
 
-import Rhino.Geometry as rg
+try:
+    import Rhino.Geometry as rg
+except ImportError:
+    rg = None
 import math, urllib.request, urllib.parse, json
 import pandas as pd
 
 from ECOMToolkit.entities.pv_module import PVModule
 from ECOMToolkit.analysis.data import HourlyData, DataUnit, DataCategory
+
+# Seconds to wait for PVGIS before giving up.
+PVGIS_TIMEOUT_SECONDS = 30
+
+# Optional callable(plant) -> (DataFrame, annual_production). When set, it
+# replaces the live PVGIS request entirely. The dashboard backend installs one
+# that caches a per-kWp profile per orientation and scales it, so changing plant
+# size costs no network round trip.
+PVGIS_PROVIDER = None
+
 
 class PVPlant:
     """
@@ -27,7 +40,8 @@ class PVPlant:
         system_loss: float = None,
         lat: float = None,
         lon: float = None,
-        custom_slope: float = None
+        custom_slope: float = None,
+        custom_azimuth: float = None
     ):
         # Set defaults if not provided
         if name is None:
@@ -51,14 +65,18 @@ class PVPlant:
         self.lat: float = float(lat)
         self.lon: float = float(lon)
         self.custom_slope: float = custom_slope
+        self.custom_azimuth: float = custom_azimuth
 
         # Surface area and usable area
         self.total_surface = self._get_surface_area(surface)
         self.usable_surface = self.total_surface * (self.percentage / 100.0)
 
         # Orientation
-        detected_slope, self.azimuth = self._get_orientation(surface)
+        detected_slope, detected_azimuth = self._get_orientation(surface)
         self.slope = float(self.custom_slope) if self.custom_slope is not None else detected_slope
+        # Without Rhino geometry _get_orientation returns (0, 0), i.e. flat and
+        # due south, so custom_azimuth is the only way to orient a plant.
+        self.azimuth = float(self.custom_azimuth) if self.custom_azimuth is not None else detected_azimuth
 
         # Installed modules and power
         self.module_count = int(self.usable_surface // self.pv_module.area)
@@ -68,7 +86,10 @@ class PVPlant:
         self.total_cost = self.module_count * self.pv_module.total_cost
         self.total_embodied_co2 = self.module_count * self.pv_module.total_embodied_co2
 
-        # Production estimation from PVGIS
+        # Production estimation from PVGIS. Stays None on success; set to the
+        # error text when the query fails, so zero production can be told apart
+        # from a failed lookup.
+        self.pvgis_error = None
         df, _ = self._get_pvgis_data()
         # Ensure 'value' is numeric before dividing
         if not df.empty and 'value' in df.columns:
@@ -76,6 +97,13 @@ class PVPlant:
         # Ensure only 'hoy' and 'value' columns are present
         if not df.empty:
             df = df[[col for col in ['hoy', 'value'] if col in df.columns]]
+        else:
+            # No PVGIS data, because capacity is zero or the query failed.
+            # HourlyData rejects a frame without 'hoy'/'value', so an empty one
+            # would abort construction with a message about DataFrame columns.
+            # Produce an explicit zero-production year instead; pvgis_error
+            # distinguishes a failed lookup from a genuinely empty plant.
+            df = pd.DataFrame({'hoy': range(1, 8761), 'value': [0.0] * 8760})
         annual_production = df["value"].sum() if not df.empty and 'value' in df.columns else 0.0
         self.hourly_result = HourlyData(
             df=df,
@@ -96,20 +124,27 @@ class PVPlant:
         Calculate the surface area of the given geometry.
         Returns 0 if the type is unsupported or invalid.
         """
-        if isinstance(surface, rg.Brep):
-            return rg.AreaMassProperties.Compute(surface).Area
-        elif isinstance(surface, rg.Surface):
-            brep = rg.Brep.CreateFromSurface(surface)
-            return rg.AreaMassProperties.Compute(brep).Area
+        # Accept a plain number as an explicit area in m2, so the class is usable
+        # outside Rhino where there is no geometry to measure.
+        if isinstance(surface, (int, float)) and not isinstance(surface, bool):
+            return float(surface)
+        if rg is not None:
+            if isinstance(surface, rg.Brep):
+                return rg.AreaMassProperties.Compute(surface).Area
+            elif isinstance(surface, rg.Surface):
+                brep = rg.Brep.CreateFromSurface(surface)
+                return rg.AreaMassProperties.Compute(brep).Area
         return 0.0
 
     def _get_orientation(self, surface) -> tuple:
         """
         Returns (slope, azimuth) in degrees for the given surface.
         """
-        if isinstance(surface, rg.Brep):
+        # Without Rhino geometry there is no normal to read. Callers outside Rhino
+        # should pass custom_slope (and accept the default south-facing azimuth).
+        if rg is not None and isinstance(surface, rg.Brep):
             normal = surface.Faces[0].NormalAt(0.5, 0.5)
-        elif isinstance(surface, rg.Surface):
+        elif rg is not None and isinstance(surface, rg.Surface):
             centroid = rg.AreaMassProperties.Compute(surface).Centroid
             _, u, v = surface.ClosestPoint(centroid)
             normal = surface.NormalAt(u, v)
@@ -131,6 +166,12 @@ class PVPlant:
         """
         if self.installed_capacity <= 0:
             return pd.DataFrame(), 0.0
+
+        # A host application (e.g. the dashboard backend) can install a provider
+        # to add caching, offline data or request throttling. It receives this
+        # plant and returns (DataFrame, annual_production) just like a live call.
+        if PVGIS_PROVIDER is not None:
+            return PVGIS_PROVIDER(self)
 
         base_url = "https://re.jrc.ec.europa.eu/api/v5_2/seriescalc"
         peakpower = max(self.installed_capacity, 0.01)  # PVGIS min 0.01 kW
@@ -157,7 +198,8 @@ class PVPlant:
 
         try:
             print(f"Requesting PVGIS URL: {full_url}")
-            response = urllib.request.urlopen(full_url)
+            # Without a timeout a slow PVGIS blocks the caller indefinitely.
+            response = urllib.request.urlopen(full_url, timeout=PVGIS_TIMEOUT_SECONDS)
             data = json.loads(response.read().decode("utf-8"))
             print(f"PVGIS response keys: {list(data.keys())}")
             if 'outputs' in data and 'hourly' in data['outputs']:
@@ -183,6 +225,9 @@ class PVPlant:
                 return pd.DataFrame(), 0.0
 
         except Exception as e:
+            # Returning zeros here is indistinguishable from a plant that
+            # genuinely produces nothing, so record why for callers that check.
+            self.pvgis_error = str(e)
             print(f"PVGIS API error: {e}")
             return pd.DataFrame(), 0.0
 

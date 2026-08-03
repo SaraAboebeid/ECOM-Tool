@@ -1,4 +1,7 @@
-import Rhino.Geometry as rg
+try:
+    import Rhino.Geometry as rg
+except ImportError:
+    rg = None
 
 # Valid owner constants
 AKADEMISKA_HUS = "Akademiska Hus"
@@ -12,7 +15,7 @@ class ChargePoint:
 
     def __init__(self, name, point, capacity, charger_type, is_v2g, owner, ev_list=None):
         self.name = str(name)
-        self.point = point if isinstance(point, rg.Point3d) else None
+        self.point = point if (rg and isinstance(point, rg.Point3d)) else None
         self.capacity = float(capacity)  # kW
         self.charger_type = str(charger_type)
         self.is_v2g = bool(is_v2g)
@@ -94,7 +97,10 @@ class ChargePoint:
     def validate(self):
         if not self.name:
             return "Error: Charge Point name is missing."
-        if not self.point:
+        # Only require geometry when Rhino is actually available. Outside Rhino
+        # (dashboard backend) self.point is always None, and callers supply
+        # coordinates separately, so this would fail every charge point.
+        if rg is not None and not self.point:
             return "Error: Valid Rhino Point3d required."
         if self.capacity <= 0:
             return "Error: Charger capacity must be greater than 0 kW."
