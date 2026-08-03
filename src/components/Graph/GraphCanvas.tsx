@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect } from 'react';
+import { useRef, useMemo } from 'react';
 import { GraphData, Node } from '../../types';
 import { GraphNodes } from './GraphNodes';
 import { GraphNodesOptimized } from './GraphNodesOptimized';
@@ -26,6 +26,73 @@ interface GraphCanvasProps {
   performanceMode?: 'auto' | 'high_performance' | 'balanced' | 'high_quality';
 }
 
+const BASEMAP_BBOX_WGS84 = {
+  minLat: 57.682,
+  minLon: 11.964,
+  maxLat: 57.696,
+  maxLon: 11.99,
+};
+
+const BASEMAP_ZOOM = 16;
+
+type BasemapTile = {
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const lonToTileX = (lon: number, zoom: number): number => {
+  return ((lon + 180) / 360) * Math.pow(2, zoom);
+};
+
+const latToTileY = (lat: number, zoom: number): number => {
+  const latRad = (lat * Math.PI) / 180;
+  return (
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+    Math.pow(2, zoom)
+  );
+};
+
+const buildBasemapTiles = (canvasWidth: number, canvasHeight: number): BasemapTile[] => {
+  const zoom = BASEMAP_ZOOM;
+
+  const xMinFloat = lonToTileX(BASEMAP_BBOX_WGS84.minLon, zoom);
+  const xMaxFloat = lonToTileX(BASEMAP_BBOX_WGS84.maxLon, zoom);
+  const yMinFloat = latToTileY(BASEMAP_BBOX_WGS84.maxLat, zoom);
+  const yMaxFloat = latToTileY(BASEMAP_BBOX_WGS84.minLat, zoom);
+
+  const xStart = Math.floor(xMinFloat);
+  const xEnd = Math.floor(xMaxFloat);
+  const yStart = Math.floor(yMinFloat);
+  const yEnd = Math.floor(yMaxFloat);
+
+  const xSpan = xMaxFloat - xMinFloat || 1;
+  const ySpan = yMaxFloat - yMinFloat || 1;
+
+  const tiles: BasemapTile[] = [];
+  for (let x = xStart; x <= xEnd; x += 1) {
+    for (let y = yStart; y <= yEnd; y += 1) {
+      const tileLeft = ((x - xMinFloat) / xSpan) * canvasWidth;
+      const tileRight = ((x + 1 - xMinFloat) / xSpan) * canvasWidth;
+      const tileTop = ((y - yMinFloat) / ySpan) * canvasHeight;
+      const tileBottom = ((y + 1 - yMinFloat) / ySpan) * canvasHeight;
+      const subdomain = ['a', 'b', 'c', 'd'][(x + y) % 4];
+
+      tiles.push({
+        url: `https://${subdomain}.basemaps.cartocdn.com/light_all/${zoom}/${x}/${y}.png`,
+        x: tileLeft,
+        y: tileTop,
+        width: tileRight - tileLeft,
+        height: tileBottom - tileTop,
+      });
+    }
+  }
+
+  return tiles;
+};
+
 /**
  * GraphCanvas component that manages the SVG container and D3 simulation
  */
@@ -43,32 +110,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   performanceMode = 'auto'
 }) => {
   const containerRef = useRef<SVGGElement>(null);
-
-  // State to track dark mode
-  const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // Check dark mode on mount and listen for changes
-  useEffect(() => {
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    };
-
-    // Initial check
-    checkDarkMode();
-
-    // Listen for dark mode changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          checkDarkMode();
-        }
-      });
-    });
-
-    observer.observe(document.documentElement, { attributes: true });
-
-    return () => observer.disconnect();
-  }, []);
 
   // Determine performance configuration
   const performanceConfig = useMemo(() => {
@@ -93,9 +134,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   // Background image dimensions (configurable scaling)
   const { width: imageWidth, height: imageHeight } = getScaledImageDimensions();
   const imageCenter = getImageCenter();
-
-  // Choose background image based on theme
-  const backgroundImage = isDarkMode ? "/3d_topview_dark.png" : "/3d_topview.png";
+  const basemapTiles = useMemo(
+    () => buildBasemapTiles(imageWidth, imageHeight),
+    [imageWidth, imageHeight]
+  );
 
   return (
     <svg
@@ -107,16 +149,52 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
       {/* Main container group for zoom/pan transforms */}
       <g ref={containerRef}>
-        {/* Background image positioned at origin (0,0) with rotation */}
-        <image
-          href={backgroundImage}
-          x={0}
-          y={0}
-          width={imageWidth}
-          height={imageHeight}
-          opacity="0.5"
+        <defs>
+          <clipPath id="campusBasemapClip">
+            <rect x={0} y={0} width={imageWidth} height={imageHeight} />
+          </clipPath>
+        </defs>
+
+        {/* Real georeferenced basemap tiles (CartoDB Positron light) for campus bbox */}
+        <g
+          clipPath="url(#campusBasemapClip)"
           transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
-        />
+        >
+          {basemapTiles.map((tile) => (
+            <image
+              key={tile.url}
+              href={tile.url}
+              x={tile.x}
+              y={tile.y}
+              width={tile.width}
+              height={tile.height}
+              preserveAspectRatio="none"
+              opacity="0.9"
+            />
+          ))}
+
+          {/* Keep campus 3D context lightly over the map */}
+          <image
+            href="/3d_topview.png"
+            x={0}
+            y={0}
+            width={imageWidth}
+            height={imageHeight}
+            opacity="0.2"
+          />
+        </g>
+
+        <text
+          x={12}
+          y={imageHeight - 12}
+          fontSize="10"
+          fill="#334155"
+          opacity="0.85"
+          pointerEvents="none"
+          transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
+        >
+          Basemap: OpenStreetMap contributors, CARTO
+        </text>
 
         {/* Links layer */}
         <GraphLinks

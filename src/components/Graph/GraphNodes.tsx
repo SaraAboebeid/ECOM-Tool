@@ -4,6 +4,26 @@ import { GraphData, Node, Link, NODE_COLORS } from '../../types';
 import { iconToString } from '../NodeIcons';
 import { hasFixedPosition, getFixedPosition } from '../../utils/nodePositioning';
 
+const getNodeRadius = (node: Node): number => {
+  switch (node.type) {
+    case 'grid':
+      return 16;
+    case 'charge_point':
+      return 18;
+    case 'battery':
+      return 19;
+    case 'pv':
+      return 18;
+    case 'building':
+      return 20;
+    default:
+      return 18;
+  }
+};
+
+const hasBuildingPvPanels = (node: Node): boolean =>
+  node.type === 'building' && !!node.total_pv_capacity && node.total_pv_capacity > 0;
+
 interface GraphNodesProps {
   containerRef: React.RefObject<SVGGElement | null>;
   data: GraphData;
@@ -200,24 +220,11 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
         .on('drag', dragged)
         .on('end', dragended) as any);
 
-    // Main node circle
-    nodeSelection.append('circle')
+    // Main node shapes
+    nodeSelection.filter((d: Node) => d.type !== 'building')
+      .append('circle')
       .attr('class', (d: Node) => `node-main node-main-${d.type}`)
-      .attr('r', (d: Node) => {
-        let baseRadius = 30;
-        switch(d.type) {
-          case 'building':
-            return baseRadius + 2;
-          case 'pv':
-            return baseRadius + 2;
-          case 'battery':
-            return baseRadius + 2;
-          case 'charge_point':
-            return baseRadius + 2;
-          default:
-            return baseRadius;
-        }
-      })
+      .attr('r', (d: Node) => getNodeRadius(d))
       .attr('fill', (d: Node) => NODE_COLORS[d.type])
       .attr('stroke', 'white')
       .attr('stroke-width', '1')
@@ -229,7 +236,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
           return isInvolved && hasCurrentFlow;
         });
-        return hasFlow ? 1.0 : 0.5; // 50% opacity for inactive nodes
+        return hasFlow ? 1.0 : 0.55;
       })
       .style('filter', (d: Node) => {
         // If this node has flow data for the current hour, add a glow effect
@@ -239,9 +246,53 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           return isInvolved && hasCurrentFlow;
         });
         return hasFlow 
-          ? 'drop-shadow(0 0 8px rgba(255,255,255,0.4)) drop-shadow(2px 4px 6px rgba(0,0,0,0.3))' 
-          : 'drop-shadow(2px 4px 6px rgba(0,0,0,0.3))';
+          ? 'drop-shadow(0 0 6px rgba(255,255,255,0.32)) drop-shadow(1px 3px 5px rgba(0,0,0,0.28))' 
+          : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))';
       });
+
+    nodeSelection.filter((d: Node) => d.type === 'building')
+      .append('rect')
+      .attr('class', 'node-main node-main-building')
+      .attr('x', -20)
+      .attr('y', -16)
+      .attr('width', 40)
+      .attr('height', 32)
+      .attr('rx', 10)
+      .attr('fill', NODE_COLORS.building)
+      .attr('stroke', 'white')
+      .attr('stroke-width', '1')
+      .attr('stroke-opacity', '0.85')
+      .attr('opacity', (d: Node) => {
+        const hasFlow = data.links.some(link => {
+          const isInvolved = link.source === d.id || link.target === d.id;
+          const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
+          return isInvolved && hasCurrentFlow;
+        });
+        return hasFlow ? 1.0 : 0.55;
+      })
+      .style('filter', (d: Node) => {
+        const hasFlow = data.links.some(link => {
+          const isInvolved = link.source === d.id || link.target === d.id;
+          const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
+          return isInvolved && hasCurrentFlow;
+        });
+        return hasFlow
+          ? 'drop-shadow(0 0 6px rgba(255,255,255,0.32)) drop-shadow(1px 3px 5px rgba(0,0,0,0.28))'
+          : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))';
+      });
+
+    nodeSelection.filter((d: Node) => hasBuildingPvPanels(d))
+      .append('rect')
+      .attr('class', 'node-pv-badge')
+      .attr('x', -12)
+      .attr('y', -24)
+      .attr('width', 24)
+      .attr('height', 8)
+      .attr('rx', 4)
+      .attr('fill', NODE_COLORS.pv)
+      .attr('stroke', 'white')
+      .attr('stroke-width', '1')
+      .attr('opacity', 0.95);
 
     // Add text icon labels inside nodes (direct text approach instead of SVG)
     nodeSelection.each(function(d: Node) {
@@ -268,7 +319,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           .attr('dominant-baseline', 'central')
           .attr('dy', '-8px') // Position slightly above center
           .attr('fill', 'white')
-          .style('font-size', '30px')
+          .style('font-size', d.type === 'building' ? '22px' : '20px')
           .style('pointer-events', 'none')
           .style('user-select', 'none')
           .text(iconName)
@@ -287,9 +338,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       node.append('text')
         .attr('class', 'node-inner-label')
         .attr('text-anchor', 'middle')
-        .attr('dy', '20px')
+        .attr('dy', '18px')
         .attr('fill', 'white')
-        .attr('font-size', '12px')
+        .attr('font-size', '11px')
         .attr('font-weight', 'bold')
         .attr('pointer-events', 'none')
         .style('font-family', 'system-ui, -apple-system, sans-serif')
@@ -304,9 +355,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       node.append('text')
         .attr('class', 'node-power-value')
         .attr('text-anchor', 'middle')
-        .attr('dy', '35px')
+        .attr('dy', '31px')
         .attr('fill', 'white')
-        .attr('font-size', '11px')
+        .attr('font-size', '10px')
         .attr('font-weight', 'bold')
         .attr('pointer-events', 'none')
         .style('font-family', 'system-ui, -apple-system, sans-serif')
@@ -348,11 +399,11 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
     // Add labels below nodes
     nodeSelection.append('text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '4em')
+      .attr('dy', '3.4em')
       .attr('fill', (d: Node) => {
         return d.type === 'pv' ? '#333' : '#fff';
       })
-      .attr('font-size', '12px')
+      .attr('font-size', '11px')
       .attr('font-weight', 'bold')
       .attr('class', 'node-label')
       .text((d: Node) => d.name || d.id);
@@ -360,9 +411,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
     // Add type labels
     nodeSelection.append('text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '5.5em')
+      .attr('dy', '4.8em')
       .attr('fill', '#fff')
-      .attr('font-size', '10px')
+      .attr('font-size', '9px')
       .attr('class', 'node-metric')
       .text((d: Node) => {
         switch(d.type) {
@@ -410,11 +461,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
   // Helper function to update node styling based on current hour and energy flows
   const updateNodeStyling = (nodeSelection: d3.Selection<any, any, any, any>, hour: number) => {
     nodeSelection.each(function(d: any) {
-      // Base radius for calculations
-      const baseRadius = 30;
-      
       const nodeElement = d3.select(this);
       const nodeCircle = nodeElement.select('.node-main');
+      const isBuilding = d.type === 'building';
       
       // Check if this node has any active energy flow at current hour
       const hasFlow = data.links.some(link => {
@@ -424,12 +473,30 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       });
       
       // Update node circle
-      nodeCircle
-        .attr('r', baseRadius)
-        .attr('opacity', hasFlow ? 1.0 : 0.5)
-        .style('filter', hasFlow 
-          ? 'drop-shadow(0 0 8px rgba(255,255,255,0.4)) drop-shadow(2px 4px 6px rgba(0,0,0,0.3))' 
-          : 'drop-shadow(2px 4px 6px rgba(0,0,0,0.3))');
+      if (isBuilding) {
+        nodeCircle
+          .attr('x', -20)
+          .attr('y', -16)
+          .attr('width', 40)
+          .attr('height', 32)
+          .attr('rx', 10)
+          .attr('opacity', hasFlow ? 1.0 : 0.55)
+          .style('filter', hasFlow 
+            ? 'drop-shadow(0 0 6px rgba(255,255,255,0.32)) drop-shadow(1px 3px 5px rgba(0,0,0,0.28))' 
+            : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))');
+      } else {
+        nodeCircle
+          .attr('r', getNodeRadius(d))
+          .attr('opacity', hasFlow ? 1.0 : 0.55)
+          .style('filter', hasFlow 
+            ? 'drop-shadow(0 0 6px rgba(255,255,255,0.32)) drop-shadow(1px 3px 5px rgba(0,0,0,0.28))' 
+            : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))');
+      }
+
+      const nodeBadge = nodeElement.select('.node-pv-badge');
+      if (!nodeBadge.empty()) {
+        nodeBadge.attr('opacity', hasFlow ? 1.0 : 0.85);
+      }
       
       // Update icon opacity if it exists
       const nodeIcon = nodeElement.select('svg');

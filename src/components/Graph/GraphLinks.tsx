@@ -27,6 +27,46 @@ const FLOW_CONFIG = {
   HOVER_MIN_WIDTH: 8,     // Minimum width on hover (px)
 } as const;
 
+const getLinkKey = (link: any): string => {
+  const sourceId = link.source?.id || link.source;
+  const targetId = link.target?.id || link.target;
+  return `${sourceId}->${targetId}`;
+};
+
+const hashString = (value: string): number => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+};
+
+const buildStructuredPath = (link: any): string => {
+  const source = link.source;
+  const target = link.target;
+
+  if (!source || !target) return '';
+
+  const sourceX = source.x || 0;
+  const sourceY = source.y || 0;
+  const targetX = target.x || 0;
+  const targetY = target.y || 0;
+
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const routeHash = hashString(getLinkKey(link));
+  const bendOffset = 14 + (routeHash % 4) * 8;
+  const horizontalFirst = Math.abs(dx) >= Math.abs(dy) || routeHash % 3 === 0;
+
+  if (horizontalFirst) {
+    const viaX = sourceX + dx * 0.5 + (routeHash % 2 === 0 ? bendOffset : -bendOffset);
+    return `M ${sourceX} ${sourceY} L ${viaX} ${sourceY} L ${viaX} ${targetY} L ${targetX} ${targetY}`;
+  }
+
+  const viaY = sourceY + dy * 0.5 + (routeHash % 2 === 0 ? bendOffset : -bendOffset);
+  return `M ${sourceX} ${sourceY} L ${sourceX} ${viaY} L ${targetX} ${viaY} L ${targetX} ${targetY}`;
+};
+
 interface GraphLinksProps {
   containerRef: React.RefObject<SVGGElement | null>;
   data: GraphData;
@@ -120,17 +160,11 @@ export const GraphLinks: React.FC<GraphLinksProps> = ({
       const updateLinkPositions = () => {
         // Update animated particle lines
         existingLinks
-          .attr('x1', (d: any) => d.source.x)
-          .attr('y1', (d: any) => d.source.y)
-          .attr('x2', (d: any) => d.target.x)
-          .attr('y2', (d: any) => d.target.y);
+          .attr('d', buildStructuredPath);
         
         // Update solid background lines
         existingBackgroundLinks
-          .attr('x1', (d: any) => d.source.x)
-          .attr('y1', (d: any) => d.source.y)
-          .attr('x2', (d: any) => d.target.x)
-          .attr('y2', (d: any) => d.target.y);
+            .attr('d', buildStructuredPath);
       };
       
       // Re-attach tick listener to ensure synchronization
@@ -151,8 +185,9 @@ export const GraphLinks: React.FC<GraphLinksProps> = ({
     const backgroundLinks = linksContainer
       .selectAll('.background-link')
       .data(linkData)
-      .enter().append('line')
+      .enter().append('path')
       .attr('class', 'background-link')
+      .attr('fill', 'none')
       .attr('stroke', '#777')
       .attr('stroke-opacity', 0.1)
       .attr('stroke-width', 1);
@@ -161,7 +196,8 @@ export const GraphLinks: React.FC<GraphLinksProps> = ({
     const linkSelection = linksContainer
       .selectAll('.link')
       .data(linkData)
-      .enter().append('line')
+      .enter().append('path')
+      .attr('fill', 'none')
       .attr('stroke-dasharray', `${FLOW_CONFIG.PARTICLE_SIZE} ${FLOW_CONFIG.PARTICLE_SIZE}`) // Equal dash and gap for square particles
       .attr('stroke-opacity', d => {
         const flowValue = d.flow && d.flow[currentHour] ? Math.abs(d.flow[currentHour]) : 0;
@@ -245,7 +281,7 @@ export const GraphLinks: React.FC<GraphLinksProps> = ({
       .on('mousemove', (event: MouseEvent) => {
         tooltip.updateTooltipPosition(event);
       })
-      .on('mouseout', function(this: SVGLineElement) {
+      .on('mouseout', function(this: SVGPathElement) {
         // Reset hover styling using current hour's flow value
         const linkDatum = d3.select(this).datum() as any;
         const flowValue = linkDatum?.flow?.[currentHour] || 0;
@@ -266,17 +302,11 @@ export const GraphLinks: React.FC<GraphLinksProps> = ({
     const updateLinkPositions = () => {
       // Update animated particle lines
       linkSelection
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        .attr('d', buildStructuredPath);
       
       // Update solid background lines  
       backgroundLinks
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        .attr('d', buildStructuredPath);
     };
 
     // Listen to simulation ticks - use namespaced event to avoid conflicts
