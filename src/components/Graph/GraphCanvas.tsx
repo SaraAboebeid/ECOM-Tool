@@ -7,6 +7,8 @@ import { GraphParticles } from './GraphParticles';
 import { useGraphSimulation } from '../../hooks/useGraphSimulation';
 import { detectPerformanceLevel, PERFORMANCE_PRESETS } from '../../utils/performanceConfig';
 import { getScaledImageDimensions, getImageCenter, COMPASS_ORIENTATION } from '../../utils/backgroundConfig';
+import { buildBasemapTiles } from '../../utils/geoProjection';
+import { useBuildingFootprints } from '../../hooks/useBuildingFootprints';
 
 interface GraphCanvasProps {
   svgRef: React.RefObject<SVGSVGElement | null>;
@@ -26,72 +28,17 @@ interface GraphCanvasProps {
   performanceMode?: 'auto' | 'high_performance' | 'balanced' | 'high_quality';
 }
 
-const BASEMAP_BBOX_WGS84 = {
-  minLat: 57.682,
-  minLon: 11.964,
-  maxLat: 57.696,
-  maxLon: 11.99,
-};
+/**
+ * Street tiles behind the campus. Off for now; the Rhino footprints carry the
+ * campus on their own. Flip back to true to restore them - the tiles are placed
+ * by their true Mercator coordinates rather than stretched to fill the render's
+ * rect, so they still line up with the footprints. See utils/geoProjection.ts.
+ */
+// Typed as boolean, not the literal false, so editors do not flag the guarded
+// branches as unreachable while it is off.
+const SHOW_BASEMAP: boolean = false;
 
-const BASEMAP_ZOOM = 16;
-
-type BasemapTile = {
-  url: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-const lonToTileX = (lon: number, zoom: number): number => {
-  return ((lon + 180) / 360) * Math.pow(2, zoom);
-};
-
-const latToTileY = (lat: number, zoom: number): number => {
-  const latRad = (lat * Math.PI) / 180;
-  return (
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-    Math.pow(2, zoom)
-  );
-};
-
-const buildBasemapTiles = (canvasWidth: number, canvasHeight: number): BasemapTile[] => {
-  const zoom = BASEMAP_ZOOM;
-
-  const xMinFloat = lonToTileX(BASEMAP_BBOX_WGS84.minLon, zoom);
-  const xMaxFloat = lonToTileX(BASEMAP_BBOX_WGS84.maxLon, zoom);
-  const yMinFloat = latToTileY(BASEMAP_BBOX_WGS84.maxLat, zoom);
-  const yMaxFloat = latToTileY(BASEMAP_BBOX_WGS84.minLat, zoom);
-
-  const xStart = Math.floor(xMinFloat);
-  const xEnd = Math.floor(xMaxFloat);
-  const yStart = Math.floor(yMinFloat);
-  const yEnd = Math.floor(yMaxFloat);
-
-  const xSpan = xMaxFloat - xMinFloat || 1;
-  const ySpan = yMaxFloat - yMinFloat || 1;
-
-  const tiles: BasemapTile[] = [];
-  for (let x = xStart; x <= xEnd; x += 1) {
-    for (let y = yStart; y <= yEnd; y += 1) {
-      const tileLeft = ((x - xMinFloat) / xSpan) * canvasWidth;
-      const tileRight = ((x + 1 - xMinFloat) / xSpan) * canvasWidth;
-      const tileTop = ((y - yMinFloat) / ySpan) * canvasHeight;
-      const tileBottom = ((y + 1 - yMinFloat) / ySpan) * canvasHeight;
-      const subdomain = ['a', 'b', 'c', 'd'][(x + y) % 4];
-
-      tiles.push({
-        url: `https://${subdomain}.basemaps.cartocdn.com/light_all/${zoom}/${x}/${y}.png`,
-        x: tileLeft,
-        y: tileTop,
-        width: tileRight - tileLeft,
-        height: tileBottom - tileTop,
-      });
-    }
-  }
-
-  return tiles;
-};
+const BASEMAP_ZOOM = 17;
 
 /**
  * GraphCanvas component that manages the SVG container and D3 simulation
@@ -134,10 +81,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   // Background image dimensions (configurable scaling)
   const { width: imageWidth, height: imageHeight } = getScaledImageDimensions();
   const imageCenter = getImageCenter();
+  // Skip the tile maths entirely while the basemap is off.
   const basemapTiles = useMemo(
-    () => buildBasemapTiles(imageWidth, imageHeight),
-    [imageWidth, imageHeight]
+    () => (SHOW_BASEMAP ? buildBasemapTiles(BASEMAP_ZOOM) : []),
+    []
   );
+
+  // Vector footprints from the Rhino campus model, replacing 3d_topview.png.
+  const { buildings, context } = useBuildingFootprints();
 
   return (
     <svg
@@ -155,46 +106,74 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           </clipPath>
         </defs>
 
-        {/* Real georeferenced basemap tiles (CartoDB Positron light) for campus bbox */}
+        {/* Vector campus footprints from the Rhino model, and the street tiles
+            when enabled. Both go through the same Mercator -> image-frame
+            projection, so they agree with each other and with the fixed node
+            positions. */}
         <g
           clipPath="url(#campusBasemapClip)"
           transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
         >
-          {basemapTiles.map((tile) => (
+          {SHOW_BASEMAP && basemapTiles.map((tile) => (
             <image
-              key={tile.url}
+              key={tile.key}
               href={tile.url}
-              x={tile.x}
-              y={tile.y}
-              width={tile.width}
-              height={tile.height}
-              preserveAspectRatio="none"
+              width={256}
+              height={256}
+              transform={tile.matrix}
               opacity="0.9"
             />
           ))}
 
-          {/* Keep campus 3D context lightly over the map */}
-          <image
-            href="/3d_topview.png"
-            x={0}
-            y={0}
-            width={imageWidth}
-            height={imageHeight}
-            opacity="0.2"
-          />
+          {/* Surrounding massing: context only, so it stays non-interactive. */}
+          {context.map((feature) => (
+            <path
+              key={feature.id}
+              d={feature.path}
+              fill="#94a3b8"
+              fillOpacity="0.28"
+              stroke="#64748b"
+              strokeOpacity="0.35"
+              strokeWidth={0.6}
+              pointerEvents="none"
+            />
+          ))}
+
+          {/* Named buildings: these carry an id and can be joined to energy data. */}
+          {buildings.map((feature) => (
+            <path
+              key={feature.id}
+              d={feature.path}
+              fill="#64748b"
+              fillOpacity="0.45"
+              stroke="#334155"
+              strokeOpacity="0.6"
+              strokeWidth={0.9}
+              pointerEvents="none"
+            >
+              <title>
+                {`${feature.rhinoLayer ?? feature.id}`}
+                {feature.footprintM2 ? ` - ${Math.round(feature.footprintM2).toLocaleString()} m2` : ''}
+                {feature.heightM ? `, ${feature.heightM.toFixed(1)} m` : ''}
+              </title>
+            </path>
+          ))}
         </g>
 
-        <text
-          x={12}
-          y={imageHeight - 12}
-          fontSize="10"
-          fill="#334155"
-          opacity="0.85"
-          pointerEvents="none"
-          transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
-        >
-          Basemap: OpenStreetMap contributors, CARTO
-        </text>
+        {/* Attribution belongs to the tiles, so it goes when they do. */}
+        {SHOW_BASEMAP && (
+          <text
+            x={12}
+            y={imageHeight - 12}
+            fontSize="10"
+            fill="#334155"
+            opacity="0.85"
+            pointerEvents="none"
+            transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
+          >
+            Basemap: OpenStreetMap contributors, CARTO
+          </text>
+        )}
 
         {/* Links layer */}
         <GraphLinks

@@ -5,7 +5,7 @@ import { useGraphDimensions } from '../../hooks/useGraphDimensions';
 import { useGraphTooltip } from '../../hooks/useGraphTooltip';
 import { GraphCanvas } from './GraphCanvas';
 import { NodeDetailsPanel } from './NodeDetailsPanel';
-import { getScaledImageDimensions } from '../../utils/backgroundConfig';
+import { getFitToBackgroundTransform } from '../../utils/backgroundConfig';
 import '../../simple-animations.css';
 import * as d3 from 'd3';
 
@@ -58,6 +58,11 @@ export const Graph: React.FC<GraphProps> = ({
   const dimensions = useGraphDimensions(svgRef);
   const tooltip = useGraphTooltip();
 
+  // The zoom behaviour is created once by useGraphSimulation and shared here so
+  // every fit reuses the same transform state.
+  const getSharedZoom = () =>
+    ((window as any).graphZoom as d3.ZoomBehavior<Element, unknown> | undefined) ?? null;
+
   // Function to fit graph to view (can be called manually)
   const fitGraphToView = useCallback(() => {
     if (!svgRef.current) return;
@@ -101,17 +106,13 @@ export const Graph: React.FC<GraphProps> = ({
     const optimizedTransform = d3.zoomIdentity
       .translate(translateX, translateY)
       .scale(scale);
-    
-    // Get the existing zoom behavior from the simulation
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 5])
-      .on('zoom', (event) => {
-        const g = d3.select(svgRef.current!.querySelector('g'));
-        g.attr('transform', event.transform);
-      });
-    
-    // Apply the zoom behavior and transform
-    svg.call(zoom as any);
+
+    // Reuse the zoom behaviour the simulation attached. Calling d3.zoom() again
+    // here would install a second behaviour whose transform starts at identity,
+    // so the next pan would jump back to the unfitted view.
+    const zoom = getSharedZoom();
+    if (!zoom) return;
+
     svg.transition()
        .duration(1500)
        .ease(d3.easeQuadOut)
@@ -121,36 +122,18 @@ export const Graph: React.FC<GraphProps> = ({
   // Function to fit to background image bounds
   const fitToImageBounds = useCallback(() => {
     if (!svgRef.current) return;
-    
+
     const svg = d3.select(svgRef.current);
-    const imageSize = getScaledImageDimensions();
-    
-    // Calculate scale to fit the background image with some padding - more zoomed in
-    const padding = 50; // Reduced padding for closer view
-    const scaleX = (dimensions.width - padding * 2) / imageSize.width;
-    const scaleY = (dimensions.height - padding * 2) / imageSize.height;
-    const scale = Math.min(scaleX, scaleY, 1.2); // Allow slightly more zoom in
-    
-    // Better centering calculation
-    const translateX = (dimensions.width - imageSize.width * scale) / 2;
-    const translateY = (dimensions.height - imageSize.height * scale) / 2;
-    
-    // Adjust for better centering - move slightly right and down for better composition
-    const centeringAdjustX = dimensions.width * 0.05; // Move 5% right
-    const centeringAdjustY = dimensions.height * 0.02; // Move 2% down
-    
+    const zoom = getSharedZoom();
+    if (!zoom) return;
+
+    // Bounds are rotation-aware, so the map lands centred without nudges.
+    const fit = getFitToBackgroundTransform(dimensions.width, dimensions.height, 50);
+
     const transform = d3.zoomIdentity
-      .translate(translateX + centeringAdjustX, translateY + centeringAdjustY)
-      .scale(scale);
-    
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 5])
-      .on('zoom', (event) => {
-        const g = d3.select(svgRef.current!.querySelector('g'));
-        g.attr('transform', event.transform);
-      });
-    
-    svg.call(zoom as any);
+      .translate(fit.x, fit.y)
+      .scale(fit.scale);
+
     svg.transition()
        .duration(1500)
        .ease(d3.easeQuadOut)

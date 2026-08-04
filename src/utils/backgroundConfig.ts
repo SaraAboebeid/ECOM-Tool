@@ -67,3 +67,51 @@ export const getImageCenter = () => {
     y: dimensions.height / 2
   };
 };
+
+/**
+ * Axis-aligned bounds the background actually occupies once COMPASS_ORIENTATION
+ * is applied. Rotating the width x height rect about its own centre leaves the
+ * centre put but swaps how far the content reaches along each axis, so fitting
+ * to the raw rect leaves the map clipped and off-centre.
+ */
+export const getRotatedImageBounds = () => {
+  const { width, height } = getScaledImageDimensions();
+  const center = getImageCenter();
+  const radians = (COMPASS_ORIENTATION * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+
+  const rotatedWidth = width * cos + height * sin;
+  const rotatedHeight = width * sin + height * cos;
+
+  return {
+    width: rotatedWidth,
+    height: rotatedHeight,
+    centerX: center.x,
+    centerY: center.y
+  };
+};
+
+/**
+ * Scale/translate that centres the rotated background inside a viewport.
+ * Shared by the initial view and the fit-to-view control so both agree.
+ */
+export const getFitToBackgroundTransform = (
+  viewportWidth: number,
+  viewportHeight: number,
+  padding = 40,
+  maxScale = 1.2
+) => {
+  const bounds = getRotatedImageBounds();
+  const scale = Math.min(
+    (viewportWidth - padding * 2) / bounds.width,
+    (viewportHeight - padding * 2) / bounds.height,
+    maxScale
+  );
+
+  return {
+    scale,
+    x: viewportWidth / 2 - bounds.centerX * scale,
+    y: viewportHeight / 2 - bounds.centerY * scale
+  };
+};

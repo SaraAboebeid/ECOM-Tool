@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { GraphData, Node } from '../types';
 import { applyFixedPositions } from '../utils/nodePositioning';
-import { getScaledImageDimensions } from '../utils/backgroundConfig';
+import { getFitToBackgroundTransform } from '../utils/backgroundConfig';
 
 interface UseGraphSimulationProps {
   svgRef: React.RefObject<SVGSVGElement | null>;
@@ -91,25 +91,18 @@ export const useGraphSimulation = ({
       svg.call(zoom as any);
       zoomInitializedRef.current = true;
 
-      // Set initial view to fit the background image bounds
-      const imageSize = getScaledImageDimensions();
-      
-      // Calculate scale to fit the background image with some padding - more zoomed in
+      // Share the zoom behaviour so fit-to-view drives the same transform state
+      // instead of attaching a second, independent zoom.
+      (window as any).graphZoom = zoom;
 
-      const fitScale = 0.5; // Allow slightly more zoom in
-      
-      // Better centering calculation - account for image rotation and positioning
-      const translateX = (width - imageSize.width * fitScale) / 2;
-      const translateY = (height - imageSize.height * fitScale) / 2;
-      
-      // Adjust for better centering - move slightly right and down for better composition
-      const centeringAdjustX = width * 0.63; // left right
-      const centeringAdjustY = height * -0.01; // Move 2% down
-      
+      // Fit the rotated background to the viewport. The bounds account for
+      // COMPASS_ORIENTATION, so no hand-tuned centering offsets are needed.
+      const fit = getFitToBackgroundTransform(width, height);
+
       const initialTransform = d3.zoomIdentity
-        .translate(translateX + centeringAdjustX, translateY + centeringAdjustY)
-        .scale(fitScale);
-      
+        .translate(fit.x, fit.y)
+        .scale(fit.scale);
+
       svg.call(zoom.transform as any, initialTransform);
     }
 
