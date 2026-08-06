@@ -56,16 +56,25 @@ MODEL_CRS = "EPSG:3006"
 
 # Recovered by running the identical mesh-union footprint construction on both
 # models and fitting a similarity transform over the buildings whose areas agree
-# to within 3% - AWL, Climbing hall, CSB chabo, JSP, MC2, P-hus, SB1, SB2, SB3,
-# Science Park, Vasa 9. The fitted scale came out at 1.000063, confirming the
-# two models hold the same geometry rather than a rebuild, and the residuals
-# were 0.08 m mean / 0.17 m max. Layers whose areas disagreed (karhus, Kemi,
-# lokal kontor, Bibiotek) hold extra context geometry in Campus3D and were
-# excluded from the fit rather than allowed to drag it.
+# to within 3%. The fitted scale came out at 1.000063, confirming the two models
+# hold the same geometry rather than a rebuild. Layers whose areas disagreed
+# (kArhus, Kemi, lokal kontor, Bibliotek) hold extra context geometry in
+# Campus3D and were excluded rather than allowed to drag the fit.
+#
+# 2026-08-06: background image.3dm was edited - buildings added and the whole
+# model moved 1,277.5 m, by (412.5, -1209.1). Scale and rotation were held at
+# the original well-conditioned values and only the translation re-solved; that
+# explains the shift on its own, so the model was moved, not rebuilt. Letting
+# scale float instead returned 1.00276, which cannot be right for identical
+# geometry and inflated the residuals to 1.4 m.
+#
+# Translation is the median offset over CSB chabo, JSP, MC2, SB1, SB2, SB3 and
+# Vasa 9: 0.06 m mean residual, 0.14 m max. AWL was dropped as an outlier at
+# 5.7 m - its geometry changed in the same edit.
 LOCAL_TO_SWEREF = {
     "scale": 1.000063490,
     "rotation_deg": 18.838776,
-    "translate": (319361.704, 6398596.943),
+    "translate": (319773.956, 6397388.652),
 }
 
 
