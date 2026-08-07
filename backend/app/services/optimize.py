@@ -42,6 +42,10 @@ HOURS_PER_YEAR = 8760
 
 DEFAULT_TEMPERATURE_C = 18.0
 
+# functions1.building.__init__ sets self.efficiency = 0.93 (functions1.py:119)
+# and the SOC balance at functions1.py:606 uses it. It is not a parameter.
+LEC_OPT_FIXED_EFFICIENCY_PCT = 93.0
+
 
 class OptimizerUnavailable(RuntimeError):
     """The optimizer or its solver could not be loaded."""
@@ -146,6 +150,36 @@ def build_optimizer_inputs(
             f"largest consumer). Flows between buildings and the battery will "
             f"differ from the dispatcher's community-level model."
         )
+
+        # functions1.building.__init__ hardcodes self.efficiency = 0.93 and
+        # uses it in the SOC balance, with no way to pass another value. A spec
+        # that says otherwise is therefore honoured by the dispatcher and
+        # ignored here, so the two models silently simulate different batteries.
+        spec_efficiency = {b.efficiency for b in spec.batteries}
+        if any(abs(e - LEC_OPT_FIXED_EFFICIENCY_PCT) > 0.5 for e in spec_efficiency):
+            notes.append(
+                f"Battery round-trip efficiency is "
+                f"{', '.join(f'{e:.0f}%' for e in sorted(spec_efficiency))} in the "
+                f"spec, but LEC-Opt hardcodes "
+                f"{LEC_OPT_FIXED_EFFICIENCY_PCT:.0f}% (functions1.py:119) and "
+                f"offers no way to override it. The optimizer therefore models a "
+                f"different battery from the dispatcher; the cost comparison is "
+                f"not like for like until they agree."
+            )
+
+        # Storage this small cannot shift anything, and a flat state of charge
+        # then looks like a broken model rather than an unused one.
+        peak_demand = max(
+            (float(b.electric_demand.df["value"].max()) for b in built.community.building),
+            default=0.0,
+        )
+        if peak_demand > 0 and total_battery < peak_demand * 0.25:
+            notes.append(
+                f"{total_battery:,.0f} kWh of storage against a {peak_demand:,.0f} kW "
+                f"peak is under 15 minutes at full load, so the optimizer has "
+                f"little to gain by cycling it and the state of charge may stay "
+                f"flat."
+            )
 
     building_data = {}
     for building in built.community.building:

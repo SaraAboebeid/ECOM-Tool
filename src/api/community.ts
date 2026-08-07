@@ -284,6 +284,119 @@ export function dispatchCommunity(
   return post<DispatchResponse>('/api/dispatch', definition, signal);
 }
 
+/* -------------------------------------------------------------------------
+ * Optimizer
+ *
+ * The dispatcher applies a fixed priority order; the optimizer minimises cost
+ * over a rolling look-ahead, so it will charge the battery in cheap hours to
+ * cover expensive ones. Comparing the two is the point.
+ *
+ * This cannot be synchronous the way /api/dispatch is: the backend measures
+ * roughly 0.25 s per building-day, so a full campus year is about an hour.
+ * Submit returns a job id, then poll.
+ * ---------------------------------------------------------------------- */
+
+export interface OptimizeRequest {
+  community: CommunityDefinition;
+  /** Days to optimise. Defaults to the whole analysis period. */
+  days?: number;
+  /** Look-ahead window per rolling step. */
+  horizon_hours?: number;
+  /** Hours kept from each step before rolling on. */
+  store_hours?: number;
+  aging?: boolean;
+  v2g?: boolean;
+  temperature_c?: number;
+}
+
+export interface OptimizeTotals {
+  grid_import_kwh: number;
+  grid_export_kwh: number;
+  supplier_cost: number;
+  transmission_cost: number;
+  peak_cost: number;
+  dso_cost: number;
+  tax_cost: number;
+  fcrn_returns: number;
+  fcrd_returns: number;
+  overall_cost: number;
+  peak_net_import_kw: number;
+}
+
+/**
+ * Hourly series over the optimised window.
+ *
+ * Not uniform: the power and cost entries are flat arrays, `timestamps` is
+ * strings, and `soc` is nested one level - a series per battery, keyed
+ * `<building>_bess_soc`, because LEC-Opt attaches storage to a building rather
+ * than to the community.
+ */
+export interface OptimizeSeries {
+  P_import_all: number[];
+  P_export_all: number[];
+  'Overall cost': number[];
+  'Supplier cost': number[];
+  soc: Record<string, number[]>;
+  timestamps: string[];
+}
+
+export interface OptimizeResult {
+  solver: string;
+  days: number;
+  hours: number;
+  /** Caveats raised while translating the spec into the optimizer's model. */
+  notes: string[];
+  totals: OptimizeTotals;
+  series: OptimizeSeries;
+  log_tail: string[];
+}
+
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
+
+export interface OptimizeJob {
+  id: string;
+  status: JobStatus;
+  progress?: string | null;
+  error?: string | null;
+  meta?: Record<string, unknown>;
+  result?: OptimizeResult | null;
+}
+
+export interface SolverStatus {
+  available: boolean;
+  solver?: string;
+  time_limit_s?: number;
+  detail?: string | null;
+}
+
+/** Whether the optimizer can run here at all, and with which solver. */
+export async function getSolverStatus(): Promise<SolverStatus> {
+  const response = await fetch('/api/optimize/solver');
+  if (!response.ok) {
+    throw new ApiError('Could not read solver status', response.status);
+  }
+  return response.json();
+}
+
+/** Queue a run. Returns immediately with a job id. */
+export function startOptimization(
+  request: OptimizeRequest,
+  signal?: AbortSignal,
+): Promise<OptimizeJob> {
+  return post<OptimizeJob>('/api/optimize', request, signal);
+}
+
+export async function getOptimizationJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<OptimizeJob> {
+  const response = await fetch(`/api/optimize/${encodeURIComponent(jobId)}`, { signal });
+  if (!response.ok) {
+    throw new ApiError(`Could not read job ${jobId}`, response.status);
+  }
+  return response.json();
+}
+
 export interface ScenarioSummary {
   name: string;
   title: string;

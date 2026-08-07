@@ -1,13 +1,10 @@
 import { useRef, useMemo } from 'react';
 import { GraphData, Node } from '../../types';
 import { GraphNodes } from './GraphNodes';
-import { GraphNodesOptimized } from './GraphNodesOptimized';
 import { GraphLinks } from './GraphLinks';
-import { GraphParticles } from './GraphParticles';
 import { useGraphSimulation } from '../../hooks/useGraphSimulation';
-import { detectPerformanceLevel, PERFORMANCE_PRESETS } from '../../utils/performanceConfig';
 import { getScaledImageDimensions, getImageCenter, COMPASS_ORIENTATION } from '../../utils/backgroundConfig';
-import { buildBasemapTiles } from '../../utils/geoProjection';
+import { buildBasemapTiles, getNorthRotationDeg } from '../../utils/geoProjection';
 import { useBuildingFootprints } from '../../hooks/useBuildingFootprints';
 
 interface GraphCanvasProps {
@@ -38,6 +35,19 @@ interface GraphCanvasProps {
 // branches as unreachable while it is off.
 const SHOW_BASEMAP: boolean = false;
 
+/**
+ * Surrounding massing from the model's BuildingMesh layer.
+ *
+ * Off, because it is not the city context it looks like. Measured against the
+ * BuildingBrep layers it is 101,994 m2 against their 233,738 m2, and at the
+ * best rigid alignment 53% of it lands on top of buildings that are already
+ * drawn - so it half-duplicates the campus, offset, and reads as a ghost copy.
+ *
+ * The offset is the same one that left BuildingMesh behind when the model was
+ * moved. Turn this back on once those layers are realigned in Rhino.
+ */
+const SHOW_CONTEXT: boolean = false;
+
 const BASEMAP_ZOOM = 17;
 
 /**
@@ -58,21 +68,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 }) => {
   const containerRef = useRef<SVGGElement>(null);
 
-  // Determine performance configuration
-  const performanceConfig = useMemo(() => {
-    const mode = performanceMode === 'auto' ? detectPerformanceLevel() : performanceMode.toUpperCase();
-    return PERFORMANCE_PRESETS[mode as keyof typeof PERFORMANCE_PRESETS] || PERFORMANCE_PRESETS.BALANCED;
-  }, [performanceMode]);
+  // Vector footprints from the Rhino campus model, replacing 3d_topview.png.
+  // Their centroids also stand in for any building the hand-placed position
+  // table has no entry for.
+  const { buildings, context, centroids } = useBuildingFootprints();
 
   // Use the simulation hook
-  const { simulation, zoom } = useGraphSimulation({
+  const { simulation } = useGraphSimulation({
     svgRef,
     containerRef,
     data,
     dimensions,
     graphStructureKey,
     filtersKey,
-    selectedNode
+    selectedNode,
+    footprintCentroids: centroids
   });
 
   // Force GraphNodes with icons for now (instead of checking performance config)
@@ -86,9 +96,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     () => (SHOW_BASEMAP ? buildBasemapTiles(BASEMAP_ZOOM) : []),
     []
   );
-
-  // Vector footprints from the Rhino campus model, replacing 3d_topview.png.
-  const { buildings, context } = useBuildingFootprints();
 
   return (
     <svg
@@ -106,12 +113,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           </clipPath>
         </defs>
 
+        {/* Plain neutral ground. The campus context footprints carry the map,
+            so no gradient, grid or glow competes with them. */}
+        <rect
+          x={-2600}
+          y={-2600}
+          width={5200}
+          height={5200}
+          fill="#f5f7fa"
+          pointerEvents="none"
+        />
+
         {/* Vector campus footprints from the Rhino model, and the street tiles
             when enabled. Both go through the same Mercator -> image-frame
             projection, so they agree with each other and with the fixed node
             positions. */}
+        {/* The clip is sized to the old 3d_topview.png frame, which is smaller
+            than the campus context in the Rhino model - it was cutting roughly
+            60% of the context massing. It only exists to bound the tile grid,
+            so it applies solely when the basemap is on. */}
         <g
-          clipPath="url(#campusBasemapClip)"
+          clipPath={SHOW_BASEMAP ? 'url(#campusBasemapClip)' : undefined}
           transform={`rotate(${COMPASS_ORIENTATION} ${imageCenter.x} ${imageCenter.y})`}
         >
           {SHOW_BASEMAP && basemapTiles.map((tile) => (
@@ -125,30 +147,33 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             />
           ))}
 
-          {/* Surrounding massing: context only, so it stays non-interactive. */}
-          {context.map((feature) => (
+          {/* Surrounding massing: context only, so it stays non-interactive.
+              Neutral grey rather than blue, and solid enough to read as the
+              city around the campus. */}
+          {SHOW_CONTEXT && context.map((feature) => (
             <path
               key={feature.id}
               d={feature.path}
-              fill="#94a3b8"
-              fillOpacity="0.28"
-              stroke="#64748b"
-              strokeOpacity="0.35"
-              strokeWidth={0.6}
+              fill="#e3e7ec"
+              fillOpacity="0.9"
+              stroke="#c6ccd5"
+              strokeOpacity="0.9"
+              strokeWidth={0.5}
               pointerEvents="none"
             />
           ))}
 
-          {/* Named buildings: these carry an id and can be joined to energy data. */}
+          {/* Named buildings: these carry an id and can be joined to energy
+              data, so they sit a step darker than the context around them. */}
           {buildings.map((feature) => (
             <path
               key={feature.id}
               d={feature.path}
-              fill="#64748b"
-              fillOpacity="0.45"
-              stroke="#334155"
-              strokeOpacity="0.6"
-              strokeWidth={0.9}
+              fill="#ccd3dd"
+              fillOpacity="0.95"
+              stroke="#94a1b2"
+              strokeOpacity="0.95"
+              strokeWidth={0.8}
               pointerEvents="none"
             >
               <title>
@@ -197,6 +222,35 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           onNodeClick={onNodeClick}
           tooltip={tooltip}
         />
+      </g>
+
+      {/* North arrow. Outside the zoom/pan group so it stays put, but rotated
+          by the same projection the map uses - north is not up here. */}
+      <g
+        transform={`translate(${dimensions.width - 52}, 52)`}
+        pointerEvents="none"
+        aria-label="North arrow"
+      >
+        <circle r={26} fill="rgba(255,255,255,0.82)" stroke="#cbd5e1" strokeWidth={1} />
+        <g transform={`rotate(${getNorthRotationDeg()})`}>
+          <path
+            d="M 0 -17 L 5.5 5 L 0 1.5 L -5.5 5 Z"
+            fill="#0f172a"
+            stroke="#0f172a"
+            strokeWidth={0.5}
+            strokeLinejoin="round"
+          />
+          <text
+            y={-20}
+            textAnchor="middle"
+            fontSize="10"
+            fontWeight="700"
+            fill="#0f172a"
+            style={{ fontFamily: 'Sora, system-ui, sans-serif' }}
+          >
+            N
+          </text>
+        </g>
       </g>
     </svg>
   );

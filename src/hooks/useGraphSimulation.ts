@@ -12,7 +12,23 @@ interface UseGraphSimulationProps {
   graphStructureKey: string;
   filtersKey: string;
   selectedNode: Node | null;
+  /**
+   * Footprint centroids, canonically keyed. Fills in buildings the hand-placed
+   * table has no entry for, so they land on their own building instead of in
+   * the force layout.
+   */
+  footprintCentroids?: Map<string, { x: number; y: number }>;
 }
+
+/** Mean position of the nodes that did get a fixed position, if any. */
+const placedCentre = (nodes: Node[]): { x: number; y: number } | null => {
+  const placed = nodes.filter(n => n.fx != null && n.fy != null);
+  if (!placed.length) return null;
+  return {
+    x: placed.reduce((sum, n) => sum + (n.fx as number), 0) / placed.length,
+    y: placed.reduce((sum, n) => sum + (n.fy as number), 0) / placed.length
+  };
+};
 
 /**
  * Custom hook for managing D3 force simulation with zoom/pan functionality
@@ -24,7 +40,8 @@ export const useGraphSimulation = ({
   dimensions,
   graphStructureKey,
   filtersKey,
-  selectedNode
+  selectedNode,
+  footprintCentroids
 }: UseGraphSimulationProps) => {
   const simulationRef = useRef<d3.Simulation<d3.SimulationNodeDatum, undefined> | null>(null);
   const zoomInitializedRef = useRef(false);
@@ -39,17 +56,25 @@ export const useGraphSimulation = ({
     const { width, height } = dimensions;
 
     // Apply fixed positions to nodes - create a shared reference
-    const nodeData = applyFixedPositions(data.nodes.map(d => ({ ...d })));
+    const nodeData = applyFixedPositions(
+      data.nodes.map(d => ({ ...d })),
+      footprintCentroids
+    );
     const linkData = data.links.map(d => ({ ...d }));
 
-    // Initialize unfixed nodes with spread-out positions to prevent clustering at (0,0)
+    // Anything still unplaced is seeded around the campus rather than around
+    // the viewport centre. The two are different coordinate spaces - the fixed
+    // positions are image-frame pixels - so seeding in viewport pixels used to
+    // strand loose nodes ~1000px away from every building.
+    const anchor = placedCentre(nodeData) ?? { x: width / 2, y: height / 2 };
+
     nodeData.forEach((node, index) => {
       if (!node.fx && !node.fy) {
         // Use a simple layout pattern to spread nodes initially
         const angle = (index * 2 * Math.PI) / nodeData.length;
         const radius = Math.min(width, height) * 0.3; // Start in a circle pattern
-        node.x = width / 2 + Math.cos(angle) * radius;
-        node.y = height / 2 + Math.sin(angle) * radius;
+        node.x = anchor.x + Math.cos(angle) * radius;
+        node.y = anchor.y + Math.sin(angle) * radius;
         // Add slight random velocity to avoid perfect overlap
         (node as any).vx = (Math.random() - 0.5) * 50;
         (node as any).vy = (Math.random() - 0.5) * 50;
@@ -60,8 +85,8 @@ export const useGraphSimulation = ({
     const simulation = d3.forceSimulation(nodeData as d3.SimulationNodeDatum[])
       .force('link', d3.forceLink(linkData).id((d: any) => d.id).distance(600))
       .force('charge', d3.forceManyBody().strength(-800))
-      .force('x', d3.forceX(width / 2).strength(0.05)) // Stronger centering for better initial layout
-      .force('y', d3.forceY(height / 2).strength(0.05)) // Stronger centering for better initial layout
+      .force('x', d3.forceX(anchor.x).strength(0.05)) // Pull toward the campus, not the viewport
+      .force('y', d3.forceY(anchor.y).strength(0.05))
       .force('collision', d3.forceCollide().radius(110))
       .alpha(1) // Start with full energy for better initial positioning
       .alphaDecay(0.0228)
@@ -110,7 +135,10 @@ export const useGraphSimulation = ({
     return () => {
       simulation.stop();
     };
-  }, [svgRef, containerRef, dimensions, graphStructureKey]); // Only recreate simulation when graph structure actually changes
+    // footprintCentroids is in the deps because it arrives asynchronously: the
+    // GeoJSON is fetched after first paint, and the nodes it places would
+    // otherwise stay stuck wherever the force layout first put them.
+  }, [svgRef, containerRef, dimensions, graphStructureKey, footprintCentroids]);
 
   // Separate effect for updating data without recreating simulation
   useEffect(() => {
@@ -119,7 +147,10 @@ export const useGraphSimulation = ({
     const simulation = simulationRef.current;
     
     // Update nodes and links data without recreating the simulation
-    const nodeData = applyFixedPositions(data.nodes.map(d => ({ ...d })));
+    const nodeData = applyFixedPositions(
+      data.nodes.map(d => ({ ...d })),
+      footprintCentroids
+    );
     const linkData = data.links.map(d => ({ ...d }));
     
     // Update simulation nodes and links
@@ -135,7 +166,7 @@ export const useGraphSimulation = ({
     
     // Gently restart simulation with low alpha to avoid jarring movements
     simulation.alpha(0.1).restart();
-  }, [data]);
+  }, [data, footprintCentroids]);
 
   return {
     simulation: simulationRef.current,

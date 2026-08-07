@@ -6,6 +6,9 @@ import { DashboardHeader } from './components/DashboardHeader';
 import { FpsCounter } from './components/FpsCounter';
 import { SankeyDrawer } from './components/SankeyDrawer';
 import { CommunityControls } from './components/CommunityControls';
+import { OptimizationPanel } from './components/OptimizationPanel';
+import { ConsoleRail } from './components/ConsoleRail';
+import { ConsolePanel } from './components/ui/ConsolePanel';
 import { GraphData } from './types';
 import { COMPASS_ORIENTATION } from './utils/backgroundConfig';
 import {
@@ -268,7 +271,7 @@ function App() {
       {/* Dashboard Header */}
       <DashboardHeader data={data} currentHour={currentHour} />
       
-      <div className="relative w-full" style={{ height: 'calc(100vh - 120px)' }}>
+      <div className="relative w-full viewer-shell" style={{ height: 'calc(100vh - 120px)' }}>
         <div className="absolute top-4 right-4 flex gap-2 z-50">
           <button
             onClick={onFitToViewClick}
@@ -312,18 +315,31 @@ function App() {
           onFitToView={handleFitToView}
         />
 
-        <CommunityControls
-          definition={definition}
-          onChange={setDefinition}
-          isComputing={isComputing}
-          error={dispatchError}
-          meta={meta}
-          scenarios={scenarios}
-          activeScenario={activeScenario}
-          onScenarioChange={setActiveScenario}
-        />
+        {/* One console for all three sections. Previously Scenario and Filters
+            were both pinned to top-4 left-4 and the optimizer to bottom-4
+            left-4, so they overlapped each other and the canvas. */}
+        <ConsoleRail>
+          <ConsolePanel
+            title="Scenario"
+            subtitle={`${definition.buildings?.length ?? 0} buildings`}
+            status={dispatchError ? 'error' : isComputing ? 'busy' : 'ok'}
+            defaultOpen
+            maxBodyHeight={380}
+          >
+            <CommunityControls
+              definition={definition}
+              onChange={setDefinition}
+              isComputing={isComputing}
+              error={dispatchError}
+              meta={meta}
+              scenarios={scenarios}
+              activeScenario={activeScenario}
+              onScenarioChange={setActiveScenario}
+            />
+          </ConsolePanel>
 
-        <Legend
+          <ConsolePanel title="Filters" subtitle={`${activeTypes.size} types`}>
+            <Legend
           activeTypes={activeTypes}
           onToggleType={toggleNodeType}
           minFlow={minFlow}
@@ -342,8 +358,14 @@ function App() {
           onV2gFilterChange={handleV2gFilterChange}
           capacityRange={capacityRange}
           onCapacityRangeChange={handleCapacityRangeChange}
-          maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
-        />
+              maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
+            />
+          </ConsolePanel>
+
+          <ConsolePanel title="Optimization" subtitle="LEC-Opt" maxBodyHeight={460}>
+            <OptimizationPanel definition={definition} />
+          </ConsolePanel>
+        </ConsoleRail>
 
         <div className="relative">
           <button

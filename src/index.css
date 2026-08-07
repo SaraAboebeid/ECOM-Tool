@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,6 +8,42 @@
 html, body, #root {
   height: 100%;
   overflow: hidden;
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(14, 165, 233, 0.12) 0%, rgba(255, 255, 255, 0) 32%),
+    radial-gradient(circle at 82% 72%, rgba(56, 189, 248, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+    linear-gradient(140deg, #eef5ff 0%, #f7fbff 42%, #e9f3ff 100%);
+}
+
+.viewer-shell {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(125, 211, 252, 0.2) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.82) 0%, rgba(240, 249, 255, 0.78) 42%, rgba(226, 243, 255, 0.84) 100%);
+  border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.viewer-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.62) 20%, rgba(0, 0, 0, 0) 86%);
+}
+
+.viewer-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px rgba(15, 23, 42, 0.14);
 }
 
 /* Performance optimization for theme switching */
@@ -27,6 +65,7 @@ html, body, #root {
   word-wrap: normal;
   direction: ltr;
   color: white;
+  font-variation-settings: 'FILL' 1, 'wght' 560, 'GRAD' 80, 'opsz' 28;
   -webkit-font-feature-settings: 'liga';
   font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
@@ -76,3 +115,147 @@ html, body, #root {
 .link-flow-reverse-slow {
   animation: flow-reverse 3s linear infinite; /* Faster: 6s -> 3s */
 }
+
+/* ==========================================================================
+   Console surface
+   --------------------------------------------------------------------------
+   The panel chrome shared by the scenario, filter and optimization sections.
+   One accent (the cyan already used by the energy flows) so the panels read as
+   instrumentation for the map rather than as separate widgets floating on it.
+   ========================================================================== */
+
+:root {
+  --console-accent: 34 211 238;      /* cyan-400, matches the flow links */
+  --console-surface: 255 255 255;
+  --console-ink: 15 23 42;
+  --console-line: 148 163 184;
+}
+
+.dark {
+  --console-surface: 15 23 42;
+  --console-ink: 226 232 240;
+  --console-line: 71 85 105;
+}
+
+.console-panel {
+  position: relative;
+  background: rgb(var(--console-surface) / 0.82);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid rgb(var(--console-line) / 0.28);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.5) inset,
+    0 8px 24px -12px rgb(15 23 42 / 0.35);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dark .console-panel {
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+/* A hairline of accent along the top edge, brightest at the left. Reads as a
+   status strip rather than decoration. */
+.console-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--console-accent) / 0.85) 0%,
+    rgb(var(--console-accent) / 0.25) 38%,
+    transparent 78%
+  );
+  pointer-events: none;
+}
+
+.console-panel:focus-within {
+  border-color: rgb(var(--console-accent) / 0.45);
+}
+
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: rgb(var(--console-ink));
+}
+
+.console-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.console-sub {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+}
+
+/* Status dot. Pulses only while busy, so movement means something. */
+.console-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: rgb(var(--console-line));
+}
+
+.console-dot--ok { background: rgb(52 211 153); }
+.console-dot--error { background: rgb(248 113 113); }
+.console-dot--busy {
+  background: rgb(var(--console-accent));
+  animation: console-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes console-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(var(--console-accent) / 0.55); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgb(var(--console-accent) / 0); }
+}
+
+.console-body {
+  padding: 0 12px 12px;
+  /* Each section scrolls on its own, so a long one cannot push the others
+     out of reach the way the old absolutely-positioned panels did. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.console-chevron {
+  margin-left: auto;
+  flex: none;
+  transition: transform 200ms ease;
+  opacity: 0.5;
+}
+
+.console-chevron--open { transform: rotate(90deg); }
+
+/* Numeric readouts line up column-wise. */
+.console-panel .tabular-nums,
+.console-panel table {
+  font-variant-numeric: tabular-nums;
+}
+
+.console-rail::-webkit-scrollbar,
+.console-body::-webkit-scrollbar { width: 6px; }
+
+.console-rail::-webkit-scrollbar-thumb,
+.console-body::-webkit-scrollbar-thumb {
+  background: rgb(var(--console-line) / 0.4);
+  border-radius: 999px;
+}
+
+.console-rail::-webkit-scrollbar-track,
+.console-body::-webkit-scrollbar-track { background: transparent; }

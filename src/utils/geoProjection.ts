@@ -24,7 +24,12 @@
  * See backend/scripts/export_footprints_geojson.py, which writes the footprint
  * GeoJSON this projects.
  */
-import { ORIGINAL_IMAGE_WIDTH, ORIGINAL_IMAGE_HEIGHT, BACKGROUND_SCALE } from './backgroundConfig';
+import {
+  ORIGINAL_IMAGE_WIDTH,
+  ORIGINAL_IMAGE_HEIGHT,
+  BACKGROUND_SCALE,
+  COMPASS_ORIENTATION,
+} from './backgroundConfig';
 
 /** Normalised Web Mercator origin of the image frame's (0,0) corner. */
 const MERCATOR_ORIGIN = { x: 0.533247958333, y: 0.302790953592 };
@@ -65,6 +70,23 @@ export const lonLatToImage = (lon: number, lat: number): Point => {
     x: (dx * MERC_TO_IMAGE[0][0] + dy * MERC_TO_IMAGE[1][0]) * BACKGROUND_SCALE,
     y: (dx * MERC_TO_IMAGE[0][1] + dy * MERC_TO_IMAGE[1][1]) * BACKGROUND_SCALE,
   };
+};
+
+/**
+ * Degrees to rotate an up-pointing arrow so it points at true north on screen.
+ *
+ * Two rotations compose here. The Rhino model was turned ~18.8deg before the
+ * render, which in Mercator at this latitude reads as 21.2deg, and the viewer
+ * then applies COMPASS_ORIENTATION on top. North therefore does not point up:
+ * it comes out pointing left and slightly up, which is why the Vasa buildings
+ * (the northern end of the campus) sit on the left of the canvas.
+ */
+export const getNorthRotationDeg = (): number => {
+  // North is decreasing Mercator y, so its image-space direction is the
+  // negated second row of the affine.
+  const angleInImage = Math.atan2(-MERC_TO_IMAGE[1][1], -MERC_TO_IMAGE[1][0]);
+  // +90 because an arrow drawn pointing up already sits at -90deg.
+  return (angleInImage * 180) / Math.PI + COMPASS_ORIENTATION + 90;
 };
 
 export interface BasemapTile {

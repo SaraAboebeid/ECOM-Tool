@@ -52,7 +52,6 @@ export const CommunityControls = ({
   definition, onChange, isComputing, error, meta,
   scenarios, activeScenario, onScenarioChange,
 }: CommunityControlsProps) => {
-  const [isOpen, setIsOpen] = useState(true);
 
   const battery = definition.batteries?.[0];
   const chargePoint = definition.charge_points?.[0];
@@ -90,35 +89,11 @@ export const CommunityControls = ({
 
   const periodDays = definition.analysis_period?.end_day ?? 2;
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="absolute top-4 left-4 z-40 px-3 py-2 rounded-md bg-white/90 dark:bg-gray-800/90 backdrop-blur shadow-lg text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-800"
-      >
-        Scenario
-      </button>
-    );
-  }
-
+  // Positioning, the title and the collapse control now belong to the console
+  // rail, so this renders content only. It used to pin itself to `top-4 left-4`
+  // with z-40, which put it directly on top of the filter panel.
   return (
-    <div className="absolute top-4 left-4 z-40 w-72 max-h-[calc(100%-2rem)] overflow-y-auto rounded-lg bg-white/90 dark:bg-gray-800/90 backdrop-blur shadow-lg p-4 text-gray-900 dark:text-gray-100">
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="text-sm font-semibold">Scenario</h2>
-        <div className="flex items-center gap-2">
-          {isComputing && (
-            <span className="h-3 w-3 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-          )}
-          <button
-            onClick={() => setIsOpen(false)}
-            className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-lg leading-none"
-            aria-label="Collapse scenario panel"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-
+    <div className="text-gray-900 dark:text-gray-100">
       {error && (
         <div className="mb-3 p-2 rounded bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 text-[11px] whitespace-pre-wrap">
           {error}

@@ -1,25 +1,44 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { GraphData, Node, Link, NODE_COLORS } from '../../types';
-import { iconToString } from '../NodeIcons';
+import { GraphData, Node, NODE_COLORS } from '../../types';
 import { hasFixedPosition, getFixedPosition } from '../../utils/nodePositioning';
 
 const getNodeRadius = (node: Node): number => {
   switch (node.type) {
     case 'grid':
-      return 16;
+      return 18;
     case 'charge_point':
-      return 18;
-    case 'battery':
-      return 19;
-    case 'pv':
-      return 18;
-    case 'building':
       return 20;
+    case 'battery':
+      return 21;
+    case 'pv':
+      return 20;
+    case 'building':
+      return 22;
     default:
-      return 18;
+      return 20;
   }
 };
+
+const getNodePowerText = (node: Node): string => {
+  switch (node.type) {
+    case 'pv':
+      return node.installed_capacity ? `${node.installed_capacity.toFixed(1)} kW` : '';
+    case 'building':
+      return node.total_pv_capacity ? `${node.total_pv_capacity.toFixed(1)} kW` : '';
+    case 'battery':
+      return node.capacity ? `${node.capacity.toFixed(1)} kWh` : '';
+    case 'charge_point':
+      return node.capacity ? `${node.capacity.toFixed(1)} kW` : '';
+    default:
+      return '';
+  }
+};
+
+/** Chip geometry. Width is measured from the rendered text, not estimated. */
+const LABEL_CHIP_HEIGHT = 18;
+const LABEL_CHIP_PADDING_X = 9;
+const LABEL_CHIP_MIN_WIDTH = 42;
 
 const hasBuildingPvPanels = (node: Node): boolean =>
   node.type === 'building' && !!node.total_pv_capacity && node.total_pv_capacity > 0;
@@ -50,10 +69,6 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
   onNodeClick,
   tooltip
 }) => {
-  
-  // Cache for parsed SVG icons to avoid re-parsing
-  const iconCacheRef = useRef<Map<string, SVGElement>>(new Map());
-  
   // Cache for node data to prevent unnecessary DOM updates
   const lastDataRef = useRef<string>('');
   
@@ -226,9 +241,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .attr('class', (d: Node) => `node-main node-main-${d.type}`)
       .attr('r', (d: Node) => getNodeRadius(d))
       .attr('fill', (d: Node) => NODE_COLORS[d.type])
-      .attr('stroke', 'white')
-      .attr('stroke-width', '1')
-      .attr('stroke-opacity', '0.8')
+      .attr('stroke', '#eef6ff')
+      .attr('stroke-width', '1.8')
+      .attr('stroke-opacity', '0.92')
       .attr('opacity', (d: Node) => {
         // If this node has flow data for the current hour, make it fully opaque
         const hasFlow = data.links.some(link => {
@@ -238,6 +253,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
         });
         return hasFlow ? 1.0 : 0.55;
       })
+      .style('mix-blend-mode', 'screen')
       .style('filter', (d: Node) => {
         // If this node has flow data for the current hour, add a glow effect
         const hasFlow = data.links.some(link => {
@@ -259,9 +275,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .attr('height', 32)
       .attr('rx', 10)
       .attr('fill', NODE_COLORS.building)
-      .attr('stroke', 'white')
-      .attr('stroke-width', '1')
-      .attr('stroke-opacity', '0.85')
+      .attr('stroke', '#eef6ff')
+      .attr('stroke-width', '1.8')
+      .attr('stroke-opacity', '0.95')
       .attr('opacity', (d: Node) => {
         const hasFlow = data.links.some(link => {
           const isInvolved = link.source === d.id || link.target === d.id;
@@ -280,6 +296,16 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           ? 'drop-shadow(0 0 6px rgba(255,255,255,0.32)) drop-shadow(1px 3px 5px rgba(0,0,0,0.28))'
           : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))';
       });
+
+    nodeSelection
+      .append('circle')
+      .attr('class', 'node-energy-halo')
+      .attr('r', (d: Node) => getNodeRadius(d) + 8)
+      .attr('fill', 'none')
+      .attr('stroke', '#7dd3fc')
+      .attr('stroke-opacity', 0.22)
+      .attr('stroke-width', 1.4)
+      .style('pointer-events', 'none');
 
     nodeSelection.filter((d: Node) => hasBuildingPvPanels(d))
       .append('rect')
@@ -317,9 +343,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           .attr('class', 'material-symbols-outlined node-icon')
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'central')
-          .attr('dy', '-8px') // Position slightly above center
+          .attr('dy', '-2px')
           .attr('fill', 'white')
-          .style('font-size', d.type === 'building' ? '22px' : '20px')
+          .style('font-size', d.type === 'building' ? '24px' : '22px')
           .style('pointer-events', 'none')
           .style('user-select', 'none')
           .text(iconName)
@@ -333,51 +359,10 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
             return hasFlow ? 1.0 : 0.7; // Slightly fade icons for inactive nodes
           });
       }
-      
-      // Add text label inside the node
-      node.append('text')
-        .attr('class', 'node-inner-label')
-        .attr('text-anchor', 'middle')
-        .attr('dy', '18px')
-        .attr('fill', 'white')
-        .attr('font-size', '11px')
-        .attr('font-weight', 'bold')
-        .attr('pointer-events', 'none')
-        .style('font-family', 'system-ui, -apple-system, sans-serif')
-        .style('text-shadow', '0px 0px 2px rgba(0, 0, 0, 0.8)')
-        .style('user-select', 'none')
-        .text(() => {
-          const label = d.name || d.id;
-          return label.substring(0, 2);
-        });
-        
-      // Add power value inside the node
-      node.append('text')
-        .attr('class', 'node-power-value')
-        .attr('text-anchor', 'middle')
-        .attr('dy', '31px')
-        .attr('fill', 'white')
-        .attr('font-size', '10px')
-        .attr('font-weight', 'bold')
-        .attr('pointer-events', 'none')
-        .style('font-family', 'system-ui, -apple-system, sans-serif')
-        .style('text-shadow', '0px 0px 2px rgba(0, 0, 0, 0.8)')
-        .style('user-select', 'none')
-        .text(() => {
-          switch(d.type) {
-            case 'pv':
-              return d.installed_capacity ? `${d.installed_capacity.toFixed(1)} kW` : '';
-            case 'building':
-              return d.total_pv_capacity ? `${d.total_pv_capacity.toFixed(1)} kW` : '';
-            case 'battery':
-              return d.capacity ? `${d.capacity.toFixed(1)} kW` : '';
-            case 'charge_point':
-              return d.capacity ? `${d.capacity.toFixed(1)} kW` : '';
-            default:
-              return '';
-          }
-        });
-      
+
+      // No abbreviation label here: the chip below already carries the full
+      // name, and stacking both repeated it on every node.
+
       // Add feature indicators
       if (d.type === 'building' && d.total_pv_capacity && d.total_pv_capacity > 0) {
         node.append('circle')
@@ -396,41 +381,64 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       }
     });
 
-    // Add labels below nodes
-    nodeSelection.append('text')
+    // The single label: full name in a chip sized to the text it holds.
+    const labelChip = nodeSelection.append('g')
+      .attr('class', 'node-label-chip')
+      .attr('transform', 'translate(0,38)')
+      .style('pointer-events', 'none');
+
+    // Text goes in first so it can be measured; the chip is inserted behind it
+    // afterwards. Estimating width from character count, as this did before,
+    // truncated the longer names - 'CSB Gibraltarvallen guesthouse' needs about
+    // 200px and the old estimate clamped every chip to 130.
+    labelChip.append('text')
+      .attr('class', 'node-label-text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '3.4em')
-      .attr('fill', (d: Node) => {
-        return d.type === 'pv' ? '#333' : '#fff';
-      })
-      .attr('font-size', '11px')
-      .attr('font-weight', 'bold')
-      .attr('class', 'node-label')
+      .attr('dy', '2px')
+      .attr('fill', '#f8fafc')
+      .attr('font-size', '10px')
+      .attr('font-weight', '600')
+      .style('font-family', 'Sora, system-ui, sans-serif')
+      .style('user-select', 'none')
       .text((d: Node) => d.name || d.id);
-      
-    // Add type labels
+
+    labelChip.each(function () {
+      const group = d3.select(this);
+      const textNode = group.select<SVGTextElement>('text.node-label-text').node();
+      if (!textNode) return;
+
+      let textWidth = 0;
+      try {
+        textWidth = textNode.getComputedTextLength();
+      } catch {
+        // getComputedTextLength throws if the element is not rendered yet.
+        textWidth = (textNode.textContent || '').length * 6.1;
+      }
+
+      const chipWidth = Math.max(LABEL_CHIP_MIN_WIDTH, textWidth + LABEL_CHIP_PADDING_X * 2);
+      group.insert('rect', 'text')
+        .attr('x', -chipWidth / 2)
+        .attr('y', -LABEL_CHIP_HEIGHT / 2)
+        .attr('width', chipWidth)
+        .attr('height', LABEL_CHIP_HEIGHT)
+        .attr('rx', LABEL_CHIP_HEIGHT / 2)
+        .attr('fill', 'rgba(15, 23, 42, 0.78)')
+        .attr('stroke', 'rgba(148, 163, 184, 0.45)')
+        .attr('stroke-width', 0.9);
+    });
+
+    // A second line only where there is a real measured value. The old code
+    // fell back to the building_type, which put 'LargeOffice' under every
+    // building name for no informational gain.
     nodeSelection.append('text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '4.8em')
-      .attr('fill', '#fff')
+      .attr('dy', '5.3em')
+      .attr('fill', '#64748b')
       .attr('font-size', '9px')
+      .attr('letter-spacing', '0.06em')
       .attr('class', 'node-metric')
-      .text((d: Node) => {
-        switch(d.type) {
-          case 'pv':
-            return 'Solar PV';
-          case 'building':
-            return d.building_type || 'Building';
-          case 'battery':
-            return 'Battery';
-          case 'charge_point':
-            return 'Charging';
-          case 'grid':
-            return 'Grid';
-          default:
-            return d.type;
-        }
-      });
+      .style('pointer-events', 'none')
+      .text((d: Node) => getNodePowerText(d));
 
     // Update simulation node force with new data
     if (simulation) {
@@ -497,9 +505,16 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       if (!nodeBadge.empty()) {
         nodeBadge.attr('opacity', hasFlow ? 1.0 : 0.85);
       }
+
+      const nodeHalo = nodeElement.select('.node-energy-halo');
+      if (!nodeHalo.empty()) {
+        nodeHalo
+          .attr('stroke-opacity', hasFlow ? 0.45 : 0.14)
+          .attr('stroke-width', hasFlow ? 1.8 : 1.1);
+      }
       
       // Update icon opacity if it exists
-      const nodeIcon = nodeElement.select('svg');
+      const nodeIcon = nodeElement.select('.node-icon');
       if (!nodeIcon.empty()) {
         nodeIcon.attr('opacity', hasFlow ? 1.0 : 0.7);
       }

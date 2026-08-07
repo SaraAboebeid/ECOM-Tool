@@ -1,5 +1,6 @@
 import { Node } from '../types';
 import { BACKGROUND_SCALE, COMPASS_ORIENTATION, rotatePoint, getImageCenter } from './backgroundConfig';
+import { canonicalName } from './canonicalName';
 
 /**
  * Original fixed positions for specific nodes in the graph
@@ -24,7 +25,7 @@ const ORIGINAL_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   'Kemi': { x: 352.798, y: 405.317 },
   'Emils kårhus': { x: 405.376, y: 407.888 },
   'Nya Matte': { x: 302.303, y: 499.262 },
-  'bibliotek': { x: 402.648, y: 484.516 },
+  'Bibliotek': { x: 402.648, y: 484.516 },
   'Kårhus entré': { x: 114.806, y: 562.152 },
   'Maskinteknik': { x: 319.243, y: 651.008 },
   'Lokalkontor': { x: 287.304, y: 586.620 },
@@ -81,19 +82,38 @@ export const FIXED_NODE_POSITIONS: Record<string, { x: number; y: number }> =
   );
 
 /**
- * Apply fixed positions to nodes that have predefined locations
+ * Fixed positions keyed canonically, so a node id only has to match a table
+ * entry up to case and accents.
+ */
+const CANONICAL_FIXED_POSITIONS: Map<string, { x: number; y: number }> = new Map(
+  Object.entries(FIXED_NODE_POSITIONS).map(([id, position]) => [
+    canonicalName(id),
+    position
+  ])
+);
+
+/**
+ * Apply fixed positions to nodes that have predefined locations.
+ *
  * @param nodes Array of nodes to process
+ * @param footprintCentroids Optional fallback positions, canonically keyed and
+ *   already in node coordinate space. Used only where the hand-placed table has
+ *   no entry, so tuned positions are never overridden. Without this, a building
+ *   with energy data but no table entry falls through to the force layout,
+ *   which is seeded in viewport pixels rather than image-frame coordinates and
+ *   so parks its icon roughly a thousand pixels away from the campus.
  * @returns Modified nodes with fixed positions applied
  */
-export const applyFixedPositions = (nodes: Node[]): Node[] => {
+export const applyFixedPositions = (
+  nodes: Node[],
+  footprintCentroids?: Map<string, { x: number; y: number }>
+): Node[] => {
   return nodes.map(node => {
-    const fixedPosition = FIXED_NODE_POSITIONS[node.id];
-    if (fixedPosition) {
-      return {
-        ...node,
-        fx: fixedPosition.x,
-        fy: fixedPosition.y
-      };
+    const key = canonicalName(node.id);
+    const position =
+      CANONICAL_FIXED_POSITIONS.get(key) ?? footprintCentroids?.get(key);
+    if (position) {
+      return { ...node, fx: position.x, fy: position.y };
     }
     return node;
   });

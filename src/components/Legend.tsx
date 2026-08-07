@@ -30,7 +30,6 @@ export const Legend = ({
   onCapacityRangeChange,
   maxCapacity = 100
 }: LegendProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isTypeFilterCollapsed, setIsTypeFilterCollapsed] = useState(false);
   const [isOwnerFilterCollapsed, setIsOwnerFilterCollapsed] = useState(false);
   const [isV2GFilterCollapsed, setIsV2GFilterCollapsed] = useState(false);
@@ -38,36 +37,14 @@ export const Legend = ({
   const [isCapacityFilterCollapsed, setIsCapacityFilterCollapsed] = useState(false);
   const nodeTypes = Object.entries(NODE_COLORS);
 
+  // Content only: the console rail supplies the frame, title and collapse
+  // control. This used to pin itself to `top-4 left-4`, the same coordinates as
+  // the scenario panel, so the two rendered on top of one another.
   return (
-    <div className={`absolute top-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg transition-all duration-300 ease-in-out ${
-      isCollapsed ? 'max-w-fit' : 'max-w-[calc(100vw-2rem)]'
-    }`}>
-      {/* Header with toggle button */}
-      <div className={`flex items-center justify-between border-b border-gray-200 dark:border-gray-700 transition-all duration-300 ${
-        isCollapsed ? 'p-3' : 'p-4'
-      }`}>
-        <h3 className={`font-semibold text-gray-900 dark:text-white transition-all duration-300 ${
-          isCollapsed ? 'text-sm' : 'text-lg'
-        }`}>
-          {isCollapsed ? 'Filters' : 'Filters'}
-        </h3>
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-          aria-label={isCollapsed ? "Expand filters" : "Collapse filters"}
-        >
-          <ChevronIcon className={`w-4 h-4 text-gray-500 dark:text-gray-400 transform transition-transform duration-300 ${
-            isCollapsed ? 'rotate-180' : 'rotate-0'
-          }`} />
-        </button>
-      </div>
-
-      {/* Collapsible content */}
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
-        isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[calc(100vh-200px)] opacity-100'
-      }`}>
-        <div 
-          className="p-2 space-y-3 overflow-y-auto w-64 custom-scrollbar"
+    <div>
+      <div>
+        <div
+          className="space-y-3 custom-scrollbar"
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: 'rgb(156 163 175) transparent'
