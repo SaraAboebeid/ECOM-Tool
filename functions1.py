@@ -10,9 +10,89 @@ from pyomo.opt import TerminationCondition
 from pathlib import Path
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# ---------------------------------------------------------------------------
+# Solver configuration
+#
+# This used to be a hardcoded SolverFactory('gurobi'). Gurobi needs a licence,
+# so the name is configurable and defaults to HiGHS, which pip installs via
+# `highspy` and needs no licence. Set functions1.SOLVER_NAME = 'gurobi' to go
+# back to Gurobi where it is available.
+# ---------------------------------------------------------------------------
+SOLVER_NAME = 'appsi_highs'
+SOLVER_TIME_LIMIT = 120          # seconds per solve
+
+# ---------------------------------------------------------------------------
+# Tunable parameters
+#
+# These were literals inside the classes below. Hoisting them to module level
+# lets a caller set them before building the model. They must be set BEFORE
+# construction: the constraints and the objective read them during __init__,
+# and pyo.Objective(rule=...) evaluates its rule immediately, so assigning to
+# model.Effect_fee afterwards has no effect on the expression already built.
+#
+# Every default is unchanged, so existing notebooks behave exactly as before.
+# ---------------------------------------------------------------------------
+EFFICIENCY = 0.93                      # round-trip, fraction (EV and BESS)
+BATTERY_COST_EUR_PER_KWH = 137         # replacement value used by the aging model
+BESS_SOC_MIN = 0.0                     # lower bound on battery state of charge
+
+PEAK_MULTIPLIER = 5                    # multiplier on the monthly peak charge
+SUBSCRIPTION_FEE_SEK_PER_MONTH = 605   # SEK per 30 days
+EFFECT_FEE_SEK_PER_KW_MONTH = 61.55    # SEK/kW per 30 days
+TRANSMISSION_FEE = 0.113               # SEK/kWh
+TRANSMISSION_HEALTH_INCENTIVE = 0.04   # SEK/kWh, paid on export
+ENERGY_TAX = 0.439                     # SEK/kWh
+ENERGY_CERTIFICATE = 0.005             # SEK/kWh
+COMPENSATION_FEE = 0.02                # SEK/kWh
+VAT_RATE = 0.25                        # on supplier cost, DSO cost and energy tax
+
+# Each solver spells its wall-clock limit differently.
+_TIME_LIMIT_OPTION = {
+    'gurobi': 'TimeLimit',
+    'cbc': 'seconds',
+    'glpk': 'tmlim',
+    'cplex': 'timelimit',
+}
+
+
+def _apply_time_limit(solver, name, seconds):
+    """Set the solve time limit whatever the solver calls it."""
+    if not seconds:
+        return
+    if name.startswith('appsi'):
+        # appsi solvers expose a typed config rather than an options dict.
+        try:
+            solver.config.time_limit = seconds
+            return
+        except Exception:
+            pass
+    key = _TIME_LIMIT_OPTION.get(name)
+    if key:
+        try:
+            solver.options[key] = seconds
+        except Exception:
+            pass
+
+
+def _termination_condition(results):
+    """Termination condition from either results object shape.
+
+    The classic Pyomo interface nests it under `.solver`; appsi solvers put it
+    at the top level. functions1 previously assumed the classic shape only.
+    """
+    solver_block = getattr(results, 'solver', None)
+    if solver_block is not None and hasattr(solver_block, 'termination_condition'):
+        return solver_block.termination_condition
+    return getattr(results, 'termination_condition', None)
+
+
+def _hit_time_limit(results):
+    condition = _termination_condition(results)
+    return str(condition).lower().replace('_', '') in ('maxtimelimit', 'timelimit')
 class charging_point():
     def __init__(self, name, ev_id, session_id, ev_capacity, ev_max_power, ev_arrival_soc, ev_arrival, ev_departure, ev_desired_soc):
-        self.efficiency = 0.93
+        self.efficiency = EFFICIENCY
         # Input validation using assertions
         assert isinstance(ev_capacity, list), "ev_capacity must be a list"
         assert isinstance(ev_max_power, list), "ev_max_power must be a list"
@@ -54,14 +134,14 @@ class charging_point():
         self.BatVol = 400 #Battery voltage in V
         self.eoi = 0.2 # End-of-life of battery in percentage (20%)
         self.SalRep = 0.5 # Salvation value over replacement value
-        self.Rep = [11.1*137*i for i in self.ev_capacity] # replacement value of battery (SEK/kWh)
+        self.Rep = [11.1*BATTERY_COST_EUR_PER_KWH*i for i in self.ev_capacity] # replacement value of battery (SEK/kWh)
         self.discount = 0.05 # discount rate (5%)
         self.life = 10 # lifetime of battery (10 years)
         self.OM = [0.02 * i for i in self.Rep] # operation and maintenance cost of battery (2% of replacement cost)
 
 class building():
     def __init__(self, name, load, pv_production, bess_capacity, bess_max_power, bess_initial_soc):
-        self.efficiency = 0.93
+        self.efficiency = EFFICIENCY
         self.name = name
         self.load = load
         self.pv_production = pv_production
@@ -73,7 +153,7 @@ class building():
         self.bess_BatVol = 400 #Battery voltage in V
         self.bess_eoi = 0.2 # End-of-life of battery in percentage (20%)
         self.bess_SalRep = 0.5 # Salvation value over replacement value
-        self.bess_Rep = 11.1*137*self.bess_capacity # replacement value of battery (SEK/kWh)
+        self.bess_Rep = 11.1*BATTERY_COST_EUR_PER_KWH*self.bess_capacity # replacement value of battery (SEK/kWh)
         self.bess_discount = 0.05 # discount rate (5%)
         self.bess_life = 10 # lifetime of battery (10 years)
         self.bess_OM = 0.02 *self.bess_Rep # operation and maintenance cost of battery (2% of replacement cost)
@@ -138,13 +218,13 @@ class LEC_Opt_spot_fcrn_fcrd():
         self.model.fcrn_returns = pyo.Var(self.model.T, within=pyo.NonNegativeReals)
         self.model.Pbid_fcrd = pyo.Var(self.model.T, within=pyo.NonNegativeReals)
         self.model.fcrd_returns = pyo.Var(self.model.T, within=pyo.NonNegativeReals)
-        self.model.Subscription_fee = 605/30  # Subscription fee SEK/14 days
-        self.model.Transmission_fee = 0.113   # Electricity transmission fee SEK/kWh
-        self.model.Transmission_health_incentive = 0.04 #Transmission health incentive SEK/kWh
-        self.model.Effect_fee = 61.55/30       # Effect fee SEK/kW/14 days
-        self.model.Energy_tax = 0.439           # Tax fee SEK/kWh
-        self.model.Energy_certificate = 0.005   #Energy certificate SEK/kWh
-        self.model.compensation_fee = 0.02    # Transfer compensation fee SEK/kWh
+        self.model.Subscription_fee = SUBSCRIPTION_FEE_SEK_PER_MONTH/30  # SEK/30 days
+        self.model.Transmission_fee = TRANSMISSION_FEE   # Electricity transmission fee SEK/kWh
+        self.model.Transmission_health_incentive = TRANSMISSION_HEALTH_INCENTIVE #SEK/kWh
+        self.model.Effect_fee = EFFECT_FEE_SEK_PER_KW_MONTH/30       # Effect fee SEK/kW/30 days
+        self.model.Energy_tax = ENERGY_TAX           # Tax fee SEK/kWh
+        self.model.Energy_certificate = ENERGY_CERTIFICATE   #Energy certificate SEK/kWh
+        self.model.compensation_fee = COMPENSATION_FEE    # Transfer compensation fee SEK/kWh
         self.model.resolution = self.resolution
 
         for charge_point in self.charging_points:
@@ -526,7 +606,7 @@ class LEC_Opt_spot_fcrn_fcrd():
             setattr(self.model, f'{building.name}_bess_Pbid_fcrdd', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, 1000000*self.fcrdd_on*building.bess_capacity)))
             setattr(self.model, f'{building.name}_bess_Pch_fcrd', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, 1000000*self.fcrdd_on*building.bess_capacity)))
             setattr(self.model, f'{building.name}_bess_Pds_fcrd', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, 1000000*self.fcrdu_on*building.bess_capacity)))
-            setattr(self.model, f'{building.name}_bess_soc', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, 1)))
+            setattr(self.model, f'{building.name}_bess_soc', pyo.Var(self.model.T, within=pyo.Reals, bounds=(BESS_SOC_MIN, 1)))
             setattr(self.model, f'{building.name}_bess_ch', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, building.bess_max_power)))
             setattr(self.model, f'{building.name}_bess_ds', pyo.Var(self.model.T, within=pyo.Reals, bounds=(0, building.bess_max_power)))
             setattr(self.model, f'{building.name}_bess_Bch', pyo.Var(self.model.T, within=pyo.Binary))
@@ -625,8 +705,10 @@ class LEC_Opt_spot_fcrn_fcrd():
 
             def building_consumption(model, t, building = building): #from spot/LEC
                 P = getattr(model, f'{building.name}_P')[t]
-                load = building.load[t]
-                pv = building.pv_production[t]
+                # .iloc, not [t]: these are Series with a DatetimeIndex, and
+                # positional lookup via [int] was removed in pandas 3.0.
+                load = building.load.iloc[t]
+                pv = building.pv_production.iloc[t]
                 bess_ch = getattr(model, f'{building.name}_bess_ch')[t]
                 bess_ds = getattr(model, f'{building.name}_bess_ds')[t]
                 return load - pv - bess_ds + bess_ch == P
@@ -864,9 +946,9 @@ class LEC_Opt_spot_fcrn_fcrd():
             subscription_fee = model.Subscription_fee
             supplier_cost = sum(model.supplier_cost[t] for t in model.T)
             transmission_cost = sum(model.transmission_cost[t] for t in model.T)
-            peak_cost = model.Effect_fee * model.monthly_peak * 5 #Check with "day/month" instead of 5
+            peak_cost = model.Effect_fee * model.monthly_peak * PEAK_MULTIPLIER
             dso_cost = transmission_cost + peak_cost + subscription_fee
-            tax_cost = (supplier_cost + dso_cost)*0.25 + (1.25 * model.Energy_tax * sum(model.P_im_grid[t] - model.P_ex_grid[t] for t in model.T) / self.resolution)
+            tax_cost = (supplier_cost + dso_cost)*VAT_RATE + ((1 + VAT_RATE) * model.Energy_tax * sum(model.P_im_grid[t] - model.P_ex_grid[t] for t in model.T) / self.resolution)
             ev_aging_cost = sum(sum(getattr(model, f'{charge_point.name}_Cyclic_cost')[t] + getattr(model, f'{charge_point.name}_Calendar_cost')[t] \
                                     for charge_point in self.charging_points) for t in model.T)
             building_bess_aging_cost = sum(sum(getattr(model, f'{building.name}_bess_CycCost')[t] + getattr(model, f'{building.name}_bess_CalCost')[t] \
@@ -881,9 +963,9 @@ class LEC_Opt_spot_fcrn_fcrd():
             subscription_fee = model.Subscription_fee
             supplier_cost = sum(model.supplier_cost[t] for t in model.T)
             transmission_cost = sum(model.transmission_cost[t] for t in model.T)
-            peak_cost = model.Effect_fee * model.monthly_peak * 5 #Check with "day/month" instead of 5
+            peak_cost = model.Effect_fee * model.monthly_peak * PEAK_MULTIPLIER
             dso_cost = transmission_cost + peak_cost + subscription_fee
-            tax_cost = (supplier_cost + dso_cost)*0.25 + (1.25 * model.Energy_tax * sum(model.P_im_grid[t] - model.P_ex_grid[t] for t in model.T) / self.resolution)
+            tax_cost = (supplier_cost + dso_cost)*VAT_RATE + ((1 + VAT_RATE) * model.Energy_tax * sum(model.P_im_grid[t] - model.P_ex_grid[t] for t in model.T) / self.resolution)
             building_bess_aging_cost = sum(sum(getattr(model, f'{building.name}_bess_CycCost')[t] + getattr(model, f'{building.name}_bess_CalCost')[t] \
                                     for building in self.buildings) for t in model.T)
             ev_soc = sum(t * (getattr(model, f'{charge_point.name}_S{charge_point.session_id[ev_index]}_soc')[t]) for charge_point in self.charging_points for ev_index in range(charge_point.num_evs) for t in model.T)
@@ -892,8 +974,8 @@ class LEC_Opt_spot_fcrn_fcrd():
         self.model.obj_dc = pyo.Objective(rule=objective_rule_dc, sense=pyo.minimize)
 
     def solve(self):
-        solver = pyo.SolverFactory('gurobi')
-        solver.options['TimeLimit'] = 120
+        solver = pyo.SolverFactory(SOLVER_NAME)
+        _apply_time_limit(solver, SOLVER_NAME, SOLVER_TIME_LIMIT)
         if self.dc:
             self.model.obj.deactivate()
             self.model.obj_dc.activate()
@@ -1225,14 +1307,14 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
                                     act_fcrd_up=act_up_fcrd, act_fcrd_down=act_down_fcrd, fcrn_on=fcrn_on, fcrdd_on=fcrdd_on, fcrdu_on=fcrdu_on, aging=aging, resolution=resolution ,v2g_on=v2g_on, dc = dc)
 
         results_df = opt_model.solve()
-        if results_df.solver.termination_condition == TerminationCondition.maxTimeLimit:
+        if _hit_time_limit(results_df):
             print("Solver stopped due to time limit and trying only with SC ")
             unfeasible_days.append(day)
             opt_model = LEC_Opt_spot_fcrn_fcrd(charging_point_list, building_list, spot_prices, temperature=temperatures, fcrn_prices=fcrn_prices, fcrdu_prices=fcrdu_prices, fcrdd_prices=fcrdd_prices,
                                     reg_up=up_reg, reg_down=down_reg, act_fcrn_up=act_up_fcrn, act_fcrn_down=act_down_fcrn, 
                                     act_fcrd_up=act_up_fcrd, act_fcrd_down=act_down_fcrd, fcrn_on=0, fcrdd_on=0, fcrdu_on=0, aging=0, resolution=resolution ,v2g_on=0, dc = False)
             results_df = opt_model.solve()
-            if results_df.solver.termination_condition == TerminationCondition.maxTimeLimit:
+            if _hit_time_limit(results_df):
                 print(f"Solver stopped due to time limit with SC - recheck every input data on day {day}")
                 break
         df = opt_model.get_results()
@@ -1262,7 +1344,12 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
             print("Step 4: Updating building SOCs")
             for name in building_data.keys():
                 soc_val = df[f'{name}_bess_soc'].iloc[store_hours * resolution - 1]
-                previous_soc[name].iloc[0] = soc_val
+                # Single-step .loc assignment. The previous form,
+                # previous_soc[name].iloc[0] = soc_val, is chained assignment:
+                # under pandas 3.0 Copy-on-Write it writes to a temporary and
+                # silently does nothing, so every day restarted from the initial
+                # SOC instead of carrying the battery state forward.
+                previous_soc.loc[previous_soc.index[0], name] = soc_val
                 print(f"  🔋 {name} end-of-day SOC: {soc_val:.2f}")
         else:
             print('Step 4. No buildings available')
@@ -1297,12 +1384,18 @@ def optimization_function_lec(charging_point_data, building_data, prices, temper
     rolling_results['Cal_Age'] = rolling_results.filter(regex='_CalAg$').sum(axis=1) * 100
     rolling_results['Cyc_Cost'] = rolling_results.filter(regex='_CycCost$').sum(axis=1) 
     rolling_results['Cal_Cost'] = rolling_results.filter(regex='_CalCost$').sum(axis=1) 
-    peak_load = (rolling_results['P_import_all']-rolling_results['P_export_all']).resample('M').max()
-    monthly_peak_costs = peak_load * 61.533 / 30 / 24 / resolution
+    # 'M' was removed in pandas 3.0; 'ME' is the month-end alias.
+    # These reported costs are recomputed here rather than read back from the
+    # model, so they carried a second copy of the tariff constants - 61.533,
+    # 0.25 and 0.439 written inline. That meant tuning the model changed the
+    # solution but not the numbers reported for it. They now read the same
+    # module-level parameters the model was built from.
+    peak_load = (rolling_results['P_import_all']-rolling_results['P_export_all']).resample('ME').max()
+    monthly_peak_costs = peak_load * EFFECT_FEE_SEK_PER_KW_MONTH / 30 / 24 / resolution
     month_end_index = rolling_results.index.to_period('M').to_timestamp('M')
     rolling_results['Peak cost'] = month_end_index.map(monthly_peak_costs)
     rolling_results['DSO cost'] = rolling_results['Transmission cost'] + rolling_results['Peak cost']
-    rolling_results['Tax cost'] = 0.25 * (rolling_results['Supplier cost'] + rolling_results['DSO cost']) + 1.25 * 0.439 * (rolling_results['P_import_all'] - rolling_results['P_export_all']) / resolution
+    rolling_results['Tax cost'] = VAT_RATE * (rolling_results['Supplier cost'] + rolling_results['DSO cost']) + (1 + VAT_RATE) * ENERGY_TAX * (rolling_results['P_import_all'] - rolling_results['P_export_all']) / resolution
     rolling_results['Overall cost'] = rolling_results['DSO cost'] + rolling_results['Supplier cost'] + rolling_results['Tax cost'] - rolling_results['FCRN returns'] - rolling_results['FCRD returns']
     print(f'\n \n Overall simulation completed - number of unfesible days: {len(unfeasible_days)} and they are: {unfeasible_days}')
     return rolling_results
