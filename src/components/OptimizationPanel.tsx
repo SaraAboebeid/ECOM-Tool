@@ -27,6 +27,8 @@ const KWH = (value: number) =>
 
 interface OptimizationPanelProps {
   definition: CommunityDefinition;
+  /** Only what the user changed; anything absent keeps LEC-Opt's default. */
+  parameters?: Record<string, number>;
   /** Dispatcher cost for the same period, if known, to show the delta. */
   baselineCost?: number | null;
 }
@@ -34,6 +36,7 @@ interface OptimizationPanelProps {
 export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
   definition,
   baselineCost,
+  parameters,
 }) => {
   const [solver, setSolver] = useState<SolverStatus | null>(null);
   const [job, setJob] = useState<OptimizeJob | null>(null);
@@ -89,6 +92,8 @@ export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
         store_hours: 24,
         aging,
         v2g,
+        parameters:
+          parameters && Object.keys(parameters).length ? parameters : undefined,
       });
       setJob(submitted);
       poll(submitted.id);

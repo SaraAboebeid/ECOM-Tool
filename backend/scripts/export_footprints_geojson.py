@@ -133,6 +133,16 @@ def footprint_polygon(objects) -> tuple[Polygon | None, float]:
     return merged, height
 
 
+def shape_of(geojson_geometry):
+    """Rebuild a shapely geometry from an already-reprojected GeoJSON dict."""
+    from shapely.geometry import shape
+
+    try:
+        return shape(geojson_geometry)
+    except Exception:
+        return None
+
+
 def to_wgs84(geom, transformer: Transformer):
     """Reproject a shapely polygon/multipolygon ring-wise into lon/lat."""
     def ring(coords):
@@ -226,6 +236,36 @@ def main() -> int:
                 "survey data.",
         "features": features,
     }
+
+    # --- centroids, for node placement ------------------------------------
+    #
+    # Written as a separate importable file rather than read back out of the
+    # GeoJSON at runtime. The GeoJSON is fetched, so its centroids arrive after
+    # the first render; by then the graph has already bound its D3 selection to
+    # node objects without positions, and swapping in new objects afterwards
+    # does not move what is on screen. Importing this synchronously means every
+    # node has its position on the first bind.
+    #
+    # Longitude/latitude, so the projection stays defined in one place -
+    # src/utils/geoProjection.ts converts these at module load.
+    centroids = {}
+    for feature in features:
+        if feature["properties"]["kind"] != "building":
+            continue
+        geom = shape_of(feature["geometry"])
+        if geom is None or geom.is_empty:
+            continue
+        point = geom.representative_point() if not geom.centroid.within(geom) \
+            else geom.centroid
+        centroids[feature["properties"]["rhino_layer"]] = [
+            round(point.x, 7), round(point.y, 7)]
+
+    centroid_path = BACKEND.parent / "src" / "data" / "buildingCentroids.json"
+    centroid_path.parent.mkdir(parents=True, exist_ok=True)
+    centroid_path.write_text(
+        json.dumps(centroids, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8")
+    print(f"Wrote {centroid_path} ({len(centroids)} centroids)")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, separators=(",", ":"),

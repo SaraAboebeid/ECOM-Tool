@@ -15,6 +15,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.builders.community import CommunityBuildError, build_community
@@ -23,6 +25,8 @@ from app.services.dispatch import run_dispatch
 from app.services.nordpool import NordPoolClient, NordPoolUnavailable
 from app.services.jobs import runner
 from app.services.optimize import run_optimization, solver_status
+from app.services.sweep import run_sweep
+from app.schemas.optimizer_params import OptimizerParameters, describe_parameters
 from app.services.pvgis_cache import PVGISCache, PVGISUnavailable
 
 CACHE_ROOT = Path(__file__).resolve().parents[1] / "cache"
@@ -167,6 +171,8 @@ class OptimizeRequest(BaseModel):
                             description="Hours kept from each step before rolling on.")
     aging: bool = Field(False, description="Include battery degradation cost.")
     v2g: bool = Field(False, description="Allow vehicle-to-grid discharge.")
+    parameters: OptimizerParameters | None = Field(
+        None, description="Overrides for LEC-Opt's hardcoded constants.")
     temperature_c: float = Field(18.0, description="Ambient temperature for aging.")
 
 
@@ -174,6 +180,65 @@ class OptimizeRequest(BaseModel):
 def optimizer_solver() -> dict:
     """Whether the optimizer can run here, and with which solver."""
     return solver_status()
+
+
+@app.get("/api/optimize/parameters")
+def optimizer_parameters() -> dict:
+    """Tunable LEC-Opt constants: defaults, bounds and where each came from.
+
+    Served rather than duplicated in the frontend so the provenance - including
+    which values are known to be out of date - has one source.
+    """
+    return {"parameters": describe_parameters()}
+
+
+class SweepRequest(BaseModel):
+    community: CommunitySpec
+    variable: Literal["battery_kwh", "pv_percent"] = Field(
+        description="What to vary across runs.")
+    values: list[float] = Field(
+        description="Sizes to solve at. Each is a full optimisation, so keep "
+        "the count and the day count small.",
+        min_length=1, max_length=12)
+    days: int | None = None
+    horizon_hours: int = Field(36, ge=2, le=72)
+    store_hours: int = Field(24, ge=1, le=48)
+    aging: bool = False
+    v2g: bool = False
+    parameters: OptimizerParameters | None = None
+
+
+@app.post("/api/optimize/sweep")
+def start_sweep(request: SweepRequest) -> dict:
+    """Queue a sizing sweep. LEC-Opt cannot size anything itself - capacity is
+    an input, not a decision variable - so this solves once per candidate size
+    and returns the cost curve."""
+    status = solver_status()
+    if not status["available"]:
+        raise HTTPException(status_code=503, detail=status["detail"])
+
+    def work(report):
+        return run_sweep(
+            request.community,
+            variable=request.variable,
+            values=request.values,
+            days=request.days,
+            horizon_hours=request.horizon_hours,
+            store_hours=request.store_hours,
+            aging=request.aging,
+            v2g=request.v2g,
+            parameters=request.parameters,
+            nordpool=nordpool,
+            progress=report,
+        )
+
+    job = runner.submit("sweep", work, meta={
+        "community": request.community.name,
+        "variable": request.variable,
+        "points": len(request.values),
+        "days": request.days or max(1, request.community.analysis_period.n_hours // 24),
+    })
+    return job.as_dict()
 
 
 @app.post("/api/optimize")
@@ -199,6 +264,7 @@ def start_optimization(request: OptimizeRequest) -> dict:
             v2g=request.v2g,
             temperature_c=request.temperature_c,
             nordpool=nordpool,
+            parameters=request.parameters,
             progress=report,
         )
 

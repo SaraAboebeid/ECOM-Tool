@@ -1,6 +1,7 @@
 import { Node } from '../types';
 import { BACKGROUND_SCALE, COMPASS_ORIENTATION, rotatePoint, getImageCenter } from './backgroundConfig';
 import { canonicalName } from './canonicalName';
+import { lonLatToImage } from './geoProjection';
 
 /**
  * Original fixed positions for specific nodes in the graph
@@ -82,15 +83,49 @@ export const FIXED_NODE_POSITIONS: Record<string, { x: number; y: number }> =
   );
 
 /**
+ * Footprint centroids from the Rhino model, in longitude/latitude.
+ *
+ * Imported rather than fetched. The GeoJSON arrives after first paint, and by
+ * then the graph has bound its D3 selection to node objects that have no
+ * position; replacing those objects later updates the simulation but not what
+ * is drawn, so buildings placed this way stayed in the force layout. A static
+ * import means every node has its position on the very first bind.
+ *
+ * Regenerate with backend/scripts/export_footprints_geojson.py.
+ */
+import BUILDING_CENTROIDS from '../data/buildingCentroids.json';
+
+/**
  * Fixed positions keyed canonically, so a node id only has to match a table
  * entry up to case and accents.
+ *
+ * The hand-placed table wins; centroids only fill the gaps, so tuned positions
+ * are never overridden by a computed one.
  */
-const CANONICAL_FIXED_POSITIONS: Map<string, { x: number; y: number }> = new Map(
-  Object.entries(FIXED_NODE_POSITIONS).map(([id, position]) => [
-    canonicalName(id),
-    position
-  ])
-);
+const CANONICAL_FIXED_POSITIONS: Map<string, { x: number; y: number }> = (() => {
+  const map = new Map<string, { x: number; y: number }>();
+
+  const centre = getImageCenter();
+  for (const [name, lonLat] of Object.entries(
+    BUILDING_CENTROIDS as Record<string, [number, number]>
+  )) {
+    const point = lonLatToImage(lonLat[0], lonLat[1]);
+    // Node coordinates are pre-rotated; the footprints are drawn inside a group
+    // that carries the rotation instead, so it has to be applied here.
+    map.set(
+      canonicalName(name),
+      COMPASS_ORIENTATION % 360 === 0
+        ? point
+        : rotatePoint(point.x, point.y, COMPASS_ORIENTATION, centre.x, centre.y)
+    );
+  }
+
+  for (const [id, position] of Object.entries(FIXED_NODE_POSITIONS)) {
+    map.set(canonicalName(id), position);
+  }
+
+  return map;
+})();
 
 /**
  * Apply fixed positions to nodes that have predefined locations.

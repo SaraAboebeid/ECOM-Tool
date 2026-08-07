@@ -359,7 +359,8 @@ export interface OptimizeJob {
   progress?: string | null;
   error?: string | null;
   meta?: Record<string, unknown>;
-  result?: OptimizeResult | null;
+  /** Sweeps share this runner, so a job may carry either shape. */
+  result?: OptimizeResult | SweepResult | null;
 }
 
 export interface SolverStatus {
@@ -395,6 +396,83 @@ export async function getOptimizationJob(
     throw new ApiError(`Could not read job ${jobId}`, response.status);
   }
   return response.json();
+}
+
+/* ---------------------------- tunable parameters ---------------------------- */
+
+/** One LEC-Opt constant: its default, bounds and where the number came from. */
+export interface OptimizerParameterInfo {
+  name: string;
+  default: number;
+  minimum: number | null;
+  maximum: number | null;
+  unit: string;
+  group: string;
+  description: string;
+  /** The team flagged this value as no longer describing current practice. */
+  outdated: boolean;
+}
+
+export type OptimizerParameters = Record<string, number>;
+
+export async function getOptimizerParameters(): Promise<OptimizerParameterInfo[]> {
+  const response = await fetch('/api/optimize/parameters');
+  if (!response.ok) {
+    throw new ApiError('Could not read optimizer parameters', response.status);
+  }
+  const payload = await response.json();
+  return payload.parameters ?? [];
+}
+
+/* --------------------------------- sweep ----------------------------------- */
+
+export type SweepVariable = 'battery_kwh' | 'pv_percent';
+
+export interface SweepPoint {
+  value: number;
+  overall_cost: number;
+  supplier_cost: number;
+  dso_cost: number;
+  tax_cost: number;
+  grid_import_kwh: number;
+  grid_export_kwh: number;
+  peak_net_import_kw: number;
+}
+
+export interface SweepResult {
+  variable: SweepVariable;
+  unit: string;
+  points: SweepPoint[];
+  best: SweepPoint;
+  baseline: SweepPoint;
+  saving_vs_baseline: number;
+  failures: { value: number; error: string }[];
+  notes: string[];
+}
+
+export interface SweepRequest {
+  community: CommunityDefinition;
+  variable: SweepVariable;
+  /** Each value is a full optimisation, so the backend caps this at 12. */
+  values: number[];
+  days?: number;
+  aging?: boolean;
+  v2g?: boolean;
+  parameters?: OptimizerParameters;
+}
+
+/**
+ * Queue a sizing sweep.
+ *
+ * LEC-Opt cannot size anything itself - capacity is an input, not a decision
+ * variable - so the backend solves once per candidate and returns the curve.
+ * Poll with getOptimizationJob: sweeps share the same job runner.
+ */
+export function startSweep(
+  request: SweepRequest,
+  signal?: AbortSignal,
+): Promise<OptimizeJob> {
+  return post<OptimizeJob>('/api/optimize/sweep', request, signal);
 }
 
 export interface ScenarioSummary {

@@ -29,6 +29,35 @@ interface DashboardHeaderProps {
   }) => void;
 }
 
+/**
+ * Icon tints, one hue per metric. Tailwind classes rather than inline styles so
+ * they follow the dark-mode toggle without any JS.
+ */
+const TINTS = {
+  sky: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300',
+  amber: 'bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300',
+  emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300',
+  indigo: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300',
+  slate: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
+} as const;
+
+const StatCard = ({
+  icon, label, value, tint = 'slate',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  tint?: keyof typeof TINTS;
+}) => (
+  <div className="header-kpi-card">
+    <span className={`header-kpi-icon ${TINTS[tint]}`}>{icon}</span>
+    <span>
+      <span className="header-kpi-label block">{label}</span>
+      <span className="header-kpi-value block">{value}</span>
+    </span>
+  </div>
+);
+
 export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -91,67 +120,69 @@ export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => 
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="py-2">
+    <div className="dashboard-header border-b border-slate-200/70 dark:border-slate-700/70 shadow-sm">
+      <div className="w-full px-4 sm:px-5 lg:px-6">
+        <div className="py-2.5">
           {/* Main Header with Inline Stats */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <EnergyIcon className="w-6 h-6 text-green-500" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-cyan-100/85 dark:bg-cyan-900/35 border border-cyan-300/60 dark:border-cyan-700/50">
+                <EnergyIcon className="w-5 h-5 text-cyan-600 dark:text-cyan-300" />
+              </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+                <h1 className="text-base sm:text-lg font-semibold tracking-[0.02em] text-slate-900 dark:text-slate-100">
                   Energy Community Dashboard
                 </h1>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tracking-[0.08em] uppercase">
+                  Real-time campus energy intelligence
+                </p>
               </div>
             </div>
 
-            {/* Quick Stats in the middle */}
+            {/* Stat row. Scrolls rather than wraps, so the header keeps its
+                height on narrow windows instead of pushing the map down. */}
             {kpis && (
-              <div className="hidden lg:flex items-center space-x-2 flex-1 justify-center max-w-2xl">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded px-6 py-1">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Assets</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white text-center">{kpis.totalNodes}</p>
-                </div>
-                
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded px-6 py-1">
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400">Solar</p>
-                  <p className="text-xl font-bold text-yellow-700 dark:text-yellow-300 text-center">
-                    {formatNumber(kpis.totalPVCapacity, 'W')}
-                  </p>
-                </div>
-                
-                <div className="bg-cyan-50 dark:bg-cyan-900/20 rounded px-6 py-1">
-                  <p className="text-xs text-cyan-600 dark:text-cyan-400">Battery</p>
-                  <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300 text-center">
-                    {formatNumber(kpis.totalBatteryCapacity, 'Wh')}
-                  </p>
-                </div>
-
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded px-6 py-1">
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Buildings</p>
-                  <p className="text-xl font-bold text-purple-700 dark:text-purple-300 text-center">{kpis.buildingNodes}</p>
-                </div>
-
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded px-6 py-1">
-                  <p className="text-xs text-blue-600 dark:text-blue-400">Self-Sufficiency</p>
-                  <p className="text-xl font-bold text-blue-700 dark:text-blue-300 text-center">
-                    {data.kpis ? formatPercentage(data.kpis.self_sufficiency) : 'N/A'}
-                  </p>
-                </div>
+              <div className="hidden lg:flex items-center gap-2 flex-1 justify-end
+                              overflow-x-auto no-scrollbar">
+                <StatCard
+                  tint="sky"
+                  icon={<AssetsIcon />}
+                  label="Assets"
+                  value={kpis.totalNodes}
+                />
+                <StatCard
+                  tint="amber"
+                  icon={<SolarIcon />}
+                  label="Solar"
+                  value={formatNumber(kpis.totalPVCapacity, 'W')}
+                />
+                <StatCard
+                  tint="emerald"
+                  icon={<BatteryIcon />}
+                  label="Battery"
+                  value={formatNumber(kpis.totalBatteryCapacity, 'Wh')}
+                />
+                <StatCard
+                  tint="indigo"
+                  icon={<BuildingsIcon />}
+                  label="Buildings"
+                  value={kpis.buildingNodes}
+                />
+                <StatCard
+                  tint="emerald"
+                  icon={<LeafIcon />}
+                  label="Self-Sufficiency"
+                  value={data.kpis ? formatPercentage(data.kpis.self_sufficiency) : 'N/A'}
+                />
               </div>
             )}
 
-            <div className="flex items-center space-x-3">
-              <div className="text-right">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Current Time</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {formatTime(currentHour)}
-                </p>
-              </div>
-              
+            {/* The timeline already shows the current hour, so a Current Time
+                card here just repeated it. */}
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded transition-colors duration-200 flex items-center space-x-1"
+                className="px-3 py-2 text-[11px] font-semibold rounded-xl transition-colors duration-200 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
               >
                 <span>{isExpanded ? 'Hide' : 'Details'}</span>
                 <ChevronIcon className={`w-3 h-3 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -159,39 +190,20 @@ export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => 
             </div>
           </div>
 
-          {/* Mobile Stats (hidden on large screens) */}
+          {/* Below lg the row above is hidden, so the same cards wrap into a
+              grid here. Same component, so the two never drift apart. */}
           {kpis && (
-            <div className="mt-2 grid grid-cols-3 sm:grid-cols-5 gap-2 lg:hidden">
-              <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Assets</p>
-                <p className="text-sm font-bold text-gray-900 dark:text-white">{kpis.totalNodes}</p>
-              </div>
-              
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded p-2">
-                <p className="text-xs text-yellow-600 dark:text-yellow-400">Solar</p>
-                <p className="text-sm font-bold text-yellow-700 dark:text-yellow-300">
-                  {formatNumber(kpis.totalPVCapacity, 'W')}
-                </p>
-              </div>
-              
-              <div className="bg-cyan-50 dark:bg-cyan-900/20 rounded p-2">
-                <p className="text-xs text-cyan-600 dark:text-cyan-400">Battery</p>
-                <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">
-                  {formatNumber(kpis.totalBatteryCapacity, 'Wh')}
-                </p>
-              </div>
-              
-              <div className="bg-purple-50 dark:bg-purple-900/20 rounded p-2">
-                <p className="text-xs text-purple-600 dark:text-purple-400">Buildings</p>
-                <p className="text-sm font-bold text-purple-700 dark:text-purple-300">{kpis.buildingNodes}</p>
-              </div>
-              
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2">
-                <p className="text-xs text-blue-600 dark:text-blue-400">Self-Sufficiency</p>
-                <p className="text-sm font-bold text-blue-700 dark:text-blue-300">
-                  {data?.kpis ? formatPercentage(data.kpis.self_sufficiency) : 'N/A'}
-                </p>
-              </div>
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 lg:hidden">
+              <StatCard tint="sky" icon={<AssetsIcon />} label="Assets"
+                        value={kpis.totalNodes} />
+              <StatCard tint="amber" icon={<SolarIcon />} label="Solar"
+                        value={formatNumber(kpis.totalPVCapacity, 'W')} />
+              <StatCard tint="emerald" icon={<BatteryIcon />} label="Battery"
+                        value={formatNumber(kpis.totalBatteryCapacity, 'Wh')} />
+              <StatCard tint="indigo" icon={<BuildingsIcon />} label="Buildings"
+                        value={kpis.buildingNodes} />
+              <StatCard tint="emerald" icon={<LeafIcon />} label="Self-Sufficiency"
+                        value={data?.kpis ? formatPercentage(data.kpis.self_sufficiency) : 'N/A'} />
             </div>
           )}
 
@@ -350,6 +362,41 @@ export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => 
 };
 
 // Icons
+/* Stat-card icons. Stroked, 1.7px, on a 24 viewbox so they sit consistently
+   inside the 32px tinted tile. */
+const I = (d: string) => ({ className = 'w-[18px] h-[18px]' }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+
+const AssetsIcon = I('M4 20h16M6 20V9l6-4 6 4v11M10 20v-4h4v4');
+const SolarIcon = ({ className = 'w-[18px] h-[18px]' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.7} strokeLinecap="round" aria-hidden>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" />
+  </svg>
+);
+const BatteryIcon = ({ className = 'w-[18px] h-[18px]' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="6" y="3" width="12" height="18" rx="3" />
+    <path d="M10 1.5h4" />
+    <path d="M12 8l-2 4h4l-2 4" />
+  </svg>
+);
+const BuildingsIcon = I('M4 21V7l6-3v17M14 21V10l6 3v8M7 10h.01M7 14h.01M17 15h.01');
+const LeafIcon = I('M20 4c0 9-6 13-11 13a5 5 0 0 1-5-5C4 7 10 4 20 4zM4 20c2-4 5-6.5 9-8');
+const ClockIcon = ({ className = 'w-[18px] h-[18px]' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
 const EnergyIcon = ({ className = "w-6 h-6" }) => (
   <svg
     className={className}

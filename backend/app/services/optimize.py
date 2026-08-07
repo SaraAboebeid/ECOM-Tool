@@ -259,6 +259,57 @@ def _availability_blocks(availability, horizon: int) -> list[tuple[int, int]]:
     return [(a, b) for a, b in blocks if b - a >= 2]
 
 
+# ------------------------------------------------------- parameter overrides
+
+
+# Our parameter name -> the module-level name in functions1.py.
+_PARAMETER_MAP = {
+    "battery_efficiency": "EFFICIENCY",
+    "battery_cost_eur_per_kwh": "BATTERY_COST_EUR_PER_KWH",
+    "bess_soc_min": "BESS_SOC_MIN",
+    "peak_multiplier": "PEAK_MULTIPLIER",
+    "subscription_fee_sek_per_month": "SUBSCRIPTION_FEE_SEK_PER_MONTH",
+    "effect_fee_sek_per_kw_month": "EFFECT_FEE_SEK_PER_KW_MONTH",
+    "transmission_fee_sek_per_kwh": "TRANSMISSION_FEE",
+    "transmission_health_incentive_sek_per_kwh": "TRANSMISSION_HEALTH_INCENTIVE",
+    "compensation_fee_sek_per_kwh": "COMPENSATION_FEE",
+    "energy_tax_sek_per_kwh": "ENERGY_TAX",
+    "energy_certificate_sek_per_kwh": "ENERGY_CERTIFICATE",
+    "vat_rate": "VAT_RATE",
+    "solver_time_limit_s": "SOLVER_TIME_LIMIT",
+}
+
+
+@contextlib.contextmanager
+def _applied_parameters(functions1, params):
+    """Apply user parameters for the duration of one run, then restore them.
+
+    These have to be set before the model is constructed, not after. The
+    constraints and the objective read them during __init__, and
+    pyo.Objective(rule=...) evaluates its rule immediately - so assigning to
+    model.Effect_fee once the object exists changes nothing, because the
+    expression was already built from the old float. That is why they are
+    module-level constants in functions1.py rather than something we can patch
+    onto the finished object.
+
+    Restoring on exit matters: the module is imported once and reused, so
+    without this one run's settings would leak into the next.
+    """
+    if params is None:
+        yield
+        return
+
+    previous = {}
+    for field, target in _PARAMETER_MAP.items():
+        previous[target] = getattr(functions1, target)
+        setattr(functions1, target, getattr(params, field))
+    try:
+        yield
+    finally:
+        for target, value in previous.items():
+            setattr(functions1, target, value)
+
+
 # --------------------------------------------------------------- run
 
 
@@ -272,6 +323,7 @@ def run_optimization(
     temperature_c: float = DEFAULT_TEMPERATURE_C,
     nordpool: Optional[NordPoolClient] = None,
     progress: Optional[Callable[[str], None]] = None,
+    parameters=None,
 ) -> dict:
     """Run the rolling-horizon optimizer and summarise the result."""
     functions1 = _import_lec()
@@ -287,8 +339,9 @@ def run_optimization(
     if progress:
         progress(f"optimising {len(inputs['building_data'])} buildings over {n_days} day(s)")
 
+    notes = list(inputs["notes"])
     sink = io.StringIO()
-    with contextlib.redirect_stdout(sink):
+    with contextlib.redirect_stdout(sink), _applied_parameters(functions1, parameters):
         frame = functions1.optimization_function_lec(
             charging_point_data=inputs["charging_point_data"],
             building_data=inputs["building_data"],
@@ -318,7 +371,7 @@ def run_optimization(
         "solver": status["solver"],
         "days": int(n_days),
         "hours": len(frame),
-        "notes": inputs["notes"],
+        "notes": notes,
         "totals": _totals(frame),
         "series": _series(frame),
         "log_tail": sink.getvalue().splitlines()[-12:],

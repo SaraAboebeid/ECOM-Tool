@@ -1,14 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { Graph } from './components/Graph/';
 import { Timeline } from './components/Timeline';
 import { Legend } from './components/Legend';
 import { DashboardHeader } from './components/DashboardHeader';
-import { FpsCounter } from './components/FpsCounter';
+
 import { SankeyDrawer } from './components/SankeyDrawer';
 import { CommunityControls } from './components/CommunityControls';
 import { OptimizationPanel } from './components/OptimizationPanel';
 import { ConsoleRail } from './components/ConsoleRail';
 import { ConsolePanel } from './components/ui/ConsolePanel';
+import { MembersPanel } from './components/MembersPanel';
+import { SizingPanel } from './components/SizingPanel';
+import { ParametersPanel } from './components/ParametersPanel';
 import { GraphData } from './types';
 import { COMPASS_ORIENTATION } from './utils/backgroundConfig';
 import {
@@ -46,6 +49,13 @@ function App() {
   const ownersSeeded = useRef(false);
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([DEMO_SCENARIO]);
   const [activeScenario, setActiveScenario] = useState<string>(DEMO_SCENARIO.name);
+  // Buildings taken out of the community. Held separately so they can be
+  // restored; dropping them from `definition` alone would lose their spec.
+  const [excludedBuildings, setExcludedBuildings] = useState<Record<string, unknown>>({});
+  // Only the parameters the user actually changed. Anything absent keeps
+  // LEC-Opt's committed default, so an empty object reproduces the model as
+  // the optimization team runs it.
+  const [optimizerParams, setOptimizerParams] = useState<Record<string, number>>({});
 
   // Saved definitions live on the backend; the built-in demo stays first so
   // there is always something to fall back to if the API is unreachable.
@@ -72,6 +82,7 @@ function App() {
       .then((loaded) => {
         if (cancelled) return;
         ownersSeeded.current = false;   // re-seed filters for the new community
+        setExcludedBuildings({});       // exclusions belong to the old community
         setDefinition(loaded);
       })
       .catch((err) => {
@@ -264,138 +275,183 @@ function App() {
   }
 
   return (
-    <div className="h-screen overflow-hidden contain-layout bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-      {/* FPS Counter */}
-      <FpsCounter />
-      
-      {/* Dashboard Header */}
-      <DashboardHeader data={data} currentHour={currentHour} />
-      
-      <div className="relative w-full viewer-shell" style={{ height: 'calc(100vh - 120px)' }}>
-        <div className="absolute top-4 right-4 flex gap-2 z-50">
-          <button
-            onClick={onFitToViewClick}
-            disabled={!fitToViewFn}
-            className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Fit graph to view"
-            title="Fit graph to view"
-          >
-            <FitToViewIcon className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-          </button>
-          
-          <div
-            className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 shadow-md flex items-center justify-center"
-            title={`Compass orientation: ${COMPASS_ORIENTATION}° clockwise`}
-          >
-            <CompassIcon 
-              className="w-6 h-6 text-gray-700 dark:text-gray-300" 
-              rotation={COMPASS_ORIENTATION}
-            />
-          </div>
-          
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 shadow-md transition-all duration-300"
-            aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-            title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {isDarkMode ? (
-              <SunIcon className="w-6 h-6 text-yellow-500" />
-            ) : (
-              <MoonIcon className="w-6 h-6 text-gray-700" />
-            )}
-          </button>
-        </div>
+    <div className="h-screen overflow-hidden contain-layout dashboard-shell text-gray-900 dark:text-gray-100">
+      <div className="h-full flex">
+        <main className="flex-1 min-w-0 flex flex-col">
+          <DashboardHeader data={data} currentHour={currentHour} />
 
-        <Graph
-          data={data}
-          currentHour={currentHour}
-          filters={filters}
-          isTimelinePlaying={isPlaying}
-          onFitToView={handleFitToView}
-        />
+          <div className="flex-1 min-h-0 px-4 pb-4 pt-2">
+            <div className="workspace-card h-full">
+              <div className="workspace-grid h-full">
+                <div className="workspace-console min-h-0">
+                  <ConsoleRail>
+                    <ConsolePanel
+                      title="Scenario"
+                      subtitle={`${definition.buildings?.length ?? 0} buildings`}
+                      status={dispatchError ? 'error' : isComputing ? 'busy' : 'ok'}
+                      defaultOpen
+                      maxBodyHeight={340}
+                    >
+                      <CommunityControls
+                        definition={definition}
+                        onChange={setDefinition}
+                        isComputing={isComputing}
+                        error={dispatchError}
+                        meta={meta}
+                        scenarios={scenarios}
+                        activeScenario={activeScenario}
+                        onScenarioChange={setActiveScenario}
+                      />
+                    </ConsolePanel>
 
-        {/* One console for all three sections. Previously Scenario and Filters
-            were both pinned to top-4 left-4 and the optimizer to bottom-4
-            left-4, so they overlapped each other and the canvas. */}
-        <ConsoleRail>
-          <ConsolePanel
-            title="Scenario"
-            subtitle={`${definition.buildings?.length ?? 0} buildings`}
-            status={dispatchError ? 'error' : isComputing ? 'busy' : 'ok'}
+                    <ConsolePanel
+            title="Members"
+            subtitle={`${definition.buildings.length} buildings`}
             defaultOpen
-            maxBodyHeight={380}
+            maxBodyHeight={440}
           >
-            <CommunityControls
+            <MembersPanel
               definition={definition}
               onChange={setDefinition}
-              isComputing={isComputing}
-              error={dispatchError}
-              meta={meta}
-              scenarios={scenarios}
-              activeScenario={activeScenario}
-              onScenarioChange={setActiveScenario}
+              excluded={excludedBuildings}
+              onExcludedChange={setExcludedBuildings}
             />
           </ConsolePanel>
 
           <ConsolePanel title="Filters" subtitle={`${activeTypes.size} types`}>
-            <Legend
-          activeTypes={activeTypes}
-          onToggleType={toggleNodeType}
-          minFlow={minFlow}
-          onMinFlowChange={setMinFlow}
-          activeOwners={activeOwners}
-          onToggleOwner={toggleOwner}
-          availableOwners={data ? [...new Set(data.nodes.flatMap(n => {
-            const owners: string[] = [];
-            if (n.owner) owners.push(n.owner);
-            if (n.VALID_OWNERS && Array.isArray(n.VALID_OWNERS)) {
-              owners.push(...n.VALID_OWNERS);
-            }
-            return owners;
-          }))] : []}
-          v2gFilter={v2gFilter}
-          onV2gFilterChange={handleV2gFilterChange}
-          capacityRange={capacityRange}
-          onCapacityRangeChange={handleCapacityRangeChange}
-              maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
-            />
-          </ConsolePanel>
+                      <Legend
+                        activeTypes={activeTypes}
+                        onToggleType={toggleNodeType}
+                        minFlow={minFlow}
+                        onMinFlowChange={setMinFlow}
+                        activeOwners={activeOwners}
+                        onToggleOwner={toggleOwner}
+                        availableOwners={data ? [...new Set(data.nodes.flatMap(n => {
+                          const owners: string[] = [];
+                          if (n.owner) owners.push(n.owner);
+                          if (n.VALID_OWNERS && Array.isArray(n.VALID_OWNERS)) {
+                            owners.push(...n.VALID_OWNERS);
+                          }
+                          return owners;
+                        }))] : []}
+                        v2gFilter={v2gFilter}
+                        onV2gFilterChange={handleV2gFilterChange}
+                        capacityRange={capacityRange}
+                        onCapacityRangeChange={handleCapacityRangeChange}
+                        maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
+                      />
+                    </ConsolePanel>
 
-          <ConsolePanel title="Optimization" subtitle="LEC-Opt" maxBodyHeight={460}>
-            <OptimizationPanel definition={definition} />
-          </ConsolePanel>
-        </ConsoleRail>
+                    <ConsolePanel title="Optimization" subtitle="LEC-Opt" maxBodyHeight={380}>
+                      <OptimizationPanel
+                        definition={definition}
+                        parameters={optimizerParams}
+                      />
+                    </ConsolePanel>
 
-        <div className="relative">
-          <button
-            onClick={() => setIsSankeyOpen(!isSankeyOpen)}
-            className="fixed left-1/2 transform -translate-x-1/2 bg-blue-500 dark:bg-blue-600 text-white rounded-t-md px-4 py-2 text-sm font-medium shadow-md z-50 hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
-            style={{ bottom: 'calc(var(--timeline-height, 96px) + 8px)' }}
-          >
-            {isSankeyOpen ? 'Hide' : 'Show'} Energy Flow Diagram
-          </button>
-          <Timeline
-            currentHour={currentHour}
-            isPlaying={isPlaying}
-            onHourChange={setCurrentHour}
-            onPlayPause={togglePlayPause}
-            isSankeyOpen={isSankeyOpen}
-            totalHours={meta?.hours ?? 48}
-          />
-        </div>
-        
-        {/* Sankey Diagram Drawer */}
-        {data && (
-          <SankeyDrawer
-            isOpen={isSankeyOpen}
-            onClose={() => setIsSankeyOpen(false)}
-            data={data}
-            currentHour={currentHour}
-            isDarkMode={isDarkMode}
-          />
-        )}
+                    <ConsolePanel title="Sizing" subtitle="cost curve" maxBodyHeight={470}>
+                      <SizingPanel
+                        definition={definition}
+                        parameters={optimizerParams}
+                      />
+                    </ConsolePanel>
+
+                    <ConsolePanel
+                      title="Parameters"
+                      subtitle={
+                        Object.keys(optimizerParams).length
+                          ? `${Object.keys(optimizerParams).length} changed`
+                          : 'defaults'
+                      }
+                      maxBodyHeight={440}
+                    >
+                      <ParametersPanel
+                        value={optimizerParams}
+                        onChange={setOptimizerParams}
+                      />
+                    </ConsolePanel>
+                  </ConsoleRail>
+                </div>
+
+                <div className="workspace-main min-h-0">
+                  <div className="relative viewer-shell flex-1 min-h-[420px] rounded-2xl overflow-hidden border border-slate-200/70 dark:border-slate-700/70">
+                    <div className="absolute top-4 right-4 flex gap-2 z-50">
+                      <button
+                        onClick={onFitToViewClick}
+                        disabled={!fitToViewFn}
+                        className="viewer-fab disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Fit graph to view"
+                        title="Fit graph to view"
+                      >
+                        <FitToViewIcon className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+                      </button>
+
+                      <div
+                        className="viewer-fab cursor-default flex items-center justify-center"
+                        title={`Compass orientation: ${COMPASS_ORIENTATION}° clockwise`}
+                      >
+                        <CompassIcon
+                          className="w-5 h-5 text-slate-700 dark:text-slate-200"
+                          rotation={COMPASS_ORIENTATION}
+                        />
+                      </div>
+
+                      <button
+                        onClick={toggleDarkMode}
+                        className="viewer-fab"
+                        aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                        title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                      >
+                        {isDarkMode ? (
+                          <SunIcon className="w-5 h-5 text-amber-500" />
+                        ) : (
+                          <MoonIcon className="w-5 h-5 text-slate-700" />
+                        )}
+                      </button>
+                    </div>
+
+                    <Graph
+                      data={data}
+                      currentHour={currentHour}
+                      filters={filters}
+                      isTimelinePlaying={isPlaying}
+                      onFitToView={handleFitToView}
+                    />
+                  </div>
+
+                  <div className="relative mt-3">
+                    <button
+                      onClick={() => setIsSankeyOpen(!isSankeyOpen)}
+                      className="absolute left-1/2 -translate-x-1/2 -top-9 bg-blue-500 dark:bg-blue-600 text-white rounded-xl px-4 py-2 text-sm font-medium shadow-md z-50 hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
+                    >
+                      {isSankeyOpen ? 'Hide' : 'Show'} Energy Flow Diagram
+                    </button>
+                    <Timeline
+                      currentHour={currentHour}
+                      isPlaying={isPlaying}
+                      onHourChange={setCurrentHour}
+                      onPlayPause={togglePlayPause}
+                      isSankeyOpen={isSankeyOpen}
+                      totalHours={meta?.hours ?? 48}
+                      embedded
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
+
+      {data && (
+        <SankeyDrawer
+          isOpen={isSankeyOpen}
+          onClose={() => setIsSankeyOpen(false)}
+          data={data}
+          currentHour={currentHour}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }
