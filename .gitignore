@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Allowlist, not a blocklist.
+#
+# This folder holds roughly 4.9 GB that must never enter git: Model/ (1.8 GB of
+# .3dm, several files over GitHub's 100 MB hard limit), Data/ (1.8 GB of
+# shapefiles and energy exports), Presentations/ (556 MB) and ~730 MB of loose
+# media in the root. Ignoring everything and re-including only the code makes an
+# accidental `git add .` impossible rather than merely unlikely.
+#
+# The large inputs stay on disk. What the code derives from them is small and IS
+# committed - Dashboard/public/buildings.geojson, Dashboard/src/data/*.json - so
+# a clone can render the campus without them.
+# ---------------------------------------------------------------------------
+/*
+
+!/.gitignore
+!/README.md
+
+!/Dashboard/
+!/ECOM Toolkit/
+!/Optimization/
+/Optimization/*
+!/Optimization/LEC-Opt/
+!/Optimization/GH_Components/
+
+# LEC-Opt ships sample workbooks; they are small and belong with the model.
+# Its own .gitignore still applies inside that tree.
+
+# ---------------------------------------------------------------------------
+# Standard build and environment noise, wherever it appears
+# ---------------------------------------------------------------------------
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/dist/
+**/dist-ssr/
+**/.vite/
+**/.pytest_cache/
+**/*.local
+**/*.log
+
+# Fetched at runtime and reproducible; some of it is large.
+Dashboard/backend/cache/
+
+# Editor and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
