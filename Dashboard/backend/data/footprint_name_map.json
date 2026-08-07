@@ -1,0 +1,68 @@
+{
+  "_comment": [
+    "Maps energy-community building names to building names in the footprint",
+    "dataset (currently OpenStreetMap; swap in DTCC/Lantmateriet with",
+    "fetch_building_footprints.py --from-geojson and keep this file).",
+    "",
+    "confirmed  - name and area both agree with an independent source.",
+    "likely     - name is a clear translation but the area is unverified.",
+    "ambiguous  - one polygon may cover several of our buildings, or one of",
+    "             our buildings may map to several polygons. NOT applied.",
+    "",
+    "Only 'confirmed' and 'likely' entries are used by",
+    "build_campus_definition.py. Move an entry out of 'ambiguous' once you",
+    "have decided which building it is."
+  ],
+
+  "confirmed": {
+    "HA": "Hörsal A",
+    "HB": "Hörsal B",
+    "HC": "Hörsal C",
+    "Idélära": "Idéläran",
+    "CA-Huset": "CA-Huset"
+  },
+
+  "likely": {
+    "Fysik origo": "Fysik",
+    "Maskinteknik": "Maskinteknik",
+    "MC2": "Mikroteknologi och nanovetenskap",
+    "Kemi": "Kemi och Bioteknik",
+    "Teknikparken": "Chalmers Teknikpark",
+    "Bibliotek": "Chalmers Bibliotek Huvudbibliotek",
+    "CSB Chabo": "Chabo",
+    "Edit": "Elektro-, Data- och IT-teknik"
+  },
+
+  "ambiguous": {
+    "SB1": "Arkitektur-, Bygg- och Miljöteknik",
+    "SB2": "Arkitektur-, Bygg- och Miljöteknik",
+    "SB3": "Arkitektur-, Bygg- och Miljöteknik",
+    "_sb_note": "One 13,599 m2 polygon covers the whole Samhallsbyggnad complex. Split it per building before using.",
+
+    "Emils kårhus": "Chalmers Kårhus",
+    "Kårhus entré": "Chalmers Kårhus",
+    "Kårresturangen": "Chalmers Kårhus",
+    "_karhus_note": "One 2,033 m2 polygon; three of our buildings claim the kårhus name.",
+
+    "Nya Matte": "Matematiska vetenskaper",
+    "Gamla matte": "Matematiska vetenskaper",
+    "_matte_note": "One 2,738 m2 polygon. Gamla Matte has a Rhino record giving 2,390 m2, so the OSM polygon is probably Nya Matte or both together.",
+
+    "CSB Holtermansgatan": "Holterman Hostel",
+    "_holterman_note": "Also 'Holterman Hostel, hus A' at 288 m2; unclear whether our building is one or both.",
+
+    "CSB Gibraltarvallen guesthouse": "Gibraltar Herrgård",
+    "_gibraltar_note": "253 m2 seems small for a guesthouse with 183 MWh/yr demand. Unverified."
+  },
+
+  "no_match": [
+    "IT",
+    "Elkraftteknik",
+    "Reaktorfysik",
+    "JSP",
+    "AWL",
+    "Lokalkontor",
+    "Vasa 1", "Vasa 4", "Vasa 7", "Vasa 8", "Vasa 9",
+    "Vasa 10", "Vasa 11", "Vasa 12", "Vasa 13", "Vasa 15"
+  ]
+}

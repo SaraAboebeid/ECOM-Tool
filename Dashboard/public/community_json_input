@@ -1,0 +1,2292 @@
+{
+  "building": [
+    {
+      "area": 0.0,
+      "name": "Fysik origo",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Fysik origo"
+        },
+        "title": "Electric Demand for Fysik origo",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Akademiska Hus",
+      "PV_plant": [],
+      "total_energy_demand": 61345.45,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "IT",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeDataCenterHighITE",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "IT"
+        },
+        "title": "Electric Demand for IT",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 11854.050000000001,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 1900.7155641552995,
+      "name": "Elkraftteknik",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        "1"
+      ],
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Elkraftteknik"
+        },
+        "title": "Electric Demand for Elkraftteknik",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 475873.85,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 971.1562499999994,
+      "name": "Idélära",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        2.0
+      ],
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Idélära"
+        },
+        "title": "Electric Demand for Idélära",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 61345.45,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 4019.864003888272,
+      "name": "HC",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        4.0
+      ],
+      "building_type": "MidriseApartment",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "HC"
+        },
+        "title": "Electric Demand for HC",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 105722.3,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "__ref__": 1871443784368
+    },
+    {
+      "area": 0.0,
+      "name": "HA",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "HA"
+        },
+        "title": "Electric Demand for HA",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 71119.5,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "__ref__": 1870153037712
+    },
+    {
+      "area": 0.0,
+      "name": "SB2",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "SB2"
+        },
+        "title": "Electric Demand for SB2",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "SB2-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "Default 400W Panel",
+            "rating": 400.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 20.0,
+            "total_cost": 1240.0,
+            "total_embodied_co2": 246.0,
+            "__type__": "PVModule"
+          },
+          "percentage": 93.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 609.1775310022236,
+          "usable_surface": 566.535103832068,
+          "azimuth": 159.02875385400318,
+          "slope": 6.212005587633813,
+          "module_count": 283,
+          "installed_capacity": 113.2,
+          "total_cost": 350920.0,
+          "total_embodied_co2": 69618.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 85202.0933,
+              "plant_name": "SB2-PV_1"
+            },
+            "title": "Hourly PV Production for SB2-PV_1",
+            "source": "SB2-PV_1",
+            "units": {
+              "__type__": "DataUnit"
+            },
+            "category": {
+              "__type__": "DataCategory"
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 85202.0933,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "SB2-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1870304991312
+          },
+          "percentage": 93.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 603.77772181174,
+          "usable_surface": 561.5132812849182,
+          "azimuth": 249.02853206534314,
+          "slope": 6.2856151624161845,
+          "module_count": 280,
+          "installed_capacity": 112.0,
+          "total_cost": 347200.0,
+          "total_embodied_co2": 68880.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 87562.34592,
+              "plant_name": "SB2-PV_2"
+            },
+            "title": "Hourly PV Production for SB2-PV_2",
+            "source": "SB2-PV_2",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 87562.34592,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 343826.35,
+      "total_pv_capacity": 225.2,
+      "total_installed_capacity": 225.2,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Edit",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Edit"
+        },
+        "title": "Electric Demand for Edit",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "Edit-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 70.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 683.1479693661181,
+          "usable_surface": 478.20357855628265,
+          "azimuth": -0.0,
+          "slope": 0.0,
+          "module_count": 239,
+          "installed_capacity": 83.65,
+          "total_cost": 259315.0,
+          "total_embodied_co2": 51444.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 67503.45413,
+              "plant_name": "Edit-PV_1"
+            },
+            "title": "Hourly PV Production for Edit-PV_1",
+            "source": "Edit-PV_1",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 67503.45413,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Edit-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1870309440048
+          },
+          "percentage": 70.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 637.5587447716172,
+          "usable_surface": 446.291121340132,
+          "azimuth": 180.0,
+          "slope": 0.0,
+          "module_count": 223,
+          "installed_capacity": 78.05,
+          "total_cost": 241955.0,
+          "total_embodied_co2": 48000.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 62982.993709999995,
+              "plant_name": "Edit-PV_2"
+            },
+            "title": "Hourly PV Production for Edit-PV_2",
+            "source": "Edit-PV_2",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 62982.993709999995,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 1293075.9000000001,
+      "total_pv_capacity": 161.7,
+      "total_installed_capacity": 161.7,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "HB",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "HB"
+        },
+        "title": "Electric Demand for HB",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 186545.825,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "SB1",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "SB1"
+        },
+        "title": "Electric Demand for SB1",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "SB1-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 50.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 603.77772181174,
+          "usable_surface": 301.88886090587,
+          "azimuth": 249.02853206534314,
+          "slope": 6.2856151624161845,
+          "module_count": 150,
+          "installed_capacity": 52.5,
+          "total_cost": 162750.0,
+          "total_embodied_co2": 32287.5,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 41044.84969999999,
+              "plant_name": "SB1-PV_1"
+            },
+            "title": "Hourly PV Production for SB1-PV_1",
+            "source": "SB1-PV_1",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 41044.84969999999,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "SB1-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591344871504
+          },
+          "percentage": 50.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 609.1775310022236,
+          "usable_surface": 304.5887655011118,
+          "azimuth": 159.02875385400318,
+          "slope": 6.212005587633813,
+          "module_count": 152,
+          "installed_capacity": 53.2,
+          "total_cost": 164920.0,
+          "total_embodied_co2": 32718.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 40041.9731,
+              "plant_name": "SB1-PV_2"
+            },
+            "title": "Hourly PV Production for SB1-PV_2",
+            "source": "SB1-PV_2",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 40041.9731,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 707663.6,
+      "total_pv_capacity": 105.7,
+      "total_installed_capacity": 105.7,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "SB3",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "SB3"
+        },
+        "title": "Electric Demand for SB3",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 1085973.0,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Maskinteknik",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Maskinteknik"
+        },
+        "title": "Electric Demand for Maskinteknik",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Akademiska Hus",
+      "PV_plant": [],
+      "total_energy_demand": 2129120.3499999996,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Gamla matte",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Gamla matte"
+        },
+        "title": "Electric Demand for Gamla matte",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Chalmersfastigheter",
+      "PV_plant": [],
+      "total_energy_demand": 453595.85000000003,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Lokalkontor",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Lokalkontor"
+        },
+        "title": "Electric Demand for Lokalkontor",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 77923.0,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "CA-Huset",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "CA-Huset"
+        },
+        "title": "Electric Demand for CA-Huset",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 151364.384858,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "CSB Chabo",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "CSB Chabo"
+        },
+        "title": "Electric Demand for CSB Chabo",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 1343820.9999999998,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "CSB Gibraltarvallen guesthouse",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "CSB Gibraltarvallen guesthouse"
+        },
+        "title": "Electric Demand for CSB Gibraltarvallen guesthouse",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 183363.4,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "CSB Holtermansgatan",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "LargeOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "CSB Holtermansgatan"
+        },
+        "title": "Electric Demand for CSB Holtermansgatan",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 277117.45,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Emils kårhus",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Emils kårhus"
+        },
+        "title": "Electric Demand for Emils kårhus",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 487980.437036,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "JSP",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "JSP"
+        },
+        "title": "Electric Demand for JSP",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 476923.95,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Kårhus entré",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Kårhus entré"
+        },
+        "title": "Electric Demand for Kårhus entré",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 339254.18469100003,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Kårresturangen",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Kårresturangen"
+        },
+        "title": "Electric Demand for Kårresturangen",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 487948.3407015,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "MC2",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "MC2"
+        },
+        "title": "Electric Demand for MC2",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 10670370.99034975,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Nya Matte",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Nya Matte"
+        },
+        "title": "Electric Demand for Nya Matte",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 818516.64375,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Reaktorfysik",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Reaktorfysik"
+        },
+        "title": "Electric Demand for Reaktorfysik",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 216423.55561325004,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Teknikparken",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Teknikparken"
+        },
+        "title": "Electric Demand for Teknikparken",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 474348.77900000004,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 1",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 1"
+        },
+        "title": "Electric Demand for Vasa 1",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 357785.7907733751,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 4",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 4"
+        },
+        "title": "Electric Demand for Vasa 4",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 49921.381926,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 7",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 7"
+        },
+        "title": "Electric Demand for Vasa 7",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 109544.63962049999,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 8",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 8"
+        },
+        "title": "Electric Demand for Vasa 8",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 301276.78620499995,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 9",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 9"
+        },
+        "title": "Electric Demand for Vasa 9",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 104556.50820874999,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 10",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 10"
+        },
+        "title": "Electric Demand for Vasa 10",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 36683.15401625,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 11",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 11"
+        },
+        "title": "Electric Demand for Vasa 11",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 309662.829691,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 12",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 12"
+        },
+        "title": "Electric Demand for Vasa 12",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 9824.9648305,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 13",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 13"
+        },
+        "title": "Electric Demand for Vasa 13",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 854.3287509999999,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Vasa 15",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Vasa 15"
+        },
+        "title": "Electric Demand for Vasa 15",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 301474.0074225,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 13856.304322710454,
+      "name": "AWL",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        7.0
+      ],
+      "building_type": "MediumOffice",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "AWL"
+        },
+        "title": "Electric Demand for AWL",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Akademiska Hus",
+      "PV_plant": [
+        {
+          "name": "AWL-PV",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 719.8453012939219,
+          "usable_surface": 647.8607711645298,
+          "azimuth": 180.0,
+          "slope": 0.0,
+          "module_count": 323,
+          "installed_capacity": 113.05,
+          "total_cost": 350455.0,
+          "total_embodied_co2": 69525.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 91226.4889,
+              "plant_name": "AWL-PV"
+            },
+            "title": "Hourly PV Production for AWL-PV",
+            "source": "AWL-PV",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 91226.4889,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 301474.0074225,
+      "total_pv_capacity": 113.05,
+      "total_installed_capacity": 113.05,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 1046.209967475352,
+      "name": "Bibliotek",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve",
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        3.0
+      ],
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Bibliotek"
+        },
+        "title": "Electric Demand for Bibliotek",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Chalmersfastigheter",
+      "PV_plant": [
+        {
+          "name": "Bibliotek-PV",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 70.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 687.8584849074723,
+          "usable_surface": 481.5009394352306,
+          "azimuth": 246.8256655426268,
+          "slope": 2.804239785237923,
+          "module_count": 240,
+          "installed_capacity": 84.0,
+          "total_cost": 260400.0,
+          "total_embodied_co2": 51660.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 66822.92483999999,
+              "plant_name": "Bibliotek-PV"
+            },
+            "title": "Hourly PV Production for Bibliotek-PV",
+            "source": "Bibliotek-PV",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 66822.92483999999,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 301474.0074225,
+      "total_pv_capacity": 84.0,
+      "total_installed_capacity": 84.0,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Kemi",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Kemi"
+        },
+        "title": "Electric Demand for Kemi",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "Kemi-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 509.19134556873286,
+          "usable_surface": 458.27221101185955,
+          "azimuth": 180.0,
+          "slope": 0.0,
+          "module_count": 229,
+          "installed_capacity": 80.15,
+          "total_cost": 248465.0,
+          "total_embodied_co2": 49292.25,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 64677.60387,
+              "plant_name": "Kemi-PV_1"
+            },
+            "title": "Hourly PV Production for Kemi-PV_1",
+            "source": "Kemi-PV_1",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 64677.60387,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Kemi-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591366134464
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 110.1092165182014,
+          "usable_surface": 99.09829486638127,
+          "azimuth": 67.2806761072693,
+          "slope": 16.699244233771335,
+          "module_count": 49,
+          "installed_capacity": 17.15,
+          "total_cost": 53165.0,
+          "total_embodied_co2": 10547.25,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 14600.271839999998,
+              "plant_name": "Kemi-PV_2"
+            },
+            "title": "Hourly PV Production for Kemi-PV_2",
+            "source": "Kemi-PV_2",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 14600.271839999998,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Kemi-PV_3",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591366134464
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 735.6501623583674,
+          "usable_surface": 662.0851461225307,
+          "azimuth": 156.2242638810768,
+          "slope": 15.62168437254966,
+          "module_count": 331,
+          "installed_capacity": 115.85,
+          "total_cost": 359135.0,
+          "total_embodied_co2": 71247.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 77395.93464,
+              "plant_name": "Kemi-PV_3"
+            },
+            "title": "Hourly PV Production for Kemi-PV_3",
+            "source": "Kemi-PV_3",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 77395.93464,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Kemi-PV_4",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591366134464
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 183.8209955368345,
+          "usable_surface": 165.43889598315104,
+          "azimuth": 66.373760414041,
+          "slope": 9.393351633859314,
+          "module_count": 82,
+          "installed_capacity": 28.7,
+          "total_cost": 88970.0,
+          "total_embodied_co2": 17650.5,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 24015.188690000003,
+              "plant_name": "Kemi-PV_4"
+            },
+            "title": "Hourly PV Production for Kemi-PV_4",
+            "source": "Kemi-PV_4",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 24015.188690000003,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Kemi-PV_5",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591366134464
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 644.9095398077901,
+          "usable_surface": 580.4185858270112,
+          "azimuth": 66.15584914925746,
+          "slope": 8.846488603955027,
+          "module_count": 290,
+          "installed_capacity": 101.5,
+          "total_cost": 314650.0,
+          "total_embodied_co2": 62422.5,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 84811.24708000002,
+              "plant_name": "Kemi-PV_5"
+            },
+            "title": "Hourly PV Production for Kemi-PV_5",
+            "source": "Kemi-PV_5",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 84811.24708000002,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Kemi-PV_6",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1591366134464
+          },
+          "percentage": 90.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 186.27614354393606,
+          "usable_surface": 167.64852918954244,
+          "azimuth": 66.2954706605956,
+          "slope": 9.301128665849074,
+          "module_count": 83,
+          "installed_capacity": 29.05,
+          "total_cost": 90055.0,
+          "total_embodied_co2": 17865.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 24303.840369999998,
+              "plant_name": "Kemi-PV_6"
+            },
+            "title": "Hourly PV Production for Kemi-PV_6",
+            "source": "Kemi-PV_6",
+            "units": {
+              "__ref__": 1591352800400
+            },
+            "category": {
+              "__ref__": 1870303110672
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 24303.840369999998,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 301474.0074225,
+      "total_pv_capacity": 372.40000000000003,
+      "total_installed_capacity": 372.40000000000003,
+      "point": null,
+      "x": null,
+      "y": null,
+      "__type__": "Building"
+    }
+  ],
+  "PV_plant": [
+    {
+      "name": "PV-Plant",
+      "surface": "Rhino.Geometry.Brep",
+      "pv_module": {
+        "name": "MC2 350W Panel",
+        "rating": 350.0,
+        "size_x": 1.0,
+        "size_y": 2.0,
+        "cost_per_kwp": 3100.0,
+        "embodied_co2_per_kwp": 615.0,
+        "area": 2.0,
+        "efficiency": 17.5,
+        "total_cost": 1085.0,
+        "total_embodied_co2": 215.25,
+        "__type__": "PVModule"
+      },
+      "percentage": 100.0,
+      "system_loss": 14.0,
+      "lat": 57.68873,
+      "lon": 11.977887,
+      "custom_slope": null,
+      "total_surface": 375.7002857992678,
+      "usable_surface": 375.7002857992678,
+      "azimuth": 31.999458602157308,
+      "slope": 0.4689290943340946,
+      "module_count": 187,
+      "installed_capacity": 65.45,
+      "total_cost": 202895.0,
+      "total_embodied_co2": 40251.75,
+      "hourly_result": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "annual_production": 53053.68318,
+          "plant_name": "PV-Plant"
+        },
+        "title": "Hourly PV Production for PV-Plant",
+        "source": "PV-Plant",
+        "units": {
+          "__ref__": 1591352800400
+        },
+        "category": {
+          "__ref__": 1870303110672
+        },
+        "__type__": "HourlyData"
+      },
+      "hourly_df": [
+        "hoy",
+        "value"
+      ],
+      "annual_production": 53053.68318,
+      "__type__": "PVPlant"
+    }
+  ],
+  "battery": [
+    {
+      "name": "Battery-01",
+      "capacity": 54.0,
+      "point": [
+        319626.64640911424,
+        6398341.68431914,
+        0.0
+      ],
+      "cost_per_kwh": 10.0,
+      "embodied_co2_per_kwh": 10.0,
+      "efficiency": 20.0,
+      "lifespan": 10.0,
+      "degradation": 0.02,
+      "initial_soc": 5.0,
+      "total_cost": 540.0,
+      "total_embodied_co2": 540.0,
+      "capacity_eol": 43.2,
+      "average_capacity": 48.6,
+      "hourly_soc": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "battery_name": "Battery-01"
+        },
+        "title": "Hourly State of Charge for Battery-01",
+        "source": "Battery-01",
+        "units": {
+          "__ref__": 1591352800400
+        },
+        "category": {
+          "__ref__": 1870303110672
+        },
+        "__type__": "HourlyData"
+      },
+      "__type__": "Battery"
+    }
+  ],
+  "charge_point": [
+    {
+      "name": "CP",
+      "point": null,
+      "capacity": 61.0,
+      "charger_type": "A",
+      "is_v2g": true,
+      "owner": "Akademiska Hus",
+      "ev_list": [
+        {
+          "name": "EV1",
+          "hoys": [
+            4800,
+            4801,
+            4802,
+            4803,
+            4804,
+            4805,
+            4806,
+            4807,
+            4808,
+            4809,
+            4810,
+            4811,
+            4812,
+            4813,
+            4814,
+            4815,
+            4816,
+            4817,
+            4818,
+            4819,
+            4820,
+            4821,
+            4822,
+            4823,
+            4824,
+            4825,
+            4826,
+            4827,
+            4828,
+            4829,
+            4830,
+            4831,
+            4832,
+            4833,
+            4834,
+            4835,
+            4836,
+            4837,
+            4838,
+            4839,
+            4840,
+            4841,
+            4842,
+            4843,
+            4844,
+            4845,
+            4846,
+            4847
+          ],
+          "start_hour": 4800,
+          "end_hour": 4847,
+          "n_hours": 48,
+          "schedule": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "type": "availability"
+            },
+            "title": "EV Schedule (EV1)",
+            "source": "ElectricVehicle Entity",
+            "units": {
+              "__type__": "DataUnit"
+            },
+            "category": {
+              "__type__": "DataCategory"
+            },
+            "__type__": "HourlyData"
+          },
+          "capacity": 50.0,
+          "is_hybrid": false,
+          "efficiency": 16.0,
+          "daily_distance": 20.0,
+          "max_charging_power": 2.5,
+          "v2g_enabled": true,
+          "embodied_co2_per_kwh": 7.3,
+          "usable_capacity": 50.0,
+          "daily_energy_demand": 3.2,
+          "total_embodied_co2": 365.0,
+          "__type__": "ElectricVehicle"
+        }
+      ],
+      "total_connected_evs": 1,
+      "v2g_enabled_evs": 1,
+      "hourlydemand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "type": "charge_point_demand"
+        },
+        "title": "Charge Point Hourly Demand (CP)",
+        "source": "ChargePoint Entity",
+        "units": {
+          "__ref__": 1591352800400
+        },
+        "category": {
+          "__ref__": 1870303110672
+        },
+        "__type__": "HourlyData"
+      },
+      "__type__": "ChargePoint"
+    }
+  ],
+  "grid": {
+    "start_hour": 4800,
+    "end_hour": 4847,
+    "n_hours": 48,
+    "electricity_market_buying_price": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "buying_price"
+      },
+      "title": "Market Buying Price",
+      "source": "Grid Entity",
+      "units": {
+        "__type__": "DataUnit"
+      },
+      "category": {
+        "__type__": "DataCategory"
+      },
+      "__type__": "HourlyData"
+    },
+    "electricity_market_selling_price": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "selling_price"
+      },
+      "title": "Market Selling Price",
+      "source": "Grid Entity",
+      "units": {
+        "__ref__": 1591314633248
+      },
+      "category": {
+        "__ref__": 1870281594384
+      },
+      "__type__": "HourlyData"
+    },
+    "electricity_market_carbon_intensity": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "carbon_intensity"
+      },
+      "title": "Market Carbon Intensity",
+      "source": "Grid Entity",
+      "units": {
+        "__type__": "DataUnit"
+      },
+      "category": {
+        "__type__": "DataCategory"
+      },
+      "__type__": "HourlyData"
+    },
+    "hourly_import": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "import"
+      },
+      "title": "Grid Import",
+      "source": "Grid Entity",
+      "units": {
+        "__ref__": 1591352800400
+      },
+      "category": {
+        "__ref__": 1870303110672
+      },
+      "__type__": "HourlyData"
+    },
+    "hourly_export": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "export"
+      },
+      "title": "Grid Export",
+      "source": "Grid Entity",
+      "units": {
+        "__ref__": 1591352800400
+      },
+      "category": {
+        "__ref__": 1870303110672
+      },
+      "__type__": "HourlyData"
+    },
+    "__type__": "Grid"
+  },
+  "__type__": "EnergyCommunity"
+}

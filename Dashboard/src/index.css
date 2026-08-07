@@ -1,0 +1,644 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent page scrolling and ensure full viewport usage */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(14, 165, 233, 0.12) 0%, rgba(255, 255, 255, 0) 32%),
+    radial-gradient(circle at 82% 72%, rgba(56, 189, 248, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+    linear-gradient(140deg, #eef5ff 0%, #f7fbff 42%, #e9f3ff 100%);
+}
+
+.dashboard-shell {
+  background: linear-gradient(140deg, #ecf4ff 0%, #f7faff 40%, #eef5ff 100%);
+}
+
+.app-left-rail {
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 10px;
+  background: linear-gradient(180deg, #082454 0%, #0b2f67 50%, #0b2a5d 100%);
+  border-right: 1px solid rgba(125, 211, 252, 0.22);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+.app-left-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  color: #67e8f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 132, 199, 0.18);
+  font-size: 18px;
+}
+
+.app-left-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.side-nav-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.28);
+  color: rgba(186, 230, 253, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 160ms ease;
+}
+
+.side-nav-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.side-nav-icon:hover {
+  border-color: rgba(34, 211, 238, 0.58);
+  color: #e0f2fe;
+  background: rgba(2, 132, 199, 0.34);
+}
+
+.side-nav-icon-active {
+  border-color: rgba(34, 211, 238, 0.8);
+  background: linear-gradient(145deg, rgba(2, 132, 199, 0.52), rgba(30, 64, 175, 0.56));
+  color: #e0f2fe;
+  box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.28) inset;
+}
+
+.app-left-user {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.45);
+  border: 1px solid rgba(147, 197, 253, 0.42);
+  color: #e0f2fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.workspace-card {
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 18px;
+  box-shadow: 0 20px 40px -30px rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  padding: 10px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.workspace-console {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(203, 213, 225, 0.7);
+  padding: 8px;
+}
+
+.workspace-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.dark .dashboard-shell {
+  background: linear-gradient(140deg, #020617 0%, #0f172a 50%, #111827 100%);
+}
+
+.dark .workspace-card {
+  background: rgba(2, 6, 23, 0.52);
+  border-color: rgba(51, 65, 85, 0.72);
+}
+
+.dark .workspace-console {
+  background: rgba(2, 6, 23, 0.5);
+  border-color: rgba(71, 85, 105, 0.66);
+}
+
+@media (max-width: 1280px) {
+  .workspace-grid {
+    grid-template-columns: 286px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1060px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-console {
+    max-height: 38vh;
+  }
+}
+
+.dashboard-header {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 249, 255, 0.85) 45%, rgba(231, 243, 255, 0.88) 100%);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.dark .dashboard-header {
+  background:
+    linear-gradient(120deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.88) 46%, rgba(15, 23, 42, 0.9) 100%);
+}
+
+/* Stat card: tinted icon tile on the left, label over value on the right. The
+   icon tint is the only colour, so the row reads as one set rather than six
+   competing badges. */
+.header-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgb(226 232 240);
+  background: rgb(255 255 255);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  white-space: nowrap;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.header-kpi-card:hover {
+  border-color: rgb(203 213 225);
+  box-shadow: 0 2px 8px -2px rgb(15 23 42 / 0.1);
+}
+
+.dark .header-kpi-card {
+  border-color: rgb(51 65 85);
+  background: rgb(30 41 59);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+}
+
+.dark .header-kpi-card:hover { border-color: rgb(71 85 105); }
+
+.header-kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 10px;
+}
+
+.header-kpi-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: rgb(100 116 139);
+}
+
+.dark .header-kpi-label { color: rgb(148 163 184); }
+
+.header-kpi-value {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgb(15 23 42);
+  font-variant-numeric: tabular-nums;
+}
+
+.dark .header-kpi-value { color: rgb(241 245 249); }
+
+.viewer-fab {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgb(148 163 184 / 0.35);
+  background: rgb(255 255 255 / 0.74);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 10px 20px -14px rgb(15 23 42 / 0.65);
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.timeline-layout {
+  align-items: center;
+}
+
+.timeline-play-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: white;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 8px 20px -12px rgba(37, 99, 235, 0.95);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 140ms ease, box-shadow 180ms ease;
+}
+
+.timeline-weather-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(71, 85, 105, 0.82);
+}
+
+.dark .timeline-weather-icon {
+  color: rgba(148, 163, 184, 0.88);
+}
+
+.timeline-play-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px -14px rgba(37, 99, 235, 0.95);
+}
+
+.timeline-track-wrap {
+  padding-bottom: 14px;
+}
+
+.timeline-track-shell {
+  position: relative;
+}
+
+.timeline-range {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.25), rgba(148, 163, 184, 0.45), rgba(148, 163, 184, 0.25));
+  cursor: pointer;
+}
+
+.timeline-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.timeline-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid #dbeafe;
+  background: #2563eb;
+  margin-top: -5px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+}
+
+.timeline-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.timeline-range::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid #dbeafe;
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+}
+
+.timeline-tick {
+  position: absolute;
+  top: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.timeline-tick-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.6);
+  margin-bottom: 4px;
+}
+
+.timeline-tick-label {
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: rgba(71, 85, 105, 0.78);
+  white-space: nowrap;
+}
+
+.dark .timeline-range {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0.25), rgba(100, 116, 139, 0.45), rgba(100, 116, 139, 0.25));
+}
+
+.dark .timeline-tick-dot {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+.dark .timeline-tick-label {
+  color: rgba(148, 163, 184, 0.82);
+}
+
+@media (max-width: 900px) {
+  .timeline-layout {
+    gap: 10px;
+  }
+
+  .timeline-play-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
+.viewer-fab:hover {
+  background: rgb(255 255 255 / 0.9);
+  border-color: rgb(34 211 238 / 0.55);
+  transform: translateY(-1px);
+}
+
+.dark .viewer-fab {
+  border-color: rgb(100 116 139 / 0.55);
+  background: rgb(15 23 42 / 0.72);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 12px 24px -16px rgb(0 0 0 / 0.8);
+}
+
+.dark .viewer-fab:hover {
+  background: rgb(30 41 59 / 0.95);
+  border-color: rgb(34 211 238 / 0.55);
+}
+
+.viewer-shell {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(125, 211, 252, 0.2) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.82) 0%, rgba(240, 249, 255, 0.78) 42%, rgba(226, 243, 255, 0.84) 100%);
+  border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.viewer-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.62) 20%, rgba(0, 0, 0, 0) 86%);
+}
+
+.viewer-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px rgba(15, 23, 42, 0.14);
+}
+
+/* Performance optimization for theme switching */
+.disable-transitions * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Material Symbols icon styles */
+.material-symbols-outlined.node-icon {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  color: white;
+  font-variation-settings: 'FILL' 1, 'wght' 560, 'GRAD' 80, 'opsz' 28;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Energy flow animations */
+@keyframes flow {
+  0% {
+    stroke-dashoffset: 32; /* 2 * (8 + 8) = 2 * particle cycle for smooth animation */
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes flow-reverse {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 32; /* 2 * (8 + 8) = 2 * particle cycle for smooth animation */
+  }
+}
+
+.link-flow {
+  animation: flow 2s linear infinite; /* Faster: 4s -> 2s */
+}
+
+.link-flow-reverse {
+  animation: flow-reverse 2s linear infinite; /* Faster: 4s -> 2s */
+}
+
+/* Fast flow animations for high energy */
+.link-flow-fast {
+  animation: flow 1s linear infinite; /* Much faster: 2.5s -> 1s */
+}
+
+.link-flow-reverse-fast {
+  animation: flow-reverse 1s linear infinite; /* Much faster: 2.5s -> 1s */
+}
+
+/* Slow flow animations for low energy */
+.link-flow-slow {
+  animation: flow 3s linear infinite; /* Faster: 6s -> 3s */
+}
+
+.link-flow-reverse-slow {
+  animation: flow-reverse 3s linear infinite; /* Faster: 6s -> 3s */
+}
+
+/* ==========================================================================
+   Console surface
+   --------------------------------------------------------------------------
+   The panel chrome shared by the scenario, filter and optimization sections.
+   One accent (the cyan already used by the energy flows) so the panels read as
+   instrumentation for the map rather than as separate widgets floating on it.
+   ========================================================================== */
+
+:root {
+  --console-accent: 34 211 238;      /* cyan-400, matches the flow links */
+  --console-surface: 255 255 255;
+  --console-ink: 15 23 42;
+  --console-line: 148 163 184;
+}
+
+.dark {
+  --console-surface: 15 23 42;
+  --console-ink: 226 232 240;
+  --console-line: 71 85 105;
+}
+
+.console-panel {
+  position: relative;
+  background: rgb(var(--console-surface) / 0.82);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid rgb(var(--console-line) / 0.28);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.5) inset,
+    0 8px 24px -12px rgb(15 23 42 / 0.35);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dark .console-panel {
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+/* A hairline of accent along the top edge, brightest at the left. Reads as a
+   status strip rather than decoration. */
+.console-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--console-accent) / 0.85) 0%,
+    rgb(var(--console-accent) / 0.25) 38%,
+    transparent 78%
+  );
+  pointer-events: none;
+}
+
+.console-panel:focus-within {
+  border-color: rgb(var(--console-accent) / 0.45);
+}
+
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: rgb(var(--console-ink));
+}
+
+.console-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.console-sub {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  text-transform: uppercase;
+}
+
+/* Status dot. Pulses only while busy, so movement means something. */
+.console-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: rgb(var(--console-line));
+}
+
+.console-dot--ok { background: rgb(52 211 153); }
+.console-dot--error { background: rgb(248 113 113); }
+.console-dot--busy {
+  background: rgb(var(--console-accent));
+  animation: console-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes console-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(var(--console-accent) / 0.55); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgb(var(--console-accent) / 0); }
+}
+
+.console-body {
+  padding: 0 12px 12px;
+  /* Each section scrolls on its own, so a long one cannot push the others
+     out of reach the way the old absolutely-positioned panels did. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.console-chevron {
+  margin-left: auto;
+  flex: none;
+  transition: transform 200ms ease;
+  opacity: 0.5;
+}
+
+.console-chevron--open { transform: rotate(90deg); }
+
+/* Numeric readouts line up column-wise. */
+.console-panel .tabular-nums,
+.console-panel table {
+  font-variant-numeric: tabular-nums;
+}
+
+.console-rail::-webkit-scrollbar,
+.console-body::-webkit-scrollbar { width: 6px; }
+
+.console-rail::-webkit-scrollbar-thumb,
+.console-body::-webkit-scrollbar-thumb {
+  background: rgb(var(--console-line) / 0.4);
+  border-radius: 999px;
+}
+
+.console-rail::-webkit-scrollbar-track,
+.console-body::-webkit-scrollbar-track { background: transparent; }
+
+/* The header stat row scrolls sideways on narrow windows; hiding the bar keeps
+   the strip clean, and the cards are still reachable by wheel or trackpad. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

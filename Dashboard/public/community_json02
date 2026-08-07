@@ -1,0 +1,667 @@
+{
+  "building": [
+    {
+      "area": 4019.864003888272,
+      "name": "HC",
+      "footprints": [
+        "Rhino.Geometry.PolylineCurve"
+      ],
+      "breps": [],
+      "number_of_floors": [
+        4.0
+      ],
+      "building_type": "MidriseApartment",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "HC"
+        },
+        "title": "Electric Demand for HC",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 105722.3,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "HA",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "HA"
+        },
+        "title": "Electric Demand for HA",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 71119.5,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "SB2",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "SB2"
+        },
+        "title": "Electric Demand for SB2",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "SB2-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "Default 400W Panel",
+            "rating": 400.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 20.0,
+            "total_cost": 1240.0,
+            "total_embodied_co2": 246.0,
+            "__type__": "PVModule"
+          },
+          "percentage": 93.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 609.1775310022236,
+          "usable_surface": 566.535103832068,
+          "azimuth": 159.02875385400318,
+          "slope": 6.212005587633813,
+          "module_count": 283,
+          "installed_capacity": 113.2,
+          "total_cost": 350920.0,
+          "total_embodied_co2": 69618.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 85202.0933,
+              "plant_name": "SB2-PV_1"
+            },
+            "title": "Hourly PV Production for SB2-PV_1",
+            "source": "SB2-PV_1",
+            "units": {
+              "__type__": "DataUnit"
+            },
+            "category": {
+              "__type__": "DataCategory"
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 85202.0933,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "SB2-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1870296913232
+          },
+          "percentage": 93.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 603.77772181174,
+          "usable_surface": 561.5132812849182,
+          "azimuth": 249.02853206534314,
+          "slope": 6.2856151624161845,
+          "module_count": 280,
+          "installed_capacity": 112.0,
+          "total_cost": 347200.0,
+          "total_embodied_co2": 68880.0,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 87562.34592,
+              "plant_name": "SB2-PV_2"
+            },
+            "title": "Hourly PV Production for SB2-PV_2",
+            "source": "SB2-PV_2",
+            "units": {
+              "__ref__": 1591550988144
+            },
+            "category": {
+              "__ref__": 1870287015120
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 87562.34592,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 343826.35,
+      "total_pv_capacity": 225.2,
+      "total_installed_capacity": 225.2,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "Edit",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "Edit"
+        },
+        "title": "Electric Demand for Edit",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [
+        {
+          "name": "Edit-PV_1",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "name": "MC2 350W Panel",
+            "rating": 350.0,
+            "size_x": 1.0,
+            "size_y": 2.0,
+            "cost_per_kwp": 3100.0,
+            "embodied_co2_per_kwp": 615.0,
+            "area": 2.0,
+            "efficiency": 17.5,
+            "total_cost": 1085.0,
+            "total_embodied_co2": 215.25,
+            "__type__": "PVModule"
+          },
+          "percentage": 70.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 683.1479693661181,
+          "usable_surface": 478.20357855628265,
+          "azimuth": -0.0,
+          "slope": 0.0,
+          "module_count": 239,
+          "installed_capacity": 83.65,
+          "total_cost": 259315.0,
+          "total_embodied_co2": 51444.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 67503.45413,
+              "plant_name": "Edit-PV_1"
+            },
+            "title": "Hourly PV Production for Edit-PV_1",
+            "source": "Edit-PV_1",
+            "units": {
+              "__ref__": 1591550988144
+            },
+            "category": {
+              "__ref__": 1870287015120
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 67503.45413,
+          "__type__": "PVPlant"
+        },
+        {
+          "name": "Edit-PV_2",
+          "surface": "Rhino.Geometry.Brep",
+          "pv_module": {
+            "__ref__": 1870282345296
+          },
+          "percentage": 70.0,
+          "system_loss": 14.0,
+          "lat": 57.68873,
+          "lon": 11.977887,
+          "custom_slope": null,
+          "total_surface": 637.5587447716172,
+          "usable_surface": 446.291121340132,
+          "azimuth": 180.0,
+          "slope": 0.0,
+          "module_count": 223,
+          "installed_capacity": 78.05,
+          "total_cost": 241955.0,
+          "total_embodied_co2": 48000.75,
+          "hourly_result": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "annual_production": 62982.993709999995,
+              "plant_name": "Edit-PV_2"
+            },
+            "title": "Hourly PV Production for Edit-PV_2",
+            "source": "Edit-PV_2",
+            "units": {
+              "__ref__": 1591550988144
+            },
+            "category": {
+              "__ref__": 1870287015120
+            },
+            "__type__": "HourlyData"
+          },
+          "hourly_df": [
+            "hoy",
+            "value"
+          ],
+          "annual_production": 62982.993709999995,
+          "__type__": "PVPlant"
+        }
+      ],
+      "total_energy_demand": 1293075.9000000001,
+      "total_pv_capacity": 161.7,
+      "total_installed_capacity": 161.7,
+      "__type__": "Building"
+    },
+    {
+      "area": 0.0,
+      "name": "JSP",
+      "footprints": [],
+      "breps": [],
+      "number_of_floors": null,
+      "building_type": "College",
+      "occupancy_schedule": null,
+      "electric_demand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "building": "JSP"
+        },
+        "title": "Electric Demand for JSP",
+        "source": null,
+        "units": "kWh",
+        "category": null,
+        "__type__": "HourlyData"
+      },
+      "owner": "Studentbostäder",
+      "PV_plant": [],
+      "total_energy_demand": 476923.95,
+      "total_pv_capacity": 0.0,
+      "total_installed_capacity": 0.0,
+      "__type__": "Building"
+    }
+  ],
+  "PV_plant": [
+    {
+      "name": "PV-Plant",
+      "surface": "Rhino.Geometry.Brep",
+      "pv_module": {
+        "name": "MC2 350W Panel",
+        "rating": 350.0,
+        "size_x": 1.0,
+        "size_y": 2.0,
+        "cost_per_kwp": 3100.0,
+        "embodied_co2_per_kwp": 615.0,
+        "area": 2.0,
+        "efficiency": 17.5,
+        "total_cost": 1085.0,
+        "total_embodied_co2": 215.25,
+        "__type__": "PVModule"
+      },
+      "percentage": 100.0,
+      "system_loss": 14.0,
+      "lat": 57.68873,
+      "lon": 11.977887,
+      "custom_slope": null,
+      "total_surface": 375.7002857992678,
+      "usable_surface": 375.7002857992678,
+      "azimuth": 31.999458602157308,
+      "slope": 0.4689290943340946,
+      "module_count": 187,
+      "installed_capacity": 65.45,
+      "total_cost": 202895.0,
+      "total_embodied_co2": 40251.75,
+      "hourly_result": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "annual_production": 53053.68318,
+          "plant_name": "PV-Plant"
+        },
+        "title": "Hourly PV Production for PV-Plant",
+        "source": "PV-Plant",
+        "units": {
+          "__ref__": 1591550988144
+        },
+        "category": {
+          "__ref__": 1870287015120
+        },
+        "__type__": "HourlyData"
+      },
+      "hourly_df": [
+        "hoy",
+        "value"
+      ],
+      "annual_production": 53053.68318,
+      "__type__": "PVPlant"
+    }
+  ],
+  "battery": [
+    {
+      "name": "Battery-01",
+      "capacity": 54.0,
+      "point": [
+        319626.64640911424,
+        6398341.68431914,
+        0.0
+      ],
+      "cost_per_kwh": 10.0,
+      "embodied_co2_per_kwh": 10.0,
+      "efficiency": 20.0,
+      "lifespan": 10.0,
+      "degradation": 0.02,
+      "initial_soc": 5.0,
+      "total_cost": 540.0,
+      "total_embodied_co2": 540.0,
+      "capacity_eol": 43.2,
+      "average_capacity": 48.6,
+      "hourly_soc": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "battery_name": "Battery-01"
+        },
+        "title": "Hourly State of Charge for Battery-01",
+        "source": "Battery-01",
+        "units": {
+          "__ref__": 1591550988144
+        },
+        "category": {
+          "__ref__": 1870287015120
+        },
+        "__type__": "HourlyData"
+      },
+      "__type__": "Battery"
+    }
+  ],
+  "charge_point": [
+    {
+      "name": "CP",
+      "point": null,
+      "capacity": 61.0,
+      "charger_type": "A",
+      "is_v2g": true,
+      "owner": "Akademiska Hus",
+      "ev_list": [
+        {
+          "name": "EV1",
+          "hoys": [
+            4800,
+            4801,
+            4802,
+            4803,
+            4804,
+            4805,
+            4806,
+            4807,
+            4808,
+            4809,
+            4810,
+            4811,
+            4812,
+            4813,
+            4814,
+            4815,
+            4816,
+            4817,
+            4818,
+            4819,
+            4820,
+            4821,
+            4822,
+            4823,
+            4824,
+            4825,
+            4826,
+            4827,
+            4828,
+            4829,
+            4830,
+            4831,
+            4832,
+            4833,
+            4834,
+            4835,
+            4836,
+            4837,
+            4838,
+            4839,
+            4840,
+            4841,
+            4842,
+            4843,
+            4844,
+            4845,
+            4846,
+            4847
+          ],
+          "start_hour": 4800,
+          "end_hour": 4847,
+          "n_hours": 48,
+          "schedule": {
+            "df": [
+              "hoy",
+              "value"
+            ],
+            "meta": {
+              "type": "availability"
+            },
+            "title": "EV Schedule (EV1)",
+            "source": "ElectricVehicle Entity",
+            "units": {
+              "__type__": "DataUnit"
+            },
+            "category": {
+              "__type__": "DataCategory"
+            },
+            "__type__": "HourlyData"
+          },
+          "capacity": 50.0,
+          "is_hybrid": false,
+          "efficiency": 16.0,
+          "daily_distance": 20.0,
+          "max_charging_power": 2.5,
+          "v2g_enabled": true,
+          "embodied_co2_per_kwh": 7.3,
+          "usable_capacity": 50.0,
+          "daily_energy_demand": 3.2,
+          "total_embodied_co2": 365.0,
+          "__type__": "ElectricVehicle"
+        }
+      ],
+      "total_connected_evs": 1,
+      "v2g_enabled_evs": 1,
+      "hourlydemand": {
+        "df": [
+          "hoy",
+          "value"
+        ],
+        "meta": {
+          "type": "charge_point_demand"
+        },
+        "title": "Charge Point Hourly Demand (CP)",
+        "source": "ChargePoint Entity",
+        "units": {
+          "__ref__": 1591550988144
+        },
+        "category": {
+          "__ref__": 1870287015120
+        },
+        "__type__": "HourlyData"
+      },
+      "__type__": "ChargePoint"
+    }
+  ],
+  "grid": {
+    "start_hour": 4800,
+    "end_hour": 4847,
+    "n_hours": 48,
+    "electricity_market_buying_price": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "buying_price"
+      },
+      "title": "Market Buying Price",
+      "source": "Grid Entity",
+      "units": {
+        "__type__": "DataUnit"
+      },
+      "category": {
+        "__type__": "DataCategory"
+      },
+      "__type__": "HourlyData"
+    },
+    "electricity_market_selling_price": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "selling_price"
+      },
+      "title": "Market Selling Price",
+      "source": "Grid Entity",
+      "units": {
+        "__ref__": 1870308853744
+      },
+      "category": {
+        "__ref__": 1591361831552
+      },
+      "__type__": "HourlyData"
+    },
+    "electricity_market_carbon_intensity": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "carbon_intensity"
+      },
+      "title": "Market Carbon Intensity",
+      "source": "Grid Entity",
+      "units": {
+        "__type__": "DataUnit"
+      },
+      "category": {
+        "__type__": "DataCategory"
+      },
+      "__type__": "HourlyData"
+    },
+    "hourly_import": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "import"
+      },
+      "title": "Grid Import",
+      "source": "Grid Entity",
+      "units": {
+        "__type__": "DataUnit"
+      },
+      "category": {
+        "__type__": "DataCategory"
+      },
+      "__type__": "HourlyData"
+    },
+    "hourly_export": {
+      "df": [
+        "hoy",
+        "value"
+      ],
+      "meta": {
+        "type": "export"
+      },
+      "title": "Grid Export",
+      "source": "Grid Entity",
+      "units": {
+        "__ref__": 1872011940288
+      },
+      "category": {
+        "__ref__": 1870404378192
+      },
+      "__type__": "HourlyData"
+    },
+    "__type__": "Grid"
+  },
+  "__type__": "EnergyCommunity"
+}

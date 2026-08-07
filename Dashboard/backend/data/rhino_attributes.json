@@ -1,0 +1,99 @@
+{
+  "07.26_SB1": {
+    "building_code": "07.26_SB1",
+    "parts": 2,
+    "sources": [
+      "Campus3D model 20022025.3dm",
+      "background image.3dm"
+    ],
+    "layers": [
+      "BuildingBrep::SB1",
+      "SB1"
+    ],
+    "suspect": [],
+    "fid": "154184",
+    "property": "Johanneberg 31:9",
+    "address": "Sven Hultins gata 6",
+    "construction_year": "1968",
+    "use": "School / Office",
+    "footprint_m2": 3066.0,
+    "floors": 20.5,
+    "height_m": 6.0
+  },
+  "07.40_Gamla Matte": {
+    "building_code": "07.40_Gamla Matte",
+    "parts": 12,
+    "sources": [
+      "Campus3D model 20022025.3dm"
+    ],
+    "layers": [
+      "Gamla Matte_1",
+      "Gamla Matte_2",
+      "Gamla Matte_3",
+      "Gamla Matte_4",
+      "Gamla Matte_5",
+      "Gamla Matte_6",
+      "Gamla Matte_7",
+      "Gamla Matte_8",
+      "Gamla Matte_9"
+    ],
+    "suspect": [],
+    "property": "Krokslätt 109:20",
+    "address": "Eklandsgatan 86",
+    "construction_year": "1980-2000",
+    "use": "Office",
+    "footprint_m2": 2390.0,
+    "floors": 5.0,
+    "floors_range": [
+      3.0,
+      5.0
+    ],
+    "height_m": 19.4
+  },
+  "BuildingBrep::Elkrafteknik": {
+    "building_code": "BuildingBrep::Elkrafteknik",
+    "parts": 2,
+    "sources": [
+      "background image.3dm"
+    ],
+    "layers": [
+      "BuildingBrep::Elkrafteknik"
+    ],
+    "suspect": [],
+    "floors": 1.0
+  },
+  "Johanneberg 31:9": {
+    "building_code": "Johanneberg 31:9",
+    "parts": 2,
+    "sources": [
+      "Campus3D model 20022025.3dm",
+      "background image.3dm"
+    ],
+    "layers": [
+      "BuildingBrep::SB2",
+      "SB2"
+    ],
+    "suspect": [
+      "floors='4000'",
+      "height_m='1'"
+    ],
+    "fid": "07.23_SB2",
+    "property": "Sven Hultins gata 6",
+    "address": "1966",
+    "construction_year": "School",
+    "use": "None",
+    "footprint_m2": 2589.0
+  },
+  "Layer 01": {
+    "building_code": "Layer 01",
+    "parts": 1,
+    "sources": [
+      "Campus3D model 20022025.3dm"
+    ],
+    "layers": [
+      "Layer 01"
+    ],
+    "suspect": [],
+    "floors": 2.0
+  }
+}
