@@ -2,21 +2,6 @@
   "name": "Chalmers Campus 2022 (verified subset)",
   "buildings": [
     {
-      "name": "Elkraftteknik",
-      "owner": "Studentbostäder",
-      "building_type": "College",
-      "footprint_area": 1900.8,
-      "number_of_floors": 1,
-      "pv_plants": [],
-      "demand": {
-        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Elkraftteknik_2022.csv"
-      },
-      "location": {
-        "x": -258.81,
-        "y": -219.33
-      }
-    },
-    {
       "name": "Idélära",
       "owner": "Studentbostäder",
       "building_type": "College",
@@ -80,7 +65,7 @@
       "name": "MC2",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 5982.3,
+      "footprint_area": 5980.7,
       "number_of_floors": 9,
       "pv_plants": [
         "MC2-PV"

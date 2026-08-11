@@ -46,6 +46,11 @@ RHINO_AMBIGUOUS = {"karhus"}
 
 TYPICAL_FLOOR_HEIGHT = 3.5
 
+# Above this, a stated floor count is not believable for a teaching or lab
+# building and is treated as a placeholder. Deliberately generous - a genuine
+# single-storey hall clears 5.5 m, so only clearly wrong values are overridden.
+IMPLAUSIBLE_STOREY_HEIGHT = 5.5
+
 # Roof PV that exists in the Rhino model but was never wired into the
 # Grasshopper definition, so it is absent from graph.json.
 #
@@ -375,6 +380,25 @@ def build(year: str, include_without_demand: bool,
             footprint = geometry["footprint_area"]
             floors = stated_floors or (survey.get("levels") if survey else None) \
                 or geometry["estimated_floors"]
+
+            # A stated floor count that implies an absurd storey height is a
+            # placeholder, not a survey. Elkraftteknik arrives from graph.json
+            # as ['1'] against a 13.2 m Rhino height - one storey four metres
+            # taller than a typical lab floor. `stated_floors or ...` cannot
+            # catch this on its own because 1 is truthy, so the placeholder wins
+            # over a better estimate.
+            implied_storey = geometry["height"] / max(1, floors)
+            if implied_storey > IMPLAUSIBLE_STOREY_HEIGHT:
+                notes.append(
+                    f"{name}: stated {floors} floor(s) against a "
+                    f"{geometry['height']:.1f} m height implies "
+                    f"{implied_storey:.1f} m per storey. Treated as a "
+                    f"placeholder and replaced with "
+                    f"{geometry['estimated_floors']} from the height."
+                )
+                floors = geometry["estimated_floors"]
+                stated_floors = None   # no longer a sourced value
+
             source = "Rhino model (union)"
             if survey and abs(survey["footprint_m2"] - footprint) / footprint > 0.15:
                 notes.append(

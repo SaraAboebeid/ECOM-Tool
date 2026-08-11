@@ -642,3 +642,111 @@ body {
    the strip clean, and the cards are still reachable by wheel or trackpad. */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ==========================================================================
+   Timeline bar
+   Day chip on the left commits (costs a dispatch); the hour scrubber to its
+   right is free, so the two are visually distinct rather than one control.
+   ========================================================================== */
+
+.timeline-bar {
+  background: rgb(var(--console-surface) / 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgb(var(--console-line) / 0.28);
+  border-radius: 14px;
+  color: rgb(var(--console-ink));
+}
+
+.timeline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--console-line) / 0.35);
+  background: rgb(var(--console-surface) / 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.timeline-chip:hover:not(:disabled) { border-color: rgb(var(--console-accent) / 0.55); }
+.timeline-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.timeline-step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--console-line) / 0.3);
+  color: rgb(var(--console-ink));
+  opacity: 0.75;
+  transition: opacity 150ms ease, border-color 150ms ease;
+}
+
+.timeline-step:hover:not(:disabled) { opacity: 1; border-color: rgb(var(--console-accent) / 0.5); }
+.timeline-step:disabled { opacity: 0.25; cursor: not-allowed; }
+
+.timeline-play {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgb(var(--console-accent));
+  color: rgb(8 47 73);
+  transition: filter 150ms ease;
+}
+
+.timeline-play:hover { filter: brightness(1.08); }
+
+.timeline-clock {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-width: 46px;
+  text-align: right;
+}
+
+/* Hour ticks sit under the track: every hour, taller every six. */
+.timeline-ticks {
+  display: flex;
+  justify-content: space-between;
+  height: 7px;
+  margin-top: 1px;
+  padding: 0 7px;   /* aligns the ends with the slider thumb travel */
+}
+
+.timeline-tick {
+  width: 1px;
+  height: 3px;
+  background: rgb(var(--console-line) / 0.45);
+}
+
+.timeline-tick--major {
+  height: 7px;
+  background: rgb(var(--console-line) / 0.75);
+}
+
+.timeline-hour-labels {
+  position: relative;
+  height: 12px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgb(var(--console-line));
+}
+
+.timeline-hour-labels span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}

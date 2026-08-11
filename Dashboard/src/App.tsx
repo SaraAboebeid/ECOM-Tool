@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { Graph } from './components/Graph/';
-import { Timeline } from './components/Timeline';
+import { TimelineBar } from './components/TimelineBar';
 import { Legend } from './components/Legend';
 import { DashboardHeader } from './components/DashboardHeader';
 
@@ -14,11 +14,10 @@ import { SizingPanel } from './components/SizingPanel';
 import { ParametersPanel } from './components/ParametersPanel';
 import { GraphData } from './types';
 import { COMPASS_ORIENTATION } from './utils/backgroundConfig';
+import { dayOf, setAnalysisDay } from './utils/analysisWindow';
 import {
   ApiError,
   CommunityDefinition,
-  DEFAULT_COMMUNITY,
-  DEMO_SCENARIO,
   ScenarioSummary,
   dispatchCommunity,
   listScenarios,
@@ -40,15 +39,17 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [fitToViewFn, setFitToViewFn] = useState<(() => void) | null>(null);
   const [isSankeyOpen, setIsSankeyOpen] = useState(false);
-  const [definition, setDefinition] = useState<CommunityDefinition>(DEFAULT_COMMUNITY);
+  // Empty until a scenario loads from the backend; there is no built-in
+  // fallback community any more.
+  const [definition, setDefinition] = useState<CommunityDefinition | null>(null);
   const [isComputing, setIsComputing] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [meta, setMeta] = useState<{ period: string; hours: number } | null>(null);
   // Owners are seeded from the first successful response only; re-seeding on
   // every dispatch would reset the user's filter selection mid-session.
   const ownersSeeded = useRef(false);
-  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([DEMO_SCENARIO]);
-  const [activeScenario, setActiveScenario] = useState<string>(DEMO_SCENARIO.name);
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
+  const [activeScenario, setActiveScenario] = useState<string>('');
   // Buildings taken out of the community. Held separately so they can be
   // restored; dropping them from `definition` alone would lose their spec.
   const [excludedBuildings, setExcludedBuildings] = useState<Record<string, unknown>>({});
@@ -57,26 +58,31 @@ function App() {
   // the optimization team runs it.
   const [optimizerParams, setOptimizerParams] = useState<Record<string, number>>({});
 
-  // Saved definitions live on the backend; the built-in demo stays first so
-  // there is always something to fall back to if the API is unreachable.
+  // Only real communities are offered. The synthetic 3-building demo used to
+  // head this list, but it invited comparisons against a made-up campus.
   useEffect(() => {
     listScenarios()
       .then((found) => {
-        setScenarios([DEMO_SCENARIO, ...found]);
-        // Prefer a real campus over the demo on first load.
-        const campus = found.find((s) => s.name.startsWith('campus'));
-        if (campus) {
-          setActiveScenario(campus.name);
-        }
+        setScenarios(found);
+        // Prefer the verified subset: every building in it has measured demand,
+        // a real footprint and a sourced floor count.
+        const preferred =
+          found.find((s) => s.name === 'campus_verified') ??
+          found.find((s) => s.name.startsWith('campus')) ??
+          found[0];
+        if (preferred) setActiveScenario(preferred.name);
       })
-      .catch(() => setScenarios([DEMO_SCENARIO]));
+      .catch((err) =>
+        setDispatchError(
+          `Could not list scenarios: ${err?.message ?? err}\n` +
+          'Start the backend with:\n' +
+          'cd Dashboard/backend && python -m uvicorn app.main:app --port 8000',
+        ),
+      );
   }, []);
 
   useEffect(() => {
-    if (activeScenario === DEMO_SCENARIO.name) {
-      setDefinition(DEFAULT_COMMUNITY);
-      return;
-    }
+    if (!activeScenario) return;
     let cancelled = false;
     loadScenario(activeScenario)
       .then((loaded) => {
@@ -92,6 +98,9 @@ function App() {
   }, [activeScenario]);
 
   useEffect(() => {
+    // Nothing to dispatch until a scenario has loaded from the backend.
+    if (!definition) return;
+
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setIsComputing(true);
@@ -170,6 +179,13 @@ function App() {
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
+
+  /** Move the dispatched window to another day, in either year. */
+  const handleDayChange = (nextDay: string) => {
+    if (!definition) return;
+    setCurrentHour(0);
+    setDefinition(setAnalysisDay(definition, nextDay));
+  };
 
   const toggleDarkMode = () => {
     // 1. First update the state (this doesn't cause immediate DOM updates)
@@ -285,6 +301,12 @@ function App() {
               <div className="workspace-grid h-full">
                 <div className="workspace-console min-h-0">
                   <ConsoleRail>
+                    {!definition && (
+                      <p className="console-panel px-3 py-2 text-[11px] text-slate-500">
+                        Loading community…
+                      </p>
+                    )}
+                    {definition && (<>
                     <ConsolePanel
                       title="Scenario"
                       subtitle={`${definition.buildings?.length ?? 0} buildings`}
@@ -315,6 +337,7 @@ function App() {
               onChange={setDefinition}
               excluded={excludedBuildings}
               onExcludedChange={setExcludedBuildings}
+              selfSufficiency={data?.kpis?.self_sufficiency ?? null}
             />
           </ConsolePanel>
 
@@ -370,6 +393,7 @@ function App() {
                         onChange={setOptimizerParams}
                       />
                     </ConsolePanel>
+                    </>)}
                   </ConsoleRail>
                 </div>
 
@@ -426,14 +450,15 @@ function App() {
                     >
                       {isSankeyOpen ? 'Hide' : 'Show'} Energy Flow Diagram
                     </button>
-                    <Timeline
+                    <TimelineBar
+                      day={definition ? dayOf(definition) : '2022-06-01'}
+                      onDayChange={handleDayChange}
                       currentHour={currentHour}
-                      isPlaying={isPlaying}
                       onHourChange={setCurrentHour}
+                      totalHours={meta?.hours ?? 24}
+                      isPlaying={isPlaying}
                       onPlayPause={togglePlayPause}
-                      isSankeyOpen={isSankeyOpen}
-                      totalHours={meta?.hours ?? 48}
-                      embedded
+                      isComputing={isComputing}
                     />
                   </div>
                 </div>

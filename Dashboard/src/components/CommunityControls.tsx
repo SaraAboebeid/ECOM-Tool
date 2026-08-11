@@ -100,22 +100,28 @@ export const CommunityControls = ({
         </div>
       )}
 
-      <label className="block mb-3">
-        <span className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Community
-        </span>
-        <select
-          value={activeScenario}
-          onChange={(e) => onScenarioChange(e.target.value)}
-          className="mt-1 w-full text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1"
-        >
-          {scenarios.map((s) => (
-            <option key={s.name} value={s.name}>
-              {s.title} — {s.buildings} building{s.buildings === 1 ? '' : 's'}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* One community now, so the picker only appears if more are added.
+          Membership is edited in the Members panel instead - the old
+          verified-subset scenario was a fixed membership choice that you can
+          now make yourself, building by building. */}
+      {scenarios.length > 1 && (
+        <label className="block mb-3">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Community
+          </span>
+          <select
+            value={activeScenario}
+            onChange={(e) => onScenarioChange(e.target.value)}
+            className="mt-1 w-full text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1"
+          >
+            {scenarios.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.title} — {s.buildings} building{s.buildings === 1 ? '' : 's'}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="mb-3 text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
         {meta && <div>{meta.period}</div>}

@@ -5,8 +5,8 @@
       "name": "Fysik origo",
       "owner": "Akademiska Hus",
       "building_type": "College",
-      "footprint_area": 4051.8,
-      "number_of_floors": 1,
+      "footprint_area": 6653.8,
+      "number_of_floors": 10,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.01_Fysik_origo_2022.csv"
@@ -36,7 +36,7 @@
       "owner": "Studentbostäder",
       "building_type": "College",
       "footprint_area": 1900.8,
-      "number_of_floors": 1,
+      "number_of_floors": 4,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Elkraftteknik_2022.csv"
@@ -164,7 +164,7 @@
       "name": "SB3",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 7385.3,
+      "footprint_area": 7383.9,
       "number_of_floors": 4,
       "pv_plants": [],
       "demand": {
@@ -224,8 +224,8 @@
       "name": "CA-Huset",
       "owner": "Studentbostäder",
       "building_type": "LargeOffice",
-      "footprint_area": 221.0,
-      "number_of_floors": 1,
+      "footprint_area": 1025.8,
+      "number_of_floors": 4,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CA-Huset_2022.csv"
@@ -310,8 +310,8 @@
       "name": "Kårhus entré",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 2541.7,
+      "number_of_floors": 5,
       "pv_plants": [
         "Karhus-PV"
       ],
@@ -327,8 +327,8 @@
       "name": "Kårresturangen",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 1172.6,
+      "number_of_floors": 4,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Kårresturangen_2022.csv"
@@ -338,7 +338,7 @@
       "name": "MC2",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 5982.3,
+      "footprint_area": 5980.7,
       "number_of_floors": 9,
       "pv_plants": [
         "MC2-PV"
@@ -385,8 +385,8 @@
       "name": "Teknikparken",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 4080.3,
-      "number_of_floors": 1,
+      "footprint_area": 4179.9,
+      "number_of_floors": 5,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Teknikparken_2022.csv"
@@ -415,8 +415,8 @@
       "name": "Vasa 4",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 455.2,
+      "number_of_floors": 6,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_4_2022.csv"
@@ -430,8 +430,8 @@
       "name": "Vasa 7",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 699.8,
+      "number_of_floors": 9,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_7_2022.csv"
@@ -490,8 +490,8 @@
       "name": "Vasa 11",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 1193.1,
+      "number_of_floors": 7,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_11_2022.csv"
@@ -516,8 +516,8 @@
       "name": "Vasa 13",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 99.0,
+      "number_of_floors": 3,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_13_2022.csv"
@@ -531,8 +531,8 @@
       "name": "Vasa 15",
       "owner": "Studentbostäder",
       "building_type": "College",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 1467.1,
+      "number_of_floors": 7,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\Vasa_15_2022.csv"

@@ -22,6 +22,8 @@ interface MembersPanelProps {
   /** Buildings removed from the community, kept so they can be restored. */
   excluded: Record<string, unknown>;
   onExcludedChange: (next: Record<string, unknown>) => void;
+  /** Latest dispatched self-sufficiency, so the effect of a change is visible here. */
+  selfSufficiency?: number | null;
 }
 
 /** The plant a building owns, if any. Buildings name their plants. */
@@ -40,6 +42,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
   onChange,
   excluded,
   onExcludedChange,
+  selfSufficiency,
 }) => {
   const [query, setQuery] = useState('');
 
@@ -125,16 +128,69 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
     return { kwp, roof };
   }, [definition]);
 
+  /** Put every building back in, or take every one out. */
+  const setAll = (include: boolean) => {
+    if (include) {
+      const restored = Object.values(excluded) as any[];
+      if (!restored.length) return;
+      onExcludedChange({});
+      onChange({ ...definition, buildings: [...definition.buildings, ...restored] });
+      return;
+    }
+    // Keep at least one member: an empty community has nothing to dispatch and
+    // the backend rejects it.
+    const [keep, ...rest] = definition.buildings;
+    if (!keep) return;
+    const nextExcluded = { ...excluded };
+    for (const b of rest) nextExcluded[b.name] = b;
+    onExcludedChange(nextExcluded);
+    onChange({ ...definition, buildings: [keep] });
+  };
+
+  const total = definition.buildings.length + Object.keys(excluded).length;
+
   return (
     <div className="text-[11px] text-slate-700 dark:text-slate-300">
-      <div className="flex items-center justify-between mb-2 tabular-nums">
+      <div className="flex items-center justify-between mb-1.5 tabular-nums">
         <span>
-          <strong>{definition.buildings.length}</strong> of{' '}
-          {definition.buildings.length + Object.keys(excluded).length} in community
+          <strong>{definition.buildings.length}</strong> of {total} in community
         </span>
         <span className="text-slate-500">
           {totals.kwp.toFixed(0)} kWp · {Math.round(totals.roof).toLocaleString()} m² roof
         </span>
+      </div>
+
+      {/* Self-sufficiency is the point of adding or removing a member, so it
+          sits with the controls rather than only in the header. */}
+      {selfSufficiency != null && (
+        <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg
+                        bg-emerald-50 dark:bg-emerald-500/10">
+          <span className="text-emerald-800 dark:text-emerald-300">Self-sufficiency</span>
+          <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+            {selfSufficiency.toFixed(2)}%
+          </span>
+        </div>
+      )}
+
+      <div className="flex gap-1 mb-2">
+        <button
+          onClick={() => setAll(true)}
+          disabled={!Object.keys(excluded).length}
+          className="flex-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700
+                     text-[10px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Include all
+        </button>
+        <button
+          onClick={() => setAll(false)}
+          disabled={definition.buildings.length <= 1}
+          className="flex-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700
+                     text-[10px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Exclude all
+        </button>
       </div>
 
       <input
