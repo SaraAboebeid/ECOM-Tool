@@ -11,16 +11,9 @@ html, body, #root {
   font-family: 'Sora', system-ui, -apple-system, sans-serif;
 }
 
-body {
-  background:
-    radial-gradient(circle at 18% 20%, rgba(14, 165, 233, 0.12) 0%, rgba(255, 255, 255, 0) 32%),
-    radial-gradient(circle at 82% 72%, rgba(56, 189, 248, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
-    linear-gradient(140deg, #eef5ff 0%, #f7fbff 42%, #e9f3ff 100%);
-}
+body { background: #F6F7ED; }
 
-.dashboard-shell {
-  background: linear-gradient(140deg, #ecf4ff 0%, #f7faff 40%, #eef5ff 100%);
-}
+.dashboard-shell { background: #F6F7ED; }
 
 .app-left-rail {
   width: 76px;
@@ -99,8 +92,8 @@ body {
 }
 
 .workspace-card {
-  background: rgba(255, 255, 255, 0.64);
-  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgb(var(--px-white) / 0.7);
+  border: 1px solid rgb(var(--console-line) / 0.22);
   border-radius: 18px;
   box-shadow: 0 20px 40px -30px rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(6px);
@@ -126,8 +119,8 @@ body {
 
 .workspace-console {
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(203, 213, 225, 0.7);
+  background: rgb(var(--px-white) / 0.55);
+  border: 1px solid rgb(var(--console-line) / 0.24);
   padding: 8px;
 }
 
@@ -136,18 +129,16 @@ body {
   flex-direction: column;
 }
 
-.dark .dashboard-shell {
-  background: linear-gradient(140deg, #020617 0%, #0f172a 50%, #111827 100%);
-}
+.dark .dashboard-shell { background: #001624; }
 
 .dark .workspace-card {
-  background: rgba(2, 6, 23, 0.52);
-  border-color: rgba(51, 65, 85, 0.72);
+  background: rgb(var(--px-midnight) / 0.55);
+  border-color: rgb(var(--console-line) / 0.3);
 }
 
 .dark .workspace-console {
-  background: rgba(2, 6, 23, 0.5);
-  border-color: rgba(71, 85, 105, 0.66);
+  background: rgb(var(--px-midnight) / 0.45);
+  border-color: rgb(var(--console-line) / 0.28);
 }
 
 @media (max-width: 1280px) {
@@ -167,16 +158,12 @@ body {
 }
 
 .dashboard-header {
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 249, 255, 0.85) 45%, rgba(231, 243, 255, 0.88) 100%);
+  background: rgb(var(--px-white) / 0.94);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
-.dark .dashboard-header {
-  background:
-    linear-gradient(120deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.88) 46%, rgba(15, 23, 42, 0.9) 100%);
-}
+.dark .dashboard-header { background: rgb(var(--px-midnight) / 0.94); }
 
 /* Stat card: tinted icon tile on the left, label over value on the right. The
    icon tint is the only colour, so the row reads as one set rather than six
@@ -187,9 +174,9 @@ body {
   gap: 10px;
   padding: 8px 14px 8px 10px;
   border-radius: 14px;
-  border: 1px solid rgb(226 232 240);
-  background: rgb(255 255 255);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  border: 1px solid rgb(var(--console-line) / 0.22);
+  background: rgb(var(--px-white));
+  box-shadow: 0 1px 2px rgb(var(--px-midnight) / 0.05);
   white-space: nowrap;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -200,8 +187,8 @@ body {
 }
 
 .dark .header-kpi-card {
-  border-color: rgb(51 65 85);
-  background: rgb(30 41 59);
+  border-color: rgb(var(--console-line) / 0.3);
+  background: rgb(var(--px-midnight));
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
 }
 
@@ -223,32 +210,45 @@ body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.3;
-  color: rgb(100 116 139);
+  color: rgb(var(--console-line));
 }
-
-.dark .header-kpi-label { color: rgb(148 163 184); }
 
 .header-kpi-value {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
-  color: rgb(15 23 42);
+  color: rgb(var(--console-ink));
   font-variant-numeric: tabular-nums;
 }
 
-.dark .header-kpi-value { color: rgb(241 245 249); }
-
+/* The two map controls - north and fit-to-view - share this so they are the
+   same size, radius, border and shadow. Relative, because the north tile puts a
+   small 'N' in its corner. */
 .viewer-fab {
+  position: relative;
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid rgb(148 163 184 / 0.35);
-  background: rgb(255 255 255 / 0.74);
+  border: 1px solid rgb(var(--console-line) / 0.35);
+  background: rgb(var(--px-white) / 0.88);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.6),
     0 10px 20px -14px rgb(15 23 42 / 0.65);
   transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
+
+.viewer-fab:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.92);
+  border-color: rgb(148 163 184 / 0.55);
+}
+
+.dark .viewer-fab {
+  background: rgb(var(--px-midnight) / 0.88);
+  border-color: rgb(var(--console-line) / 0.4);
+  box-shadow: 0 10px 20px -14px rgb(0 0 0 / 0.8);
+}
+
+.dark .viewer-fab:not(:disabled):hover { background: rgb(30 41 59 / 0.95); }
 
 .timeline-layout {
   align-items: center;
@@ -294,48 +294,8 @@ body {
   position: relative;
 }
 
-.timeline-range {
-  width: 100%;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.25), rgba(148, 163, 184, 0.45), rgba(148, 163, 184, 0.25));
-  cursor: pointer;
-}
-
-.timeline-range::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: transparent;
-}
-
-.timeline-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  border: 2px solid #dbeafe;
-  background: #2563eb;
-  margin-top: -5px;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
-}
-
-.timeline-range::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: transparent;
-}
-
-.timeline-range::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  border: 2px solid #dbeafe;
-  background: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
-}
+/* .timeline-range had its own 6px track and bordered blue thumb; it now takes
+   the shared slider styling above like every other one. */
 
 .timeline-tick {
   position: absolute;
@@ -510,21 +470,58 @@ body {
    instrumentation for the map rather than as separate widgets floating on it.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   Praxeti palette - the UI chrome only.
+   The map keeps its own neon node colours (NODE_COLORS in types.ts); these
+   dress the console, header and timeline around it.
+
+   The accent flips between modes because contrast demands it, not for variety:
+   Nuit Blanche reaches 8.17:1 on Praxeti White but only 1.88:1 on Midnight
+   Mirage, and First Colors of Spring is the mirror image - 12.17:1 on dark,
+   1.26:1 on light. Spring and Mantis never carry text on a light surface.
+   -------------------------------------------------------------------------- */
 :root {
-  --console-accent: 34 211 238;      /* cyan-400, matches the flow links */
-  --console-surface: 255 255 255;
-  --console-ink: 15 23 42;
-  --console-line: 148 163 184;
+  --px-white: 246 247 237;      /* Praxeti White */
+  --px-spring: 219 230 76;      /* First Colors of Spring */
+  --px-midnight: 0 31 63;       /* Midnight Mirage */
+  --px-mantis: 116 195 101;     /* Mantis */
+  --px-green: 0 128 76;         /* Picture Book Green */
+  --px-nuit: 30 72 143;         /* Nuit Blanche */
+
+  --console-surface: var(--px-white);
+  --console-ink: var(--px-midnight);
+  --console-accent: var(--px-nuit);
+  /* Borders and muted text: Midnight thinned rather than a separate grey, so
+     the neutrals stay in the same family as the ink. */
+  --console-line: 82 106 130;
+
+  /* Sliders. Their own accent rather than the console's: a control that is
+     being dragged should read as distinct from the surface holding it, and
+     Nuit Blanche is the panel colour already. Violet 600 measures 5.28:1 on
+     Praxeti White; it falls to 2.91:1 on Midnight, so dark lifts to violet 400
+     at 6.09:1 rather than carrying one value across both. */
+  --range-accent: 124 58 237;
+  --range-rail: 15 23 42;
+  --range-rail-alpha: 0.13;
 }
 
 .dark {
-  --console-surface: 15 23 42;
-  --console-ink: 226 232 240;
-  --console-line: 71 85 105;
+  --console-surface: var(--px-midnight);
+  --console-ink: var(--px-white);
+  --console-accent: var(--px-spring);
+  --console-line: 122 148 172;
+  --range-accent: 167 139 250;
+  --range-rail: 246 247 237;
+  --range-rail-alpha: 0.2;
 }
 
 .console-panel {
   position: relative;
+  /* The rail is a flex column at full height, so a panel would otherwise be
+     shrunk below its own content when a sibling expands - and with overflow
+     hidden that clips the subtitle's descenders, which is what made the closed
+     headers look squashed. Panels keep their natural height; the rail scrolls. */
+  flex: none;
   background: rgb(var(--console-surface) / 0.92);
   backdrop-filter: blur(18px) saturate(1.25);
   -webkit-backdrop-filter: blur(18px) saturate(1.25);
@@ -654,6 +651,7 @@ body {
 /* Group heading: a small coloured tick, then the label. */
 .console-group {
   display: flex;
+  flex: none;             /* same reason as .console-panel: never shrink */
   align-items: center;
   gap: 6px;
   padding: 8px 2px 2px;
@@ -802,4 +800,145 @@ body {
   position: absolute;
   transform: translateX(-50%);
   white-space: nowrap;
+}
+
+/* Palette tiles for the console icons and the header stats.
+   Wash and ink are separate: the wash always carries the hue so each tile keeps
+   its identity, while the ink switches to whichever sibling is legible on the
+   current surface. Mantis reaches only 2.00:1 on Praxeti White and Spring just
+   1.26:1, so on light they draw their glyph in Picture Book Green (4.64:1);
+   Nuit and Midnight are the mirror case on the dark surface. */
+.px-tile {
+  background: rgb(var(--tile) / 0.16);
+  color: rgb(var(--tile-ink, var(--tile)));
+}
+
+.dark .px-tile { background: rgb(var(--tile) / 0.22); }
+
+.px-tile--nuit     { --tile: var(--px-nuit); }
+.px-tile--green    { --tile: var(--px-green); }
+.px-tile--mantis   { --tile: var(--px-mantis);   --tile-ink: var(--px-green); }
+.px-tile--spring   { --tile: var(--px-spring);   --tile-ink: var(--px-green); }
+.px-tile--midnight { --tile: var(--px-midnight); }
+
+.dark .px-tile--mantis   { --tile-ink: var(--px-mantis); }
+.dark .px-tile--spring   { --tile-ink: var(--px-spring); }
+.dark .px-tile--nuit     { --tile-ink: var(--px-mantis); }
+.dark .px-tile--midnight { --tile-ink: var(--px-white); }
+
+
+/* ---------------------------------------------------------------------------
+   Sliders
+
+   One rule for all of them. They were previously a mix of `accent-cyan-500`
+   defaults and a bespoke `.timeline-range`, so the same control looked
+   different depending on the panel it sat in.
+
+   The track is 3px - thin enough that the thumb, not the rail, is the thing
+   the eye lands on. The input keeps a taller transparent box so the pointer
+   target stays a comfortable size; only the painted track is slim.
+
+   The filled portion is a gradient stop driven by `--range-fill`, which
+   utils/rangeFill.ts keeps in step with the value. WebKit offers no
+   pseudo-element for it; Firefox does, so it uses `::-moz-range-progress`
+   directly and ignores the gradient.
+--------------------------------------------------------------------------- */
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Focus lands on the thumb's ring below, not a box around the whole control. */
+input[type='range']:focus {
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(var(--range-accent)) 0 var(--range-fill, 0%),
+      rgb(var(--range-rail) / var(--range-rail-alpha)) var(--range-fill, 0%) 100%
+    );
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: rgb(var(--range-accent));
+  border: none;
+  /* Centres the thumb on a 3px track: (3 - 13) / 2. */
+  margin-top: -5px;
+  box-shadow: 0 0 0 0 rgb(var(--range-accent) / 0.18);
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+
+input[type='range']::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(var(--range-rail) / var(--range-rail-alpha));
+}
+
+input[type='range']::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(var(--range-accent));
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: rgb(var(--range-accent));
+  border: none;
+  box-shadow: 0 0 0 0 rgb(var(--range-accent) / 0.18);
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+
+/* Halo states. Split per engine because a selector list containing an unknown
+   pseudo-element is dropped whole by both. */
+input[type='range']:hover:not(:disabled)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgb(var(--range-accent) / 0.16);
+}
+input[type='range']:hover:not(:disabled)::-moz-range-thumb {
+  box-shadow: 0 0 0 6px rgb(var(--range-accent) / 0.16);
+}
+
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(var(--console-surface)), 0 0 0 6px rgb(var(--range-accent));
+}
+input[type='range']:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px rgb(var(--console-surface)), 0 0 0 6px rgb(var(--range-accent));
+}
+
+input[type='range']:active:not(:disabled)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 9px rgb(var(--range-accent) / 0.22);
+  transform: scale(1.08);
+}
+input[type='range']:active:not(:disabled)::-moz-range-thumb {
+  box-shadow: 0 0 0 9px rgb(var(--range-accent) / 0.22);
+  transform: scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type='range']::-webkit-slider-thumb,
+  input[type='range']::-moz-range-thumb {
+    transition: none;
+  }
 }

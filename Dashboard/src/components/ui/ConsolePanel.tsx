@@ -11,26 +11,13 @@ export type PanelStatus = 'idle' | 'busy' | 'ok' | 'error';
 export type PanelAccent = 'sky' | 'emerald' | 'violet' | 'amber' | 'slate';
 
 const ACCENTS: Record<PanelAccent, { tile: string; edge: string }> = {
-  sky: {
-    tile: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300',
-    edge: 'rgb(14 165 233)',
-  },
-  emerald: {
-    tile: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300',
-    edge: 'rgb(16 185 129)',
-  },
-  violet: {
-    tile: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300',
-    edge: 'rgb(139 92 246)',
-  },
-  amber: {
-    tile: 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
-    edge: 'rgb(245 158 11)',
-  },
-  slate: {
-    tile: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300',
-    edge: 'rgb(100 116 139)',
-  },
+  // Praxeti hues. The tile is the colour at low alpha with the colour itself as
+  // ink, so each keeps its identity on either surface without a second value.
+  sky:     { tile: 'px-tile px-tile--nuit',     edge: 'rgb(30 72 143)' },
+  emerald: { tile: 'px-tile px-tile--green',    edge: 'rgb(0 128 76)' },
+  violet:  { tile: 'px-tile px-tile--mantis',   edge: 'rgb(116 195 101)' },
+  amber:   { tile: 'px-tile px-tile--spring',   edge: 'rgb(219 230 76)' },
+  slate:   { tile: 'px-tile px-tile--midnight', edge: 'rgb(0 31 63)' },
 };
 
 interface ConsolePanelProps {

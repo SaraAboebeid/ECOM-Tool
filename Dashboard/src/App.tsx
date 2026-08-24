@@ -14,6 +14,7 @@ import { SizingPanel } from './components/SizingPanel';
 import { ParametersPanel } from './components/ParametersPanel';
 import { GraphData } from './types';
 import { dayOf, setAnalysisDay } from './utils/analysisWindow';
+import { getNorthRotationDeg } from './utils/geoProjection';
 import {
   ApiError,
   CommunityDefinition,
@@ -477,19 +478,37 @@ function App() {
 
                 <div className="workspace-main min-h-0">
                   <div className="relative viewer-shell flex-1 min-h-[420px] rounded-2xl overflow-hidden border border-slate-200/70 dark:border-slate-700/70">
-                    {/* Only fit-to-view stays on the map, tucked under the
-                        north arrow in the same corner. The compass and theme
-                        toggle moved into the console so nothing crowds the
-                        arrow. */}
-                    <div className="absolute top-[92px] right-4 z-50">
+                    {/* North and fit-to-view, stacked in one corner. Both are
+                        .viewer-fab so they share size, radius, border and
+                        shadow - the arrow used to be an SVG circle drawn inside
+                        the canvas, which is why it was a different shape and
+                        half again as large. */}
+                    <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
+                      <div
+                        className="viewer-fab flex items-center justify-center cursor-default"
+                        title={`North is ${Math.round(getNorthRotationDeg())}° from screen up`}
+                        aria-label="North arrow"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24"
+                             style={{ transform: `rotate(${getNorthRotationDeg()}deg)` }}
+                             aria-hidden>
+                          <path d="M12 3 L16.5 20 L12 16.4 L7.5 20 Z"
+                                fill="currentColor"
+                                className="text-slate-800 dark:text-slate-100" />
+                        </svg>
+                        <span className="absolute -top-0.5 right-1 text-[8px] font-bold
+                                         text-slate-500 dark:text-slate-400">N</span>
+                      </div>
+
                       <button
                         onClick={onFitToViewClick}
                         disabled={!fitToViewFn}
-                        className="viewer-fab disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="viewer-fab flex items-center justify-center
+                                   disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Fit graph to view"
                         title="Fit graph to view"
                       >
-                        <FitToViewIcon className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+                        <FitToViewIcon className="w-[18px] h-[18px] text-slate-800 dark:text-slate-100" />
                       </button>
                     </div>
 

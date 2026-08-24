@@ -195,7 +195,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
           step={1}
           value={Math.min(size, field.max)}
           onChange={(e) => setSize(Number(e.target.value))}
-          className="w-full accent-cyan-500"
+          className="w-full"
         />
       </label>
 
@@ -208,7 +208,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
             </div>
             <input type="range" min={1} max={20} step={1} value={floors}
                    onChange={(e) => setFloors(Number(e.target.value))}
-                   className="w-full accent-cyan-500" />
+                   className="w-full" />
           </label>
 
           <label className="block mb-1.5">
@@ -218,7 +218,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
             </div>
             <input type="range" min={10000} max={5000000} step={10000} value={annualKwh}
                    onChange={(e) => setAnnualKwh(Number(e.target.value))}
-                   className="w-full accent-cyan-500" />
+                   className="w-full" />
           </label>
 
           <p className="text-[9px] text-amber-700 dark:text-amber-400 mb-1.5 leading-snug">

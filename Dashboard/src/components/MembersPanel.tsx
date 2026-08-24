@@ -281,7 +281,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
                   type="checkbox"
                   checked={included}
                   onChange={(e) => setMembership(name, e.target.checked)}
-                  className="w-3.5 h-3.5 rounded accent-cyan-500"
+                  className="w-3.5 h-3.5 rounded"
                 />
                 <span className="font-medium truncate flex-1">{name}</span>
                 <span className="text-slate-500 tabular-nums text-[10px]">
@@ -311,7 +311,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
                     step={1}
                     value={coverage}
                     onChange={(e) => setCoverage(name, Number(e.target.value))}
-                    className="w-full accent-cyan-500"
+                    className="w-full"
                   />
                 </div>
               )}

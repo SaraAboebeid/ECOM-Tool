@@ -117,7 +117,7 @@ export const ConsoleRail: React.FC<ConsoleRailProps> = ({
   return (
     <AccordionContext.Provider value={{ openId, toggle, register }}>
       <div className="console-rail h-full w-full flex flex-col gap-2 overflow-y-auto pr-1">
-        <div className="flex items-center gap-2 px-1.5 pb-1.5 mb-0.5
+        <div className="shrink-0 flex items-center gap-2 px-1.5 pb-1.5 mb-0.5
                         border-b border-slate-200/70 dark:border-slate-700/70">
           <span className="flex items-center justify-center w-6 h-6 rounded-lg
                            bg-cyan-100 text-cyan-600
@@ -151,7 +151,7 @@ export const ConsoleRail: React.FC<ConsoleRailProps> = ({
 
         {children}
 
-        {footer && <div className="mt-auto pt-2">{footer}</div>}
+        {footer && <div className="shrink-0 mt-auto pt-2">{footer}</div>}
       </div>
     </AccordionContext.Provider>
   );

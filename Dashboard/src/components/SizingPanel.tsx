@@ -122,7 +122,7 @@ export const SizingPanel: React.FC<SizingPanelProps> = ({
           <input type="range" min={100} max={5000} step={100} value={maxValue}
                  disabled={running}
                  onChange={(e) => setMaxValue(Number(e.target.value))}
-                 className="w-full accent-cyan-500" />
+                 className="w-full" />
         </label>
       )}
 
@@ -135,7 +135,7 @@ export const SizingPanel: React.FC<SizingPanelProps> = ({
           <input type="range" min={3} max={MAX_POINTS} step={1} value={pointCount}
                  disabled={running}
                  onChange={(e) => setPointCount(Number(e.target.value))}
-                 className="w-full accent-cyan-500" />
+                 className="w-full" />
         </label>
         <label>
           <div className="flex justify-between text-[10px] mb-0.5">
@@ -145,7 +145,7 @@ export const SizingPanel: React.FC<SizingPanelProps> = ({
           <input type="range" min={1} max={7} step={1} value={days}
                  disabled={running}
                  onChange={(e) => setDays(Number(e.target.value))}
-                 className="w-full accent-cyan-500" />
+                 className="w-full" />
         </label>
       </div>
 

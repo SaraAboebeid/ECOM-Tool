@@ -1,10 +1,10 @@
 import { useRef, useMemo } from 'react';
-import { GraphData, Node } from '../../types';
+import { GraphData, Node, SURFACE_COLOR } from '../../types';
 import { GraphNodes } from './GraphNodes';
 import { GraphLinks } from './GraphLinks';
 import { useGraphSimulation } from '../../hooks/useGraphSimulation';
 import { getScaledImageDimensions, getImageCenter, COMPASS_ORIENTATION } from '../../utils/backgroundConfig';
-import { buildBasemapTiles, getNorthRotationDeg } from '../../utils/geoProjection';
+import { buildBasemapTiles } from '../../utils/geoProjection';
 import { useBuildingFootprints } from '../../hooks/useBuildingFootprints';
 
 interface GraphCanvasProps {
@@ -120,7 +120,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           y={-2600}
           width={5200}
           height={5200}
-          fill="#f5f7fa"
+          fill={SURFACE_COLOR}
           pointerEvents="none"
         />
 
@@ -224,34 +224,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         />
       </g>
 
-      {/* North arrow. Outside the zoom/pan group so it stays put, but rotated
-          by the same projection the map uses - north is not up here. */}
-      <g
-        transform={`translate(${dimensions.width - 52}, 52)`}
-        pointerEvents="none"
-        aria-label="North arrow"
-      >
-        <circle r={26} fill="rgba(255,255,255,0.82)" stroke="#cbd5e1" strokeWidth={1} />
-        <g transform={`rotate(${getNorthRotationDeg()})`}>
-          <path
-            d="M 0 -17 L 5.5 5 L 0 1.5 L -5.5 5 Z"
-            fill="#0f172a"
-            stroke="#0f172a"
-            strokeWidth={0.5}
-            strokeLinejoin="round"
-          />
-          <text
-            y={-20}
-            textAnchor="middle"
-            fontSize="10"
-            fontWeight="700"
-            fill="#0f172a"
-            style={{ fontFamily: 'Sora, system-ui, sans-serif' }}
-          >
-            N
-          </text>
-        </g>
-      </g>
     </svg>
   );
 };

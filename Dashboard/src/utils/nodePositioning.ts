@@ -50,6 +50,10 @@ const ORIGINAL_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   'Vasa 15': { x: 381.065, y: 334.557 },
   'PV-Plant': { x: 195.531, y: 1079.886 },
   'GRID': { x: 197.562, y: 495.081 }, // Placeholder for grid node
+  // The community battery sits beside the grid connection: both are shared
+  // assets with no building of their own, and pairing them shows the import /
+  // store relationship that the flows between them describe.
+  'BAT_Battery-01': { x: 197.562, y: 452.081 },
 };
 
 /**
