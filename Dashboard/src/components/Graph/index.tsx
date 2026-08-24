@@ -176,6 +176,7 @@ export const Graph: React.FC<GraphProps> = ({
 
       {/* Node details panel */}
       <NodeDetailsPanel
+        allNodes={data.nodes}
         selectedNode={selectedNode}
         onClose={handleCloseNodeDetails}
         links={data.links}

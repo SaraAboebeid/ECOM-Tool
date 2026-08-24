@@ -46,6 +46,12 @@ RHINO_AMBIGUOUS = {"karhus"}
 
 TYPICAL_FLOOR_HEIGHT = 3.5
 
+# Standalone PV arrays - ones graph.json lists without a host building. Off,
+# because the only such array sat as an unanchored node in the middle of the
+# campus with no building to belong to. Roof arrays are unaffected: they are
+# folded into their host and shown by its PV badge.
+INCLUDE_COMMUNITY_PV = False
+
 # Above this, a stated floor count is not believable for a teaching or lab
 # building and is treated as a placeholder. Deliberately generous - a genuine
 # single-storey hall clears 5.5 m, so only clearly wrong values are overridden.
@@ -309,12 +315,17 @@ def build(year: str, include_without_demand: bool,
         if "_PV_" in node_id:
             owner_name = node_id.rsplit("_PV_", 1)[0]
             pv_by_building.setdefault(owner_name, []).append(plant)
-        else:
+        elif INCLUDE_COMMUNITY_PV:
             # Standalone arrays are their own map node, so they need a position.
             where = position_for(coords, plant["name"], "PV-Plant")
             if where:
                 plant["location"] = where
             community_pv.append(plant)
+        else:
+            notes.append(
+                f"PV {node_id}: standalone community array, excluded "
+                f"(INCLUDE_COMMUNITY_PV is off). It has no host building, so it "
+                f"was drawn as a lone node in the middle of the campus.")
 
     # --- buildings ----------------------------------------------------------
     buildings: list[dict] = []

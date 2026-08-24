@@ -13,7 +13,6 @@ import { MembersPanel } from './components/MembersPanel';
 import { SizingPanel } from './components/SizingPanel';
 import { ParametersPanel } from './components/ParametersPanel';
 import { GraphData } from './types';
-import { COMPASS_ORIENTATION } from './utils/backgroundConfig';
 import { dayOf, setAnalysisDay } from './utils/analysisWindow';
 import {
   ApiError,
@@ -26,6 +25,27 @@ import {
 
 /** A dispatch takes ~2 s, so wait for the slider to settle before asking. */
 const DISPATCH_DEBOUNCE_MS = 400;
+
+/* Console panel icons. Stroked at 1.7px on a 24 viewbox so they sit
+   consistently in the tinted tile, matching the header stat cards. */
+const PanelIcon = ({ d }: { d: string }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+
+const MembersGlyph = () => <PanelIcon d="M4 21V7l6-3v17M14 21V10l6 3v8M7 10h.01M7 14h.01M17 15h.01" />;
+const GridGlyph = () => <PanelIcon d="M13 2 L4 14h7l-1 8 9-12h-7z" />;
+const OptimizeGlyph = () => <PanelIcon d="M4 19h16M6 15l4-5 3 3 5-7" />;
+const ParamsGlyph = () => <PanelIcon d="M4 7h9M17 7h3M4 17h4M12 17h8M15 4v6M8 14v6" />;
+
+/** A quiet heading that groups the console panels below it. */
+const ConsoleGroup = ({ label, edge }: { label: string; edge: string }) => (
+  <p className="console-group" style={{ ['--group-edge' as string]: edge }}>
+    {label}
+  </p>
+);
 
 function App() {
   const [data, setData] = useState<GraphData | null>(null);
@@ -57,6 +77,8 @@ function App() {
   // LEC-Opt's committed default, so an empty object reproduces the model as
   // the optimization team runs it.
   const [optimizerParams, setOptimizerParams] = useState<Record<string, number>>({});
+  // Collapsing the console widens the map, so the layout has to know.
+  const [isConsoleCollapsed, setIsConsoleCollapsed] = useState(false);
 
   // Only real communities are offered. The synthetic 3-building demo used to
   // head this list, but it invited comparisons against a made-up campus.
@@ -298,20 +320,99 @@ function App() {
 
           <div className="flex-1 min-h-0 px-4 pb-4 pt-2">
             <div className="workspace-card h-full">
-              <div className="workspace-grid h-full">
-                <div className="workspace-console min-h-0">
-                  <ConsoleRail>
+              <div className={`workspace-grid h-full ${isConsoleCollapsed ? 'workspace-grid--console-collapsed' : ''}`}>
+                <div className={`workspace-console min-h-0 ${isConsoleCollapsed ? 'workspace-console--collapsed' : ''}`}>
+                  <ConsoleRail
+                    onCollapsedChange={setIsConsoleCollapsed}
+                    footer={
+                      <button
+                        onClick={toggleDarkMode}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg
+                                   border border-slate-200 dark:border-slate-700
+                                   hover:bg-white/70 dark:hover:bg-slate-800 transition-colors"
+                        aria-pressed={isDarkMode}
+                        title={isDarkMode ? 'Switch to bright' : 'Switch to dark'}
+                      >
+                        {isDarkMode
+                          ? <SunIcon className="w-4 h-4 text-amber-400" />
+                          : <MoonIcon className="w-4 h-4 text-slate-600" />}
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.12em]
+                                         text-slate-500 dark:text-slate-400">Display</span>
+                        <span className="ml-auto text-[10px] font-semibold
+                                         text-slate-700 dark:text-slate-200">
+                          {isDarkMode ? 'Dark' : 'Bright'}
+                        </span>
+                      </button>
+                    }
+                    footerCollapsed={
+                      <button
+                        onClick={toggleDarkMode}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg
+                                   border border-slate-200 dark:border-slate-700
+                                   hover:bg-white/70 dark:hover:bg-slate-800 transition-colors"
+                        aria-pressed={isDarkMode}
+                        title={isDarkMode ? 'Switch to bright' : 'Switch to dark'}
+                      >
+                        {isDarkMode
+                          ? <SunIcon className="w-4 h-4 text-amber-400" />
+                          : <MoonIcon className="w-4 h-4 text-slate-600" />}
+                      </button>
+                    }
+                  >
                     {!definition && (
                       <p className="console-panel px-3 py-2 text-[11px] text-slate-500">
                         Loading community…
                       </p>
                     )}
                     {definition && (<>
+                    <ConsoleGroup label="Community" edge="rgb(14 165 233)" />
+
                     <ConsolePanel
-                      title="Scenario"
-                      subtitle={`${definition.buildings?.length ?? 0} buildings`}
+                      title="Members"
+                      subtitle={`${definition.buildings.length} buildings`}
+                      icon={<MembersGlyph />}
+                      accent="sky"
                       status={dispatchError ? 'error' : isComputing ? 'busy' : 'ok'}
                       defaultOpen
+                      maxBodyHeight={460}
+                    >
+                      <MembersPanel
+                        definition={definition}
+                        onChange={setDefinition}
+                        excluded={excludedBuildings}
+                        onExcludedChange={setExcludedBuildings}
+                        selfSufficiency={data?.kpis?.self_sufficiency ?? null}
+                        filters={
+                          <Legend
+                            activeTypes={activeTypes}
+                            onToggleType={toggleNodeType}
+                            minFlow={minFlow}
+                            onMinFlowChange={setMinFlow}
+                            activeOwners={activeOwners}
+                            onToggleOwner={toggleOwner}
+                            availableOwners={data ? [...new Set(data.nodes.flatMap(n => {
+                              const owners: string[] = [];
+                              if (n.owner) owners.push(n.owner);
+                              if (n.VALID_OWNERS && Array.isArray(n.VALID_OWNERS)) {
+                                owners.push(...n.VALID_OWNERS);
+                              }
+                              return owners;
+                            }))] : []}
+                            v2gFilter={v2gFilter}
+                            onV2gFilterChange={handleV2gFilterChange}
+                            capacityRange={capacityRange}
+                            onCapacityRangeChange={handleCapacityRangeChange}
+                            maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
+                          />
+                        }
+                      />
+                    </ConsolePanel>
+
+                    <ConsolePanel
+                      title="Grid & storage"
+                      subtitle={meta?.period ? `${meta.hours} h dispatched` : 'prices, battery'}
+                      icon={<GridGlyph />}
+                      accent="emerald"
                       maxBodyHeight={340}
                     >
                       <CommunityControls
@@ -326,65 +427,41 @@ function App() {
                       />
                     </ConsolePanel>
 
+                    <ConsoleGroup label="Analyse" edge="rgb(139 92 246)" />
+
                     <ConsolePanel
-            title="Members"
-            subtitle={`${definition.buildings.length} buildings`}
-            defaultOpen
-            maxBodyHeight={440}
-          >
-            <MembersPanel
-              definition={definition}
-              onChange={setDefinition}
-              excluded={excludedBuildings}
-              onExcludedChange={setExcludedBuildings}
-              selfSufficiency={data?.kpis?.self_sufficiency ?? null}
-            />
-          </ConsolePanel>
-
-          <ConsolePanel title="Filters" subtitle={`${activeTypes.size} types`}>
-                      <Legend
-                        activeTypes={activeTypes}
-                        onToggleType={toggleNodeType}
-                        minFlow={minFlow}
-                        onMinFlowChange={setMinFlow}
-                        activeOwners={activeOwners}
-                        onToggleOwner={toggleOwner}
-                        availableOwners={data ? [...new Set(data.nodes.flatMap(n => {
-                          const owners: string[] = [];
-                          if (n.owner) owners.push(n.owner);
-                          if (n.VALID_OWNERS && Array.isArray(n.VALID_OWNERS)) {
-                            owners.push(...n.VALID_OWNERS);
-                          }
-                          return owners;
-                        }))] : []}
-                        v2gFilter={v2gFilter}
-                        onV2gFilterChange={handleV2gFilterChange}
-                        capacityRange={capacityRange}
-                        onCapacityRangeChange={handleCapacityRangeChange}
-                        maxCapacity={data ? Math.max(...data.nodes.map(n => n.capacity || n.installed_capacity || 0)) : 100}
-                      />
-                    </ConsolePanel>
-
-                    <ConsolePanel title="Optimization" subtitle="LEC-Opt" maxBodyHeight={380}>
+                      title="Optimization"
+                      subtitle="run, sweep, cost curve"
+                      icon={<OptimizeGlyph />}
+                      accent="violet"
+                      maxBodyHeight={520}
+                    >
                       <OptimizationPanel
                         definition={definition}
                         parameters={optimizerParams}
                       />
+                      <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.12em]
+                                      text-slate-400 dark:text-slate-500 mb-1.5">
+                          Find the cheapest size
+                        </p>
+                        <SizingPanel
+                          definition={definition}
+                          parameters={optimizerParams}
+                        />
+                      </div>
                     </ConsolePanel>
 
-                    <ConsolePanel title="Sizing" subtitle="cost curve" maxBodyHeight={470}>
-                      <SizingPanel
-                        definition={definition}
-                        parameters={optimizerParams}
-                      />
-                    </ConsolePanel>
+                    <ConsoleGroup label="Model" edge="rgb(100 116 139)" />
 
                     <ConsolePanel
                       title="Parameters"
+                      icon={<ParamsGlyph />}
+                      accent="slate"
                       subtitle={
                         Object.keys(optimizerParams).length
                           ? `${Object.keys(optimizerParams).length} changed`
-                          : 'defaults'
+                          : '13 model constants'
                       }
                       maxBodyHeight={440}
                     >
@@ -394,12 +471,17 @@ function App() {
                       />
                     </ConsolePanel>
                     </>)}
+
                   </ConsoleRail>
                 </div>
 
                 <div className="workspace-main min-h-0">
                   <div className="relative viewer-shell flex-1 min-h-[420px] rounded-2xl overflow-hidden border border-slate-200/70 dark:border-slate-700/70">
-                    <div className="absolute top-4 right-4 flex gap-2 z-50">
+                    {/* Only fit-to-view stays on the map, tucked under the
+                        north arrow in the same corner. The compass and theme
+                        toggle moved into the console so nothing crowds the
+                        arrow. */}
+                    <div className="absolute top-[92px] right-4 z-50">
                       <button
                         onClick={onFitToViewClick}
                         disabled={!fitToViewFn}
@@ -408,29 +490,6 @@ function App() {
                         title="Fit graph to view"
                       >
                         <FitToViewIcon className="w-5 h-5 text-slate-700 dark:text-slate-200" />
-                      </button>
-
-                      <div
-                        className="viewer-fab cursor-default flex items-center justify-center"
-                        title={`Compass orientation: ${COMPASS_ORIENTATION}° clockwise`}
-                      >
-                        <CompassIcon
-                          className="w-5 h-5 text-slate-700 dark:text-slate-200"
-                          rotation={COMPASS_ORIENTATION}
-                        />
-                      </div>
-
-                      <button
-                        onClick={toggleDarkMode}
-                        className="viewer-fab"
-                        aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-                        title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-                      >
-                        {isDarkMode ? (
-                          <SunIcon className="w-5 h-5 text-amber-500" />
-                        ) : (
-                          <MoonIcon className="w-5 h-5 text-slate-700" />
-                        )}
                       </button>
                     </div>
 
@@ -532,49 +591,5 @@ const FitToViewIcon = ({ className = "w-6 h-6" }) => (
   </svg>
 );
 
-const CompassIcon = ({ className = "w-6 h-6", rotation = 0 }) => (
-  <svg
-    className={className}
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
-    style={{ transform: `rotate(${rotation}deg)` }}
-  >
-    {/* Compass circle */}
-    <circle
-      cx="12"
-      cy="12"
-      r="10"
-      strokeWidth={2}
-    />
-    {/* North arrow */}
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 2 L16 8 L12 6 L8 8 Z"
-      fill="currentColor"
-    />
-    {/* Center dot */}
-    <circle
-      cx="12"
-      cy="12"
-      r="1"
-      fill="currentColor"
-    />
-    {/* N marker */}
-    <text
-      x="12"
-      y="5"
-      fontSize="8"
-      textAnchor="middle"
-      fill="currentColor"
-      fontWeight="bold"
-    >
-      N
-    </text>
-  </svg>
-);
 
 export default App;

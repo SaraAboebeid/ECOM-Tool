@@ -236,6 +236,26 @@ def classify(info: dict, curves: list[float]) -> tuple[str, str]:
                        f"({summed:,.0f} -> {area:,.0f} m2)")
 
 
+def visible_layers(model) -> set:
+    """Indices of layers switched on in Rhino, ancestors included.
+
+    A child is only on if every layer above it is on too. The model carries
+    context massing, streets, terrain and PV surfaces that are present but
+    hidden; reading them anyway would report geometry the author has turned off.
+    """
+    by_path = {layer.FullPath: layer for layer in model.Layers}
+
+    def on(layer) -> bool:
+        parts = layer.FullPath.split("::")
+        for depth in range(1, len(parts) + 1):
+            ancestor = by_path.get("::".join(parts[:depth]))
+            if ancestor is not None and not ancestor.Visible:
+                return False
+        return True
+
+    return {i for i, layer in enumerate(model.Layers) if on(layer)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -252,9 +272,15 @@ def main() -> int:
     model = r3.File3dm.Read(str(args.model))
     layers = {i: layer.FullPath for i, layer in enumerate(model.Layers)}
 
+    on = visible_layers(model)
+    skipped = 0
+
     grouped: dict[str, list] = defaultdict(list)
     points: list[dict] = []
     for obj in model.Objects:
+        if obj.Attributes.LayerIndex not in on:
+            skipped += 1
+            continue
         layer = layers.get(obj.Attributes.LayerIndex, "")
         geometry = obj.Geometry
         if type(geometry).__name__ == "Point":
@@ -269,6 +295,9 @@ def main() -> int:
             continue
         if layer.startswith(BUILDING_PREFIX) or layer.endswith(PV_SUFFIX) or layer == "PV-Plant":
             grouped[layer].append(geometry)
+
+    if skipped:
+        print(f"Skipped {skipped} object(s) on switched-off layers.")
 
     print(f"Cross-checking against {CURVES_MODEL.name}...")
     curve_areas = closed_curve_areas(CURVES_MODEL)

@@ -5,7 +5,7 @@
       "name": "Fysik origo",
       "owner": "Akademiska Hus",
       "building_type": "College",
-      "footprint_area": 6653.8,
+      "footprint_area": 6653.7,
       "number_of_floors": 10,
       "pv_plants": [],
       "demand": {
@@ -224,7 +224,7 @@
       "name": "CA-Huset",
       "owner": "Studentbostäder",
       "building_type": "LargeOffice",
-      "footprint_area": 1025.8,
+      "footprint_area": 1025.9,
       "number_of_floors": 4,
       "pv_plants": [],
       "demand": {
@@ -254,8 +254,8 @@
       "name": "CSB Gibraltarvallen guesthouse",
       "owner": "Studentbostäder",
       "building_type": "LargeOffice",
-      "footprint_area": 0.0,
-      "number_of_floors": 1,
+      "footprint_area": 804.1,
+      "number_of_floors": 6,
       "pv_plants": [],
       "demand": {
         "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\CSB_Gibraltarvallen_guesthouse_2022.csv"
@@ -634,20 +634,6 @@
         "size_y": 2.0,
         "cost_per_kwp": 3100.0,
         "embodied_co2_per_kwp": 615.0
-      }
-    },
-    {
-      "name": "community PV-Plant",
-      "surface_area": 375.7,
-      "percentage": 100.0,
-      "system_loss": 14.0,
-      "slope": 0.469,
-      "azimuth": 31.999,
-      "lat": 57.68873,
-      "lon": 11.977887,
-      "location": {
-        "x": -404.47,
-        "y": -479.89
       }
     }
   ],

@@ -6,13 +6,30 @@ interface NodeDetailsPanelProps {
   selectedNode: Node | null;
   onClose: () => void;
   links?: Link[];
+  /**
+   * Every node from the dispatch, before filtering.
+   *
+   * Roof arrays are hidden from the map - the building already shows a PV badge
+   * and its combined capacity - but their per-array detail still has to be
+   * reachable, so it is listed here on the building that owns them.
+   */
+  allNodes?: Node[];
 }
 
 /**
  * Side panel component for displaying detailed node information
  */
-export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({ selectedNode, onClose, links = [] }) => {
+export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
+  selectedNode, onClose, links = [], allNodes = [],
+}) => {
   if (!selectedNode) return null;
+
+  /** Roof arrays mounted on this building. Ids are '<host>_PV_<plant>'. */
+  const roofArrays = selectedNode.type === 'building'
+    ? allNodes.filter(
+        (n) => n.type === 'pv' && n.id.startsWith(`${selectedNode.id}_PV_`)
+      )
+    : [];
 
   const getAttributesByNodeType = () => {
     switch(selectedNode.type) {
@@ -42,6 +59,23 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({ selectedNode
             {selectedNode.total_pv_capacity && (
               <div>
                 <span className="font-semibold">PV Capacity:</span> {selectedNode.total_pv_capacity.toFixed(2)} kW
+                {roofArrays.length > 0 && (
+                  <ul className="mt-1 ml-1 pl-2 border-l-2 border-amber-300 dark:border-amber-600 space-y-0.5">
+                    {roofArrays.map((array) => (
+                      <li key={array.id} className="text-[11px] text-gray-600 dark:text-gray-400">
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {array.name || array.id.split('_PV_')[1]}
+                        </span>
+                        {array.installed_capacity != null &&
+                          ` — ${array.installed_capacity.toFixed(1)} kW`}
+                        {array.annual_production != null &&
+                          ` · ${(array.annual_production / 1000).toFixed(1)} MWh/yr`}
+                        {array.custom_slope != null && ` · ${array.custom_slope}° tilt`}
+                        {array.azimuth != null && ` · ${array.azimuth}° azimuth`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>

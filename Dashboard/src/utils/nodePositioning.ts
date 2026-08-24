@@ -91,25 +91,37 @@ export const FIXED_NODE_POSITIONS: Record<string, { x: number; y: number }> =
  * is drawn, so buildings placed this way stayed in the force layout. A static
  * import means every node has its position on the very first bind.
  *
- * Regenerate with backend/scripts/export_footprints_geojson.py.
+ * Regenerate with backend/scripts/export_footprints_geojson.py, which also
+ * writes the roof areas roofArea.ts reads - one file, so the two cannot drift.
  */
-import BUILDING_CENTROIDS from '../data/buildingCentroids.json';
+import BUILDING_FOOTPRINTS from '../data/buildingFootprints.json';
 
 /**
- * Fixed positions keyed canonically, so a node id only has to match a table
- * entry up to case and accents.
+ * Fixed positions keyed canonically, so a node id only has to match up to case
+ * and accents.
  *
- * The hand-placed table wins; centroids only fill the gaps, so tuned positions
- * are never overridden by a computed one.
+ * The Rhino model wins. The hand-placed table below predates the georeferenced
+ * footprints and only fills gaps for buildings the model has no layer for -
+ * where both exist they disagreed by 20 m on average, and by 685 m for karhus,
+ * because the table was eyeballed against a raster render while the centroids
+ * are measured from the model itself. Anything drawn from the model - the
+ * footprint polygons, the roof areas - is placed from those centroids, so
+ * taking node positions from anywhere else guarantees the icon and its building
+ * disagree.
  */
 const CANONICAL_FIXED_POSITIONS: Map<string, { x: number; y: number }> = (() => {
   const map = new Map<string, { x: number; y: number }>();
 
+  // Hand-placed first, so the measured centroids below overwrite them.
+  for (const [id, position] of Object.entries(FIXED_NODE_POSITIONS)) {
+    map.set(canonicalName(id), position);
+  }
+
   const centre = getImageCenter();
-  for (const [name, lonLat] of Object.entries(
-    BUILDING_CENTROIDS as Record<string, [number, number]>
+  for (const [name, record] of Object.entries(
+    BUILDING_FOOTPRINTS as Record<string, { centroid: [number, number] }>
   )) {
-    const point = lonLatToImage(lonLat[0], lonLat[1]);
+    const point = lonLatToImage(record.centroid[0], record.centroid[1]);
     // Node coordinates are pre-rotated; the footprints are drawn inside a group
     // that carries the rotation instead, so it has to be applied here.
     map.set(
@@ -120,12 +132,27 @@ const CANONICAL_FIXED_POSITIONS: Map<string, { x: number; y: number }> = (() => 
     );
   }
 
-  for (const [id, position] of Object.entries(FIXED_NODE_POSITIONS)) {
-    map.set(canonicalName(id), position);
-  }
-
   return map;
 })();
+
+/**
+ * The building a roof array belongs to, from its node id.
+ *
+ * Ids are built as `<host>_PV_<plant>` - 'SB1_PV_SB1-PV_1' is the first array
+ * on SB1 - so the host is everything before the separator. The standalone
+ * community plant has no host and is left to the layout.
+ */
+const hostOf = (nodeId: string): string | null => {
+  const marker = nodeId.indexOf('_PV_');
+  return marker > 0 ? nodeId.slice(0, marker) : null;
+};
+
+/** Where a roof array sits relative to the building it is mounted on. */
+const ARRAY_ORBIT_RADIUS = 52;
+/** Fan siblings out rather than stacking them; Kemi has six arrays. */
+const ARRAY_FAN_DEGREES = 46;
+/** Up and to the right of the host, clear of the label chip below it. */
+const ARRAY_BASE_ANGLE = -60;
 
 /**
  * Apply fixed positions to nodes that have predefined locations.
@@ -143,16 +170,57 @@ export const applyFixedPositions = (
   nodes: Node[],
   footprintCentroids?: Map<string, { x: number; y: number }>
 ): Node[] => {
+  const positionFor = (id: string) => {
+    const key = canonicalName(id);
+    return CANONICAL_FIXED_POSITIONS.get(key) ?? footprintCentroids?.get(key);
+  };
+
+  // Roof arrays are placed relative to their building, so siblings have to be
+  // known before any of them can be offset - hence a grouping pass first.
+  // Sorted so a given array always lands in the same place between renders.
+  const arraysByHost = new Map<string, string[]>();
+  for (const node of nodes) {
+    const host = hostOf(node.id);
+    if (!host || positionFor(node.id)) continue;
+    if (!positionFor(host)) continue;   // host itself is unplaced; nothing to anchor to
+    const siblings = arraysByHost.get(host) ?? [];
+    siblings.push(node.id);
+    arraysByHost.set(host, siblings);
+  }
+  for (const siblings of arraysByHost.values()) siblings.sort();
+
   return nodes.map(node => {
-    const key = canonicalName(node.id);
-    const position =
-      CANONICAL_FIXED_POSITIONS.get(key) ?? footprintCentroids?.get(key);
-    if (position) {
-      return { ...node, fx: position.x, fy: position.y };
+    const own = positionFor(node.id);
+    if (own) return { ...node, fx: own.x, fy: own.y };
+
+    // A roof array with no position of its own sits on its building. The link
+    // to the host already exists in the graph; this makes the two agree
+    // spatially instead of leaving the array in the force layout.
+    const host = hostOf(node.id);
+    if (host) {
+      const anchor = positionFor(host);
+      const siblings = arraysByHost.get(host);
+      if (anchor && siblings) {
+        const index = siblings.indexOf(node.id);
+        const spread = siblings.length > 1 ? ARRAY_FAN_DEGREES : 0;
+        const angle =
+          ARRAY_BASE_ANGLE +
+          (siblings.length > 1
+            ? -spread / 2 + (spread * index) / (siblings.length - 1)
+            : 0);
+        const radians = (angle * Math.PI) / 180;
+        return {
+          ...node,
+          fx: anchor.x + Math.cos(radians) * ARRAY_ORBIT_RADIUS,
+          fy: anchor.y + Math.sin(radians) * ARRAY_ORBIT_RADIUS,
+        };
+      }
     }
+
     return node;
   });
 };
+
 
 /**
  * Check if a node has a fixed position

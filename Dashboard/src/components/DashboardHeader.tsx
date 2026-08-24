@@ -134,7 +134,7 @@ export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => 
                   Energy Community Dashboard
                 </h1>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 tracking-[0.08em] uppercase">
-                  Real-time campus energy intelligence
+                  Real-time campus energy flexibility
                 </p>
               </div>
             </div>

@@ -65,10 +65,10 @@
       "confidence_reason": "18 objects, union removed 31% of overlapping projection (3,677 -> 2,519 m2)"
     },
     "CA-Huset": {
-      "footprint_area": 1025.8,
-      "projected_sum": 1040.1,
-      "roof_plan_area": 1040.1,
-      "surface_area_3d": 6045.6,
+      "footprint_area": 1025.9,
+      "projected_sum": 1040.3,
+      "roof_plan_area": 1040.3,
+      "surface_area_3d": 6046.5,
       "height": 14.99,
       "estimated_floors": 4,
       "tilt": 90.0,
@@ -93,6 +93,36 @@
       "object_count": 8,
       "confidence": "trusted",
       "confidence_reason": "8 objects, no overlap"
+    },
+    "CSB Gibraltarvallen guesthouse": {
+      "footprint_area": 804.1,
+      "projected_sum": 1608.2,
+      "roof_plan_area": 804.1,
+      "surface_area_3d": 5167.0,
+      "height": 21.03,
+      "estimated_floors": 6,
+      "tilt": 0.0,
+      "azimuth": 180.0,
+      "centroid": {
+        "x": 425.79,
+        "y": 678.25
+      },
+      "bbox": {
+        "min": [
+          403.86,
+          666.33,
+          -67.61
+        ],
+        "max": [
+          447.71,
+          690.17,
+          -46.58
+        ]
+      },
+      "objects_without_mesh": 1,
+      "object_count": 3,
+      "confidence": "trusted",
+      "confidence_reason": "3 objects, union removed 50% of overlapping projection (1,608 -> 804 m2)"
     },
     "CSB chabo": {
       "footprint_area": 2274.1,
@@ -189,7 +219,7 @@
       "confidence_reason": "single massing solid"
     },
     "Fysik Origo": {
-      "footprint_area": 6653.8,
+      "footprint_area": 6653.7,
       "projected_sum": 10427.2,
       "roof_plan_area": 8182.6,
       "surface_area_3d": 42288.4,
@@ -224,7 +254,7 @@
       "footprint_area": 2346.7,
       "projected_sum": 2355.4,
       "roof_plan_area": 2355.4,
-      "surface_area_3d": 11627.9,
+      "surface_area_3d": 11627.8,
       "height": 18.41,
       "estimated_floors": 5,
       "tilt": 0.0,
@@ -288,7 +318,7 @@
       "height": 9.0,
       "estimated_floors": 3,
       "tilt": 90.0,
-      "azimuth": 270.0,
+      "azimuth": 90.0,
       "centroid": {
         "x": 377.83,
         "y": 597.07
@@ -350,7 +380,7 @@
       "height": 9.96,
       "estimated_floors": 3,
       "tilt": 90.0,
-      "azimuth": 0.0,
+      "azimuth": 180.0,
       "centroid": {
         "x": 282.86,
         "y": 453.26
@@ -810,11 +840,11 @@
       "footprint_area": 4179.9,
       "projected_sum": 6755.3,
       "roof_plan_area": 6755.3,
-      "surface_area_3d": 25148.9,
+      "surface_area_3d": 25148.8,
       "height": 18.6,
       "estimated_floors": 5,
       "tilt": 90.0,
-      "azimuth": 0.0,
+      "azimuth": 180.0,
       "centroid": {
         "x": 132.12,
         "y": 174.12
@@ -1142,7 +1172,7 @@
       "footprint_area": 699.8,
       "projected_sum": 781.7,
       "roof_plan_area": 781.7,
-      "surface_area_3d": 4630.1,
+      "surface_area_3d": 4630.0,
       "height": 33.18,
       "estimated_floors": 9,
       "tilt": 24.76,
@@ -1234,7 +1264,7 @@
       "footprint_area": 3014.7,
       "projected_sum": 5589.0,
       "roof_plan_area": 5589.0,
-      "surface_area_3d": 22500.2,
+      "surface_area_3d": 22500.1,
       "height": 25.58,
       "estimated_floors": 7,
       "tilt": 89.35,
@@ -1293,191 +1323,6 @@
       "confidence_reason": "9 objects, union removed 9% of overlapping projection (2,706 -> 2,457 m2)"
     }
   },
-  "pv_surfaces": {
-    "AWL": {
-      "error": "no render mesh on any object",
-      "object_count": 1
-    },
-    "Bibiotek": {
-      "footprint_area": 687.0,
-      "projected_sum": 687.0,
-      "roof_plan_area": 687.0,
-      "surface_area_3d": 687.9,
-      "height": 0.7,
-      "estimated_floors": 1,
-      "tilt": 2.8,
-      "azimuth": 246.83,
-      "centroid": {
-        "x": 121.89,
-        "y": 236.93
-      },
-      "bbox": {
-        "min": [
-          105.86,
-          212.01,
-          63.84
-        ],
-        "max": [
-          137.91,
-          261.84,
-          64.54
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 1
-    },
-    "Edit": {
-      "footprint_area": 1320.9,
-      "projected_sum": 1320.9,
-      "roof_plan_area": 1320.9,
-      "surface_area_3d": 1321.0,
-      "height": 1.67,
-      "estimated_floors": 1,
-      "tilt": 0.0,
-      "azimuth": 336.45,
-      "centroid": {
-        "x": 149.87,
-        "y": -23.56
-      },
-      "bbox": {
-        "min": [
-          109.9,
-          -69.27,
-          79.83
-        ],
-        "max": [
-          189.84,
-          22.15,
-          81.49
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 3
-    },
-    "Kemi": {
-      "footprint_area": 2325.2,
-      "projected_sum": 2325.5,
-      "roof_plan_area": 2325.5,
-      "surface_area_3d": 2370.0,
-      "height": 21.63,
-      "estimated_floors": 6,
-      "tilt": 6.77,
-      "azimuth": 112.35,
-      "centroid": {
-        "x": 37.54,
-        "y": 328.19
-      },
-      "bbox": {
-        "min": [
-          -20.55,
-          287.79,
-          68.78
-        ],
-        "max": [
-          95.63,
-          368.58,
-          90.41
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 6
-    },
-    "MC2": {
-      "footprint_area": 4950.5,
-      "projected_sum": 4950.5,
-      "roof_plan_area": 4950.5,
-      "surface_area_3d": 5116.2,
-      "height": 15.79,
-      "estimated_floors": 5,
-      "tilt": 0.65,
-      "azimuth": 1.09,
-      "centroid": {
-        "x": -94.3,
-        "y": 353.83
-      },
-      "bbox": {
-        "min": [
-          -140.43,
-          310.03,
-          68.99
-        ],
-        "max": [
-          -48.17,
-          397.64,
-          84.79
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 23
-    },
-    "PV-Plant": {
-      "error": "no render mesh on any object",
-      "object_count": 1
-    },
-    "SB1": {
-      "footprint_area": 1205.7,
-      "projected_sum": 1205.7,
-      "roof_plan_area": 1205.7,
-      "surface_area_3d": 1213.0,
-      "height": 1.64,
-      "estimated_floors": 1,
-      "tilt": 4.43,
-      "azimuth": 204.09,
-      "centroid": {
-        "x": -7.52,
-        "y": -32.06
-      },
-      "bbox": {
-        "min": [
-          -43.2,
-          -57.91,
-          66.49
-        ],
-        "max": [
-          28.15,
-          -6.22,
-          68.13
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 2
-    },
-    "SB2": {
-      "error": "no render mesh on any object",
-      "object_count": 2
-    },
-    "SB3": {
-      "footprint_area": 2464.4,
-      "projected_sum": 2464.4,
-      "roof_plan_area": 2464.4,
-      "surface_area_3d": 2464.4,
-      "height": 0.0,
-      "estimated_floors": 1,
-      "tilt": 0.0,
-      "azimuth": 0.0,
-      "centroid": {
-        "x": 65.52,
-        "y": -177.91
-      },
-      "bbox": {
-        "min": [
-          34.41,
-          -231.6,
-          59.59
-        ],
-        "max": [
-          96.62,
-          -124.21,
-          59.59
-        ]
-      },
-      "objects_without_mesh": 0,
-      "object_count": 2
-    },
-    "karhus": {
-      "error": "no render mesh on any object",
-      "object_count": 1
-    }
-  },
+  "pv_surfaces": {},
   "points": []
 }

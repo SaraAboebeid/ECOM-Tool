@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
+import { AddMemberForm } from './AddMemberForm';
 import { CommunityDefinition, PVPlantSpec } from '../api/community';
 import {
   MAX_ROOF_COVERAGE_PERCENT,
@@ -24,6 +25,16 @@ interface MembersPanelProps {
   onExcludedChange: (next: Record<string, unknown>) => void;
   /** Latest dispatched self-sufficiency, so the effect of a change is visible here. */
   selfSufficiency?: number | null;
+  /**
+   * View filters, folded in behind a disclosure.
+   *
+   * Membership and filtering are the same question asked twice - which assets
+   * am I looking at - so they were two panels competing for the same decision.
+   * Membership changes the community and re-dispatches; filtering only changes
+   * what is drawn. Keeping them together but separating the disclosure makes
+   * that difference visible instead of implied by which panel you opened.
+   */
+  filters?: ReactNode;
 }
 
 /** The plant a building owns, if any. Buildings name their plants. */
@@ -43,8 +54,11 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
   excluded,
   onExcludedChange,
   selfSufficiency,
+  filters,
 }) => {
   const [query, setQuery] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   const rows = useMemo(() => {
     const inCommunity = definition.buildings.map((b) => ({
@@ -172,6 +186,27 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
         </div>
       )}
 
+      {isAdding ? (
+        <AddMemberForm
+          definition={definition}
+          onChange={onChange}
+          roofCandidates={definition.buildings
+            .map((b) => ({ name: b.name, roofM2: roofAreaOf(b.name) ?? 0 }))
+            .filter((r) => r.roofM2 > 0)}
+          onClose={() => setIsAdding(false)}
+        />
+      ) : (
+        <button
+          onClick={() => setIsAdding(true)}
+          className="w-full mb-2 px-2 py-1 rounded-lg border border-dashed
+                     border-cyan-400 dark:border-cyan-600 text-[10px] font-semibold
+                     text-cyan-700 dark:text-cyan-400
+                     hover:bg-cyan-50 dark:hover:bg-cyan-500/10"
+        >
+          + Add member
+        </button>
+      )}
+
       <div className="flex gap-1 mb-2">
         <button
           onClick={() => setAll(true)}
@@ -192,6 +227,25 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
           Exclude all
         </button>
       </div>
+
+      {filters && (
+        <div className="mb-2">
+          <button
+            onClick={() => setShowFilters((open) => !open)}
+            className="w-full flex items-center justify-between px-2 py-1 rounded-lg
+                       border border-slate-200 dark:border-slate-700 text-[10px]
+                       font-semibold hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <span>View filters</span>
+            <span className="text-slate-400">{showFilters ? '−' : '+'}</span>
+          </button>
+          {showFilters && (
+            <div className="mt-1.5 pl-1 border-l-2 border-slate-200 dark:border-slate-700">
+              {filters}
+            </div>
+          )}
+        </div>
+      )}
 
       <input
         type="search"

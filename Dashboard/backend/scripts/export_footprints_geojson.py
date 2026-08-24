@@ -159,6 +159,30 @@ def to_wgs84(geom, transformer: Transformer):
     return gj
 
 
+def visible_layers(model) -> set:
+    """Indices of layers switched on in Rhino, ancestors included.
+
+    A child layer is only really on if every layer above it is on too, so the
+    state has to be walked up the path rather than read off the layer itself.
+
+    Respecting this matters because the model carries far more than the campus:
+    context massing, streets, terrain meshes and per-building PV surfaces are
+    all present but switched off. Reading them anyway would put geometry on the
+    map that the author has deliberately hidden.
+    """
+    by_path = {layer.FullPath: layer for layer in model.Layers}
+
+    def on(layer) -> bool:
+        parts = layer.FullPath.split("::")
+        for depth in range(1, len(parts) + 1):
+            ancestor = by_path.get("::".join(parts[:depth]))
+            if ancestor is not None and not ancestor.Visible:
+                return False
+        return True
+
+    return {i for i, layer in enumerate(model.Layers) if on(layer)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -177,9 +201,17 @@ def main() -> int:
     model = r3.File3dm.Read(str(args.model))
     layers = {i: layer.FullPath for i, layer in enumerate(model.Layers)}
 
+    on = visible_layers(model)
+    hidden_layers = sorted(
+        {layers.get(o.Attributes.LayerIndex, "") for o in model.Objects
+         if o.Attributes.LayerIndex not in on}
+    )
+
     named: dict[str, list] = defaultdict(list)
     context: list = []
     for obj in model.Objects:
+        if obj.Attributes.LayerIndex not in on:
+            continue
         layer = layers.get(obj.Attributes.LayerIndex, "")
         if layer.endswith(PV_SUFFIX) or layer == "PV-Plant":
             continue
@@ -187,6 +219,11 @@ def main() -> int:
             named[part_base(layer[len(BUILDING_PREFIX):])].append(obj.Geometry)
         elif layer.split("::")[0] in CONTEXT_LAYERS:
             context.append(obj.Geometry)
+
+    if hidden_layers:
+        print(f"Skipped {len(hidden_layers)} switched-off layer(s): "
+              f"{', '.join(hidden_layers[:8])}"
+              f"{' ...' if len(hidden_layers) > 8 else ''}")
 
     transformer = Transformer.from_crs(MODEL_CRS, "EPSG:4326", always_xy=True)
     features = []
@@ -237,35 +274,49 @@ def main() -> int:
         "features": features,
     }
 
-    # --- centroids, for node placement ------------------------------------
+    # --- footprints for the frontend --------------------------------------
     #
-    # Written as a separate importable file rather than read back out of the
-    # GeoJSON at runtime. The GeoJSON is fetched, so its centroids arrive after
-    # the first render; by then the graph has already bound its D3 selection to
-    # node objects without positions, and swapping in new objects afterwards
-    # does not move what is on screen. Importing this synchronously means every
-    # node has its position on the first bind.
+    # One importable file rather than a second fetch. The GeoJSON is fetched, so
+    # anything derived from it arrives after first paint; by then the graph has
+    # bound its D3 selection to node objects with no position, and replacing
+    # those objects later updates the simulation but not what is drawn. A static
+    # import means every node has its position on the very first bind.
     #
-    # Longitude/latitude, so the projection stays defined in one place -
-    # src/utils/geoProjection.ts converts these at module load.
-    centroids = {}
+    # Carries three things the UI needs, so there is one file to regenerate and
+    # no chance of the roof areas and the centroids drifting apart:
+    #   centroid  lon/lat, projected by src/utils/geoProjection.ts at load
+    #   roof_m2   caps the PV coverage slider, and gates the 2D viewer
+    #   height_m  reported, and the basis for the floor-count estimate
+    #
+    # Centroid is taken from the LARGEST part of a multi-part building, not the
+    # area-weighted mean of all of them: 'Vasa 11' spans two clusters 730 m
+    # apart and its true centroid lands between them, on nothing.
+    footprints: dict[str, dict] = {}
     for feature in features:
-        if feature["properties"]["kind"] != "building":
+        properties = feature["properties"]
+        if properties["kind"] != "building":
             continue
-        geom = shape_of(feature["geometry"])
-        if geom is None or geom.is_empty:
+        geometry = shape_of(feature["geometry"])
+        if geometry is None or geometry.is_empty:
             continue
-        point = geom.representative_point() if not geom.centroid.within(geom) \
-            else geom.centroid
-        centroids[feature["properties"]["rhino_layer"]] = [
-            round(point.x, 7), round(point.y, 7)]
 
-    centroid_path = BACKEND.parent / "src" / "data" / "buildingCentroids.json"
-    centroid_path.parent.mkdir(parents=True, exist_ok=True)
-    centroid_path.write_text(
-        json.dumps(centroids, indent=2, ensure_ascii=False, sort_keys=True),
+        largest = geometry
+        if geometry.geom_type == "MultiPolygon":
+            largest = max(geometry.geoms, key=lambda part: part.area)
+        point = largest.centroid if largest.centroid.within(largest)             else largest.representative_point()
+
+        footprints[properties["rhino_layer"]] = {
+            "centroid": [round(point.x, 7), round(point.y, 7)],
+            "roof_m2": properties.get("footprint_m2"),
+            "height_m": properties.get("height_m"),
+        }
+
+    footprint_path = BACKEND.parent / "src" / "data" / "buildingFootprints.json"
+    footprint_path.parent.mkdir(parents=True, exist_ok=True)
+    footprint_path.write_text(
+        json.dumps(footprints, indent=2, ensure_ascii=False, sort_keys=True),
         encoding="utf-8")
-    print(f"Wrote {centroid_path} ({len(centroids)} centroids)")
+    print(f"Wrote {footprint_path} ({len(footprints)} buildings)")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, separators=(",", ":"),

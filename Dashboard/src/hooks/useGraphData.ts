@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { hasFootprint } from '../utils/roofArea';
 import { GraphData } from '../types';
 import { calculateKPIs, createGraphStructureKey, createFiltersKey, KPIData } from '../utils/graphCalculations';
 
@@ -61,6 +62,23 @@ export const useGraphData = ({ data, filters, currentHour = 0, onKPICalculated }
     const filteredNodes = nodesCopy.filter(node => {
       // Filter by node type
       if (!filters.nodeTypes.has(node.type)) return false;
+
+      // A building with no measured footprint has no geometry and no real map
+      // position, so it would sit wherever the force layout pushed it and read
+      // as a placement rather than a fact. Five buildings are in this state -
+      // IT, Reaktorfysik, Emils karhus and the two CSB addresses - all with
+      // footprint_area 0. They stay in the Members list, where membership and
+      // demand are still meaningful; they are only withheld from the map.
+      if (node.type === 'building' && !hasFootprint(node.id)) return false;
+
+      // A roof array is not a separate place on the map. Its building already
+      // carries a PV badge and the array's capacity in total_pv_capacity, so
+      // drawing a second icon beside it said the same thing twice and covered
+      // the building it belonged to. Ids are '<host>_PV_<plant>'; a plant with
+      // no host - a standalone community array - has nowhere to fold into and
+      // is still drawn. The arrays remain in the unfiltered data, so clicking
+      // the building can still list them.
+      if (node.type === 'pv' && node.id.includes('_PV_')) return false;
       
       // Filter by owner
       if (node.owner && filters.owners.size > 0 && !filters.owners.has(node.owner)) {

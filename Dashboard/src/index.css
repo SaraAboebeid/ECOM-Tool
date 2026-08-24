@@ -111,6 +111,17 @@ body {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 10px;
+  transition: grid-template-columns 220ms ease;
+}
+
+/* Collapsing the console has to hand the width back, otherwise it only hides
+   the panels and the map is no bigger for it. */
+.workspace-grid--console-collapsed {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+
+.workspace-console--collapsed {
+  padding: 4px;
 }
 
 .workspace-console {
@@ -514,72 +525,93 @@ body {
 
 .console-panel {
   position: relative;
-  background: rgb(var(--console-surface) / 0.82);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border: 1px solid rgb(var(--console-line) / 0.28);
+  background: rgb(var(--console-surface) / 0.92);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  border: 1px solid rgb(var(--console-line) / 0.26);
   border-radius: 14px;
-  box-shadow:
-    0 1px 0 0 rgb(255 255 255 / 0.5) inset,
-    0 8px 24px -12px rgb(15 23 42 / 0.35);
+  overflow: hidden;
   transition: border-color 180ms ease, box-shadow 180ms ease;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 }
 
 .dark .console-panel {
-  box-shadow:
-    0 1px 0 0 rgb(255 255 255 / 0.06) inset,
-    0 8px 24px -12px rgb(0 0 0 / 0.6);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
-/* A hairline of accent along the top edge, brightest at the left. Reads as a
-   status strip rather than decoration. */
+/* A short accent stripe down the left edge, in the panel's own colour. Full
+   height on hover and when open, so the colour reads as state rather than
+   decoration. */
 .console-panel::before {
   content: '';
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  border-radius: 12px 12px 0 0;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--console-accent) / 0.85) 0%,
-    rgb(var(--console-accent) / 0.25) 38%,
-    transparent 78%
-  );
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 0 3px 3px 0;
+  background: var(--panel-edge, rgb(var(--console-line)));
+  opacity: 0.55;
+  transition: height 200ms ease, opacity 200ms ease;
   pointer-events: none;
 }
 
-.console-panel:focus-within {
-  border-color: rgb(var(--console-accent) / 0.45);
+.console-panel:hover { border-color: rgb(var(--console-line) / 0.45); }
+.console-panel:hover::before { height: 26px; opacity: 0.85; }
+
+.console-panel--open {
+  border-color: rgb(var(--console-line) / 0.4);
+  box-shadow: 0 4px 14px -8px rgb(15 23 42 / 0.28);
+}
+
+.console-panel--open::before {
+  top: 0;
+  transform: none;
+  height: 100%;
+  border-radius: 0;
+  opacity: 1;
 }
 
 .console-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 11px 12px;
+  padding: 9px 11px 9px 13px;
   cursor: pointer;
   user-select: none;
   background: none;
   border: 0;
   text-align: left;
   color: rgb(var(--console-ink));
+  transition: background-color 150ms ease;
+}
+
+.console-header:hover { background: rgb(var(--console-line) / 0.07); }
+
+.console-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 9px;
 }
 
 .console-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
 }
 
 .console-sub {
-  margin-left: auto;
-  margin-right: 8px;
   font-size: 10px;
-  letter-spacing: 0.06em;
-  opacity: 0.55;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  color: rgb(var(--console-line));
 }
 
 /* Status dot. Pulses only while busy, so movement means something. */
@@ -604,7 +636,7 @@ body {
 }
 
 .console-body {
-  padding: 0 12px 12px;
+  padding: 2px 12px 12px 13px;
   /* Each section scrolls on its own, so a long one cannot push the others
      out of reach the way the old absolutely-positioned panels did. */
   overflow-y: auto;
@@ -612,13 +644,34 @@ body {
 }
 
 .console-chevron {
-  margin-left: auto;
   flex: none;
   transition: transform 200ms ease;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-.console-chevron--open { transform: rotate(90deg); }
+.console-chevron--open { transform: rotate(90deg); opacity: 0.7; }
+
+/* Group heading: a small coloured tick, then the label. */
+.console-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--console-line));
+}
+
+.console-group::before {
+  content: '';
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--group-edge, rgb(var(--console-accent)));
+  opacity: 0.8;
+}
 
 /* Numeric readouts line up column-wise. */
 .console-panel .tabular-nums,
