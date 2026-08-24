@@ -131,17 +131,17 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
   };
 
   return (
-    <div className="rounded-lg border border-cyan-300 dark:border-cyan-700 p-2 mb-2
-                    bg-cyan-50/60 dark:bg-cyan-500/5">
+    <div className="rounded-xl border p-2.5 mb-2 bg-white/65 dark:bg-slate-900/35
+                    border-slate-200 dark:border-slate-700 backdrop-blur-sm">
       <div className="grid grid-cols-3 gap-1 mb-2">
         {KINDS.map((k) => (
           <button
             key={k.key}
             onClick={() => { setKind(k.key); setError(null); }}
-            className={`px-1 py-1 rounded text-[10px] font-semibold transition-colors ${
+            className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
               kind === k.key
-                ? 'bg-cyan-600 text-white'
-                : 'border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800'
+                ? 'text-slate-900 bg-lime-300 border border-lime-300 dark:text-slate-900'
+                : 'text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-500 hover:bg-white/70 dark:hover:bg-slate-800/65'
             }`}
           >
             {k.label}
@@ -153,16 +153,14 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
         value={name}
         onChange={(e) => { setName(e.target.value); setError(null); }}
         placeholder="Name"
-        className="w-full mb-1.5 px-2 py-1 rounded text-[11px] border
-                   border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+        className="tech-input mb-1.5"
       />
 
       {kind === 'roof_pv' && (
         <select
           value={host}
           onChange={(e) => setHost(e.target.value)}
-          className="w-full mb-1.5 px-2 py-1 rounded text-[11px] border
-                     border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+          className="tech-select mb-1.5"
         >
           {roofCandidates.map((r) => (
             <option key={r.name} value={r.name}>
@@ -176,8 +174,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
         <select
           value={owner}
           onChange={(e) => setOwner(e.target.value as Owner)}
-          className="w-full mb-1.5 px-2 py-1 rounded text-[11px] border
-                     border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+          className="tech-select mb-1.5"
         >
           {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -233,14 +230,15 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
       <div className="flex gap-1">
         <button
           onClick={submit}
-          className="flex-1 px-2 py-1 rounded bg-cyan-600 text-white text-[10px]
-                     font-semibold hover:bg-cyan-700"
+          className="flex-1 px-2 py-1 rounded-lg bg-[#1E488F] dark:bg-[#DBE64C] dark:text-slate-900 text-white text-[10px]
+                     font-semibold hover:brightness-110 transition"
         >
           Add
         </button>
         <button
           onClick={onClose}
-          className="px-3 py-1 rounded border border-slate-200 dark:border-slate-700 text-[10px]"
+          className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px]
+                     hover:bg-white/80 dark:hover:bg-slate-800/70 transition"
         >
           Cancel
         </button>

@@ -643,7 +643,7 @@
       "capacity": 54.0,
       "cost_per_kwh": 10.0,
       "embodied_co2_per_kwh": 10.0,
-      "efficiency": 20.0,
+      "efficiency": 90.0,
       "lifespan": 10.0,
       "degradation": 2.0,
       "initial_soc_fraction": 0.0926

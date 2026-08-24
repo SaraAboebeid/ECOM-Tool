@@ -62,7 +62,13 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
   const clock = `${String(currentHour % 24).padStart(2, '0')}:00`;
 
   return (
-    <div className="timeline-bar flex items-center gap-3 px-3 py-2">
+    /* Two rows. The scrubber used to sit in a flex-1 between the day controls
+       and the play button, so its left edge moved with the date chip's width
+       and it could never line up with the chart above it. On its own row it
+       spans the same box as the chart, and both are inset by half a thumb so
+       hour zero is at the same x in each. */
+    <div className="timeline-bar px-3.5 py-2">
+      <div className="flex items-center gap-3">
       {/* Day: a chip that opens the native picker, bounded by the data we hold. */}
       <button
         type="button"
@@ -101,8 +107,35 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
              strokeWidth={2} strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
       </button>
 
+      <button type="button" className="timeline-step" disabled={atEnd || isComputing}
+              onClick={() => onDayChange(shiftDay(day, 1))} aria-label="Next day">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth={2} strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>
+      </button>
+
+      <button
+        type="button"
+        onClick={onPlayPause}
+        className="timeline-play"
+        aria-label={isPlaying ? 'Pause' : 'Play'}
+      >
+        {isPlaying ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M8 5l11 7-11 7z" />
+          </svg>
+        )}
+      </button>
+
+      <span className="timeline-clock tabular-nums">{clock}</span>
+      </div>
+
       {/* Hour scrubber. Ticks every hour, labels at 06/12/18. */}
-      <div className="flex-1 min-w-0">
+      <div className="timeline-scrub">
         <div className="relative">
           <input
             type="range"
@@ -134,31 +167,6 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
         </div>
       </div>
 
-      <button type="button" className="timeline-step" disabled={atEnd || isComputing}
-              onClick={() => onDayChange(shiftDay(day, 1))} aria-label="Next day">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth={2} strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>
-      </button>
-
-      <button
-        type="button"
-        onClick={onPlayPause}
-        className="timeline-play"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
-      >
-        {isPlaying ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <rect x="6" y="5" width="4" height="14" rx="1" />
-            <rect x="14" y="5" width="4" height="14" rx="1" />
-          </svg>
-        ) : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M8 5l11 7-11 7z" />
-          </svg>
-        )}
-      </button>
-
-      <span className="timeline-clock tabular-nums">{clock}</span>
     </div>
   );
 };

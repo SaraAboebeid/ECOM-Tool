@@ -183,7 +183,7 @@ export const DashboardHeader = ({ data, currentHour }: DashboardHeaderProps) => 
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="px-3 py-2 text-[11px] font-semibold rounded-xl transition-colors duration-200 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                className="tech-action px-3 py-2 text-[11px] font-semibold rounded-xl flex items-center gap-1.5"
               >
                 <span>{isExpanded ? 'Hide' : 'Details'}</span>
                 <ChevronIcon className={`w-3 h-3 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />

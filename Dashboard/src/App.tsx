@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { Graph } from './components/Graph/';
+import { AnalyticsRow } from './components/analytics/AnalyticsRow';
+import { FlowLegend } from './components/analytics/FlowLegend';
 import { TimelineBar } from './components/TimelineBar';
 import { Legend } from './components/Legend';
 import { DashboardHeader } from './components/DashboardHeader';
@@ -183,18 +185,21 @@ function App() {
       setIsDarkMode(storedTheme === 'dark');
       document.documentElement.classList.toggle('dark', storedTheme === 'dark');
     } else {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const isDark = mediaQuery.matches;
-      setIsDarkMode(isDark);
-      document.documentElement.classList.toggle('dark', isDark);
+      // Dark is the design the console was drawn for, so it is the default
+      // rather than whatever the OS happens to be set to. A choice made with
+      // the toggle is stored and wins from then on.
+      setIsDarkMode(true);
+      document.documentElement.classList.toggle('dark', true);
     }
 
     // Listen for system preference changes
-    const handler = (e: MediaQueryListEvent) => {
-      // Only update if no theme is stored in localStorage
+    const handler = (_e: MediaQueryListEvent) => {
+      // Intentionally inert: the default is dark regardless of the OS, so
+      // following a system change here would pull the console to light in a
+      // session where nobody asked for it.
       if (!localStorage.getItem('theme')) {
-        setIsDarkMode(e.matches);
-        document.documentElement.classList.toggle('dark', e.matches);
+        setIsDarkMode(true);
+        document.documentElement.classList.toggle('dark', true);
       }
     };
     
@@ -477,7 +482,7 @@ function App() {
                 </div>
 
                 <div className="workspace-main min-h-0">
-                  <div className="relative viewer-shell flex-1 min-h-[420px] rounded-2xl overflow-hidden border border-slate-200/70 dark:border-slate-700/70">
+                  <div className="relative viewer-shell flex-1 min-h-[300px] rounded-2xl overflow-hidden border border-slate-200/70 dark:border-slate-700/70">
                     {/* North and fit-to-view, stacked in one corner. Both are
                         .viewer-fab so they share size, radius, border and
                         shadow - the arrow used to be an SVG circle drawn inside
@@ -519,12 +524,16 @@ function App() {
                       isTimelinePlaying={isPlaying}
                       onFitToView={handleFitToView}
                     />
+
+                    <FlowLegend />
                   </div>
+
+                  <AnalyticsRow data={data} currentHour={currentHour} totalHours={meta?.hours ?? 0} />
 
                   <div className="relative mt-3">
                     <button
                       onClick={() => setIsSankeyOpen(!isSankeyOpen)}
-                      className="absolute left-1/2 -translate-x-1/2 -top-9 bg-blue-500 dark:bg-blue-600 text-white rounded-xl px-4 py-2 text-sm font-medium shadow-md z-50 hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
+                      className="flow-toggle absolute left-1/2 -translate-x-1/2 -top-9 rounded-xl px-4 py-2 text-sm font-medium z-50"
                     >
                       {isSankeyOpen ? 'Hide' : 'Show'} Energy Flow Diagram
                     </button>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { GraphData } from '../types';
 import { NODE_COLORS } from '../types';
+import { inkOn } from '../utils/inkOn';
 
 interface SankeyDrawerProps {
   isOpen: boolean;
@@ -326,7 +327,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
         .attr('x', dimensions.width / 2)
         .attr('y', dimensions.height / 2)
         .attr('text-anchor', 'middle')
-        .attr('fill', isDarkMode ? '#e5e7eb' : '#374151')
+        .attr('fill', isDarkMode ? '#F6F7ED' : '#001F3F')
         .text('No energy flows for this hour');
       return;
     }
@@ -476,7 +477,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
       .on('mouseover', function(event, d: SankeyNode) {
         // Highlight this node and connected links
         d3.select(this).select('rect')
-          .attr('stroke', '#ffffff')
+          .attr('stroke', isDarkMode ? '#001F3F' : '#F6F7ED')
           .attr('stroke-width', 2);
           
         // Highlight links connected to this node
@@ -537,7 +538,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
       .attr('y', 3)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'hanging')
-      .attr('fill', '#ffffff')
+      .attr('fill', d => inkOn(NODE_COLORS[d.type] || '#aaaaaa'))
       .attr('font-size', isFullscreen ? '10px' : '8px')
       .attr('font-weight', 'bold')
       .style('pointer-events', 'none')
@@ -587,11 +588,11 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
           .attr('x', midpoint.x)
           .attr('y', midpoint.y - 5)
           .attr('text-anchor', 'middle')
-          .attr('fill', isDarkMode ? '#e5e7eb' : '#374151')
+          .attr('fill', isDarkMode ? '#F6F7ED' : '#001F3F')
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
           .attr('pointer-events', 'none')
-          .attr('stroke', isDarkMode ? '#1f2937' : '#ffffff')
+          .attr('stroke', isDarkMode ? '#001F3F' : '#F6F7ED')
           .attr('stroke-width', 2)
           .attr('paint-order', 'stroke')
           .style('opacity', 0)
@@ -604,7 +605,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
       .attr('x', width)
       .attr('y', height - (isFullscreen ? 30 : 20)) // More space from bottom in fullscreen
       .attr('text-anchor', 'end')
-      .attr('fill', isDarkMode ? '#e5e7eb' : '#374151')
+      .attr('fill', isDarkMode ? '#F6F7ED' : '#001F3F')
       .attr('font-size', '14px')
       .text(`Hour: ${currentHour}`);
 
@@ -615,7 +616,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
       .attr('text-anchor', 'middle')
       .attr('font-size', '12px')
       .attr('font-weight', 'bold')
-      .attr('fill', isDarkMode ? '#e5e7eb' : '#374151')
+      .attr('fill', isDarkMode ? '#F6F7ED' : '#001F3F')
       .text('Energy Flow Between Individual Entities');
 
   }, [isOpen, dimensions, data, currentHour, isDarkMode, isFullscreen]);
@@ -628,7 +629,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
   // Always render the component but control visibility with CSS
   return (
     <div 
-      className={`flow-drawer fixed left-0 right-0 bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ease-in-out ${
+      className={`flow-drawer fixed left-0 right-0 shadow-lg transition-all duration-300 ease-in-out ${
         isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full pointer-events-none'
       } z-30`}
       style={{ 
@@ -643,19 +644,19 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
       {/* Resize handle */}
       <div 
         ref={resizeHandleRef}
-        className={`absolute top-0 left-0 right-0 h-2 cursor-row-resize flex justify-center items-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 ${isResizing ? 'bg-blue-300 dark:bg-blue-800' : ''}`}
+        className={`flow-drawer-grip absolute top-0 left-0 right-0 h-2 cursor-row-resize flex justify-center items-center ${isResizing ? 'flow-drawer-grip--active' : ''}`}
         title="Drag to resize">
-        <div className="w-16 h-1 bg-gray-400 dark:bg-gray-500 rounded-full"></div>
+        <div className="flow-drawer-grip-bar w-16 h-1 rounded-full"></div>
       </div>
       
-      <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200 dark:border-gray-700 mt-2">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+      <div className="flow-drawer-line flex justify-between items-center px-4 py-2 border-b mt-2">
+        <h2 className="flow-drawer-title text-lg font-semibold">
           Individual Entity Energy Flows - Hour {currentHour}
         </h2>
         <div className="flex space-x-3">
           <button
             onClick={toggleFullscreen}
-            className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800 px-2 py-1 rounded-md flex items-center gap-1"
+            className="flow-drawer-action px-2 py-1 rounded-md flex items-center gap-1"
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
             {isFullscreen ? (
@@ -676,7 +677,7 @@ export const SankeyDrawer: React.FC<SankeyDrawerProps> = ({ isOpen, onClose, dat
           </button>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="flow-drawer-close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />

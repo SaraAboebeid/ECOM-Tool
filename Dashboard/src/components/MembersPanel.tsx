@@ -198,10 +198,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
       ) : (
         <button
           onClick={() => setIsAdding(true)}
-          className="w-full mb-2 px-2 py-1 rounded-lg border border-dashed
-                     border-cyan-400 dark:border-cyan-600 text-[10px] font-semibold
-                     text-cyan-700 dark:text-cyan-400
-                     hover:bg-cyan-50 dark:hover:bg-cyan-500/10"
+          className="tech-action w-full mb-2 px-2 py-1 text-[10px] font-semibold"
         >
           + Add member
         </button>
@@ -211,8 +208,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
         <button
           onClick={() => setAll(true)}
           disabled={!Object.keys(excluded).length}
-          className="flex-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700
-                     text-[10px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800
+          className="tech-action flex-1 px-2 py-1 text-[10px] font-semibold
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Include all
@@ -220,8 +216,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
         <button
           onClick={() => setAll(false)}
           disabled={definition.buildings.length <= 1}
-          className="flex-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700
-                     text-[10px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800
+          className="tech-action flex-1 px-2 py-1 text-[10px] font-semibold
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Exclude all
@@ -232,9 +227,8 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
         <div className="mb-2">
           <button
             onClick={() => setShowFilters((open) => !open)}
-            className="w-full flex items-center justify-between px-2 py-1 rounded-lg
-                       border border-slate-200 dark:border-slate-700 text-[10px]
-                       font-semibold hover:bg-slate-50 dark:hover:bg-slate-800"
+            className="tech-action w-full flex items-center justify-between px-2 py-1 text-[10px]
+                       font-semibold"
           >
             <span>View filters</span>
             <span className="text-slate-400">{showFilters ? '−' : '+'}</span>
@@ -252,10 +246,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Find a building…"
-        className="w-full mb-2 px-2 py-1.5 rounded-lg text-[11px]
-                   border border-slate-200 dark:border-slate-700
-                   bg-white dark:bg-slate-800 outline-none
-                   focus:border-cyan-400 dark:focus:border-cyan-500"
+        className="tech-input mb-2"
       />
 
       <ul className="space-y-1.5">

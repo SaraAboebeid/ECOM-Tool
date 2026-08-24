@@ -33,7 +33,14 @@ SOLVER_TIME_LIMIT = 120          # seconds per solve
 #
 # Every default is unchanged, so existing notebooks behave exactly as before.
 # ---------------------------------------------------------------------------
-EFFICIENCY = 0.93                      # round-trip, fraction (EV and BESS)
+# One-way, NOT round-trip: the SOC balance applies it on charge and divides by
+# it on discharge (soc += (ch*e - ds/e)/capacity), so the round-trip figure is
+# e**2. At the 0.93 default that is 86.5% round trip. The old comment here said
+# "round-trip", which made every value set from a datasheet too optimistic.
+EFFICIENCY = 0.93                      # one-way, fraction (EV charge points)
+# The battery gets its own constant so a community BESS can be set from its
+# datasheet without also changing how efficiently every EV charges.
+BESS_EFFICIENCY = 0.93                 # one-way, fraction (building BESS)
 BATTERY_COST_EUR_PER_KWH = 137         # replacement value used by the aging model
 BESS_SOC_MIN = 0.0                     # lower bound on battery state of charge
 
@@ -141,7 +148,7 @@ class charging_point():
 
 class building():
     def __init__(self, name, load, pv_production, bess_capacity, bess_max_power, bess_initial_soc):
-        self.efficiency = EFFICIENCY
+        self.efficiency = BESS_EFFICIENCY
         self.name = name
         self.load = load
         self.pv_production = pv_production

@@ -49,11 +49,18 @@ const ORIGINAL_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   'Vasa 7': { x: 245.196, y: 236.308 },
   'Vasa 15': { x: 381.065, y: 334.557 },
   'PV-Plant': { x: 195.531, y: 1079.886 },
-  'GRID': { x: 197.562, y: 495.081 }, // Placeholder for grid node
-  // The community battery sits beside the grid connection: both are shared
-  // assets with no building of their own, and pairing them shows the import /
-  // store relationship that the flows between them describe.
+  // The three community-scale assets stack together on one column. None of them
+  // belongs to a building, so scattering them among the footprints implied a
+  // location none of them has. Grouped, the column reads as the shared side of
+  // the community and the import / store / draw flows between them are legible
+  // as short hops rather than lines crossing the whole campus.
+  //   BAT   store
+  //   GRID  import and export
+  //   CP    draw
+  // 43 px apart, which clears the node radius plus its label chip.
   'BAT_Battery-01': { x: 197.562, y: 452.081 },
+  'GRID': { x: 197.562, y: 495.081 },
+  'CP_CP': { x: 197.562, y: 538.081 },
 };
 
 /**

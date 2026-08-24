@@ -129,11 +129,12 @@ body { background: #F6F7ED; }
   flex-direction: column;
 }
 
-.dark .dashboard-shell { background: #001624; }
+.dark .dashboard-shell { background: rgb(var(--nv-shell)); }
 
 .dark .workspace-card {
-  background: rgb(var(--px-midnight) / 0.55);
-  border-color: rgb(var(--console-line) / 0.3);
+  background: rgb(var(--nv-surface) / 0.72);
+  border-color: rgb(var(--nv-line));
+  box-shadow: 0 24px 48px -32px rgb(0 0 0 / 0.8);
 }
 
 .dark .workspace-console {
@@ -500,19 +501,47 @@ body { background: #F6F7ED; }
      Nuit Blanche is the panel colour already. Violet 600 measures 5.28:1 on
      Praxeti White; it falls to 2.91:1 on Midnight, so dark lifts to violet 400
      at 6.09:1 rather than carrying one value across both. */
-  --range-accent: 124 58 237;
+  --range-accent: var(--px-nuit);
   --range-rail: 15 23 42;
   --range-rail-alpha: 0.13;
+
+  --control-top: 255 255 255;
+  --control-bottom: 232 239 247;
+  --control-border: 64 98 141;
+  --control-ink: var(--px-midnight);
+  --control-muted: 80 108 136;
+  --control-focus: var(--px-nuit);
+  --control-glow: var(--px-spring);
 }
 
 .dark {
-  --console-surface: var(--px-midnight);
-  --console-ink: var(--px-white);
-  --console-accent: var(--px-spring);
-  --console-line: 122 148 172;
-  --range-accent: 167 139 250;
-  --range-rail: 246 247 237;
-  --range-rail-alpha: 0.2;
+  /* Command-centre navy. The reference design is a dark-first console, so dark
+     mode is the one being matched; bright mode stays on Praxeti. Ink and line
+     are steps of the same hue as the shell rather than neutral greys, which is
+     what keeps the depth reading as one material instead of stacked panels. */
+  --nv-shell: 8 13 26;          /* page behind everything */
+  --nv-surface: 13 21 38;       /* cards */
+  --nv-raised: 19 29 50;        /* controls sitting on a card */
+  --nv-line: 32 47 73;          /* hairlines */
+  --nv-ink: 232 238 247;
+  --nv-muted: 133 153 180;
+  --nv-cyan: 34 211 238;        /* the accent the flows already use */
+
+  --console-surface: var(--nv-surface);
+  --console-ink: var(--nv-ink);
+  --console-accent: var(--nv-cyan);
+  --console-line: var(--nv-line);
+  --range-accent: var(--nv-cyan);
+  --range-rail: 232 238 247;
+  --range-rail-alpha: 0.14;
+
+  --control-top: var(--nv-raised);
+  --control-bottom: var(--nv-surface);
+  --control-border: var(--nv-line);
+  --control-ink: var(--nv-ink);
+  --control-muted: var(--nv-muted);
+  --control-focus: var(--nv-cyan);
+  --control-glow: var(--nv-cyan);
 }
 
 .console-panel {
@@ -828,6 +857,118 @@ body { background: #F6F7ED; }
 
 
 /* ---------------------------------------------------------------------------
+   Form controls
+
+   Shared dropdown/input styling for the console panels. The subtle layered
+   gradient and glow gives a modern instrument look while keeping strong
+   contrast in both modes.
+--------------------------------------------------------------------------- */
+
+.tech-input,
+.tech-select {
+  width: 100%;
+  border-radius: 11px;
+  border: 1px solid rgb(var(--control-border) / 0.42);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--control-top) / 0.84) 0%,
+      rgb(var(--control-bottom) / 0.9) 100%
+    );
+  color: rgb(var(--control-ink));
+  font-size: 11px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  padding: 8px 11px;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    0 10px 22px -18px rgb(var(--px-midnight) / 0.65);
+  transition:
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    transform 170ms ease,
+    background-color 170ms ease;
+}
+
+.dark .tech-input,
+.dark .tech-select {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 14px 28px -20px rgb(0 0 0 / 0.9);
+}
+
+.tech-input::placeholder { color: rgb(var(--control-muted) / 0.78); }
+
+.tech-input:hover,
+.tech-select:hover {
+  border-color: rgb(var(--control-border) / 0.68);
+}
+
+.tech-input:focus-visible,
+.tech-select:focus-visible {
+  border-color: rgb(var(--control-focus) / 0.92);
+  box-shadow:
+    0 0 0 3px rgb(var(--console-surface) / 0.84),
+    0 0 0 5px rgb(var(--control-glow) / 0.45),
+    0 12px 24px -18px rgb(var(--control-focus) / 0.75);
+}
+
+.tech-select {
+  appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgb(var(--control-muted)) 50%),
+    linear-gradient(135deg, rgb(var(--control-muted)) 50%, transparent 50%),
+    radial-gradient(circle at right, rgb(var(--control-border) / 0.18) 0, rgb(var(--control-border) / 0.04) 56%, transparent 57%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px),
+    100% 0;
+  background-size: 5px 5px, 5px 5px, 2.8em 100%;
+  background-repeat: no-repeat;
+}
+
+.tech-select option {
+  color: rgb(var(--control-ink));
+  background: rgb(var(--console-surface));
+}
+
+.tech-check {
+  accent-color: rgb(var(--console-accent));
+}
+
+.tech-action {
+  border-radius: 10px;
+  border: 1px solid rgb(var(--control-border) / 0.36);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--control-top) / 0.92) 0%,
+      rgb(var(--control-bottom) / 0.94) 100%
+    );
+  color: rgb(var(--control-ink));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.34),
+    0 12px 24px -20px rgb(var(--px-midnight) / 0.75);
+  transition: border-color 170ms ease, box-shadow 170ms ease, transform 170ms ease;
+}
+
+.tech-action:hover {
+  border-color: rgb(var(--control-focus) / 0.58);
+  transform: translateY(-1px);
+}
+
+.tech-action:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgb(var(--console-surface) / 0.84),
+    0 0 0 5px rgb(var(--control-glow) / 0.45),
+    0 10px 18px -12px rgb(var(--control-focus) / 0.7);
+}
+
+
+/* ---------------------------------------------------------------------------
    Sliders
 
    One rule for all of them. They were previously a mix of `accent-cyan-500`
@@ -848,7 +989,7 @@ input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 18px;
+  height: 22px;
   margin: 0;
   background: transparent;
   cursor: pointer;
@@ -865,49 +1006,61 @@ input[type='range']:focus {
 }
 
 input[type='range']::-webkit-slider-runnable-track {
-  height: 3px;
+  height: 6px;
   border-radius: 999px;
+  border: 1px solid rgb(var(--range-rail) / 0.12);
   background:
     linear-gradient(
       90deg,
       rgb(var(--range-accent)) 0 var(--range-fill, 0%),
+      rgb(var(--range-accent) / 0.82) calc(var(--range-fill, 0%) + 3%),
       rgb(var(--range-rail) / var(--range-rail-alpha)) var(--range-fill, 0%) 100%
-    );
+    ),
+    linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(255 255 255 / 0));
 }
 
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  background: rgb(var(--range-accent));
-  border: none;
-  /* Centres the thumb on a 3px track: (3 - 13) / 2. */
-  margin-top: -5px;
-  box-shadow: 0 0 0 0 rgb(var(--range-accent) / 0.18);
+  background:
+    radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.82), rgb(255 255 255 / 0) 45%),
+    rgb(var(--range-accent));
+  border: 1px solid rgb(var(--console-surface) / 0.75);
+  /* Centres the thumb on a 6px track: (6 - 18) / 2. */
+  margin-top: -7px;
+  box-shadow:
+    0 0 0 0 rgb(var(--range-accent) / 0.2),
+    0 10px 18px -10px rgb(var(--range-accent) / 0.9);
   transition: box-shadow 140ms ease, transform 140ms ease;
 }
 
 input[type='range']::-moz-range-track {
-  height: 3px;
+  height: 6px;
   border-radius: 999px;
   background: rgb(var(--range-rail) / var(--range-rail-alpha));
+  border: 1px solid rgb(var(--range-rail) / 0.12);
 }
 
 input[type='range']::-moz-range-progress {
-  height: 3px;
+  height: 6px;
   border-radius: 999px;
   background: rgb(var(--range-accent));
 }
 
 input[type='range']::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  background: rgb(var(--range-accent));
-  border: none;
-  box-shadow: 0 0 0 0 rgb(var(--range-accent) / 0.18);
+  background:
+    radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.82), rgb(255 255 255 / 0) 45%),
+    rgb(var(--range-accent));
+  border: 1px solid rgb(var(--console-surface) / 0.75);
+  box-shadow:
+    0 0 0 0 rgb(var(--range-accent) / 0.2),
+    0 10px 18px -10px rgb(var(--range-accent) / 0.9);
   transition: box-shadow 140ms ease, transform 140ms ease;
 }
 
@@ -941,4 +1094,507 @@ input[type='range']:active:not(:disabled)::-moz-range-thumb {
   input[type='range']::-moz-range-thumb {
     transition: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Energy flow drawer
+
+   The Sankey's nodes and links already take NODE_COLORS, so the flows agree
+   with the map. Only the chrome around them needed moving: it was hardcoded
+   white / gray-800 with blue-500 buttons, which read as a separate application
+   sitting under the console.
+--------------------------------------------------------------------------- */
+
+/* The toggle is the one full-bleed accent button in the layout, so it carries
+   the accent as fill rather than as ink. Nuit Blanche against Praxeti White
+   measures 8.17:1; on the dark surface it drops to 1.88:1, so dark swaps to
+   Spring on Midnight at 12.17:1 - the same flip the rest of the chrome makes. */
+.flow-toggle {
+  background: rgb(var(--console-accent));
+  color: rgb(var(--px-white));
+  transition: filter 140ms ease, box-shadow 140ms ease;
+  box-shadow: 0 2px 8px rgb(var(--px-midnight) / 0.16);
+}
+
+.dark .flow-toggle {
+  color: rgb(var(--px-midnight));
+}
+
+.flow-toggle:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgb(var(--px-midnight) / 0.22);
+}
+
+.flow-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--console-surface)), 0 0 0 6px rgb(var(--console-accent));
+}
+
+.flow-drawer {
+  background: rgb(var(--console-surface));
+  color: rgb(var(--console-ink));
+}
+
+.flow-drawer-line {
+  border-color: rgb(var(--console-line) / 0.28);
+}
+
+.flow-drawer-title {
+  color: rgb(var(--console-ink));
+}
+
+/* Secondary actions in the drawer header: accent as ink on a low-alpha wash,
+   matching the panel tiles in the console rather than a filled blue button. */
+.flow-drawer-action {
+  background: rgb(var(--console-accent) / 0.14);
+  color: rgb(var(--console-accent));
+  transition: background-color 140ms ease;
+}
+
+.flow-drawer-action:hover {
+  background: rgb(var(--console-accent) / 0.24);
+}
+
+.flow-drawer-close {
+  color: rgb(var(--console-ink) / 0.55);
+  transition: color 140ms ease;
+}
+
+.flow-drawer-close:hover {
+  color: rgb(var(--console-ink));
+}
+
+/* Resize grip. */
+.flow-drawer-grip {
+  background: rgb(var(--console-line) / 0.18);
+  transition: background-color 140ms ease;
+}
+
+.flow-drawer-grip:hover,
+.flow-drawer-grip--active {
+  background: rgb(var(--console-accent) / 0.32);
+}
+
+.flow-drawer-grip-bar {
+  background: rgb(var(--console-line) / 0.6);
+}
+
+/* ---------------------------------------------------------------------------
+   Analytics row
+
+   Four cards under the map. Sized so the row keeps its height while the map
+   takes the rest: the map is the thing that should grow on a tall screen.
+--------------------------------------------------------------------------- */
+
+.analytics-row {
+  /* One full-width strip. Fixed height in the flex column so the map takes the
+     slack on a tall screen and this is not squashed on a short one. */
+  flex: none;
+  margin-top: 10px;
+}
+
+.analytics-card {
+  background: rgb(var(--console-surface));
+  border: 1px solid rgb(var(--console-line) / 0.45);
+  border-radius: 14px;
+  padding-top: 12px;
+  padding-bottom: 13px;
+  min-width: 0;
+}
+
+.dark .analytics-card {
+  background: rgb(var(--nv-surface));
+  border-color: rgb(var(--nv-line));
+}
+
+.analytics-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.analytics-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(var(--console-ink));
+}
+
+.analytics-card__meta {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(var(--console-ink) / 0.5);
+}
+
+.analytics-empty {
+  font-size: 11px;
+  color: rgb(var(--console-ink) / 0.5);
+  padding: 18px 0;
+  text-align: center;
+}
+
+
+
+
+
+
+/* Legend rows ----------------------------------------------------------- */
+
+.analytics-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.analytics-legend-row--inline { font-size: 10px; }
+
+
+.analytics-swatch {
+  flex: none;
+}
+
+.analytics-swatch--line {
+  width: 12px;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.analytics-legend-name {
+  color: rgb(var(--console-ink) / 0.72);
+  flex: 1;
+  min-width: 0;
+}
+
+
+
+/* Chart ----------------------------------------------------------------- */
+
+.analytics-gridline {
+  stroke: rgb(var(--console-ink) / 0.1);
+  stroke-width: 1;
+}
+
+.analytics-playhead {
+  stroke: rgb(var(--console-accent) / 0.55);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.analytics-axis-label {
+  font-size: 9px;
+  fill: rgb(var(--console-ink) / 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+
+
+
+
+
+
+
+
+/* Flow key, pinned inside the viewer. */
+.flow-legend {
+  position: absolute;
+  /* Left, not right: the node detail drawer opens down the right edge and
+     would sit on top of this. */
+  left: 14px;
+  bottom: 14px;
+  z-index: 40;
+  padding: 9px 11px 8px;
+  border-radius: 11px;
+  background: rgb(var(--console-surface) / 0.88);
+  border: 1px solid rgb(var(--console-line) / 0.4);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.dark .flow-legend {
+  background: rgb(var(--nv-surface) / 0.86);
+  border-color: rgb(var(--nv-line));
+}
+
+.flow-legend__title {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(var(--console-ink) / 0.55);
+  margin-bottom: 6px;
+}
+
+.flow-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: rgb(var(--console-ink) / 0.82);
+}
+
+.flow-legend__line {
+  width: 14px;
+  height: 2.5px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.flow-legend__note {
+  display: block;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgb(var(--console-line) / 0.3);
+  font-size: 9px;
+  color: rgb(var(--console-ink) / 0.45);
+}
+
+/* ---------------------------------------------------------------------------
+   Node detail drawer
+--------------------------------------------------------------------------- */
+
+.detail-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 306px;
+  /* Above the viewer's own chrome: the FABs are z-50 and the flow key z-40, and
+     at the old z-10 both drew straight through this panel. */
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--console-surface));
+  border-left: 1px solid rgb(var(--console-line) / 0.45);
+  box-shadow: -18px 0 40px -30px rgb(0 0 0 / 0.6);
+  animation: detail-in 180ms ease-out;
+}
+
+.dark .detail-drawer {
+  background: rgb(var(--nv-surface));
+  border-left-color: rgb(var(--nv-line));
+}
+
+@keyframes detail-in {
+  from { transform: translateX(12px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-drawer { animation: none; }
+}
+
+.detail-drawer__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 12px 10px 14px;
+  border-bottom: 1px solid rgb(var(--console-line) / 0.28);
+}
+
+.detail-drawer__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 13px 14px 18px;
+}
+
+/* Type badge carries the node's own colour, so the drawer is tied to the dot
+   that was clicked on the map. */
+.detail-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(var(--console-ink) / 0.62);
+}
+
+.detail-type__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.detail-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: rgb(var(--console-ink) / 0.55);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.detail-close:hover {
+  background: rgb(var(--console-ink) / 0.08);
+  color: rgb(var(--console-ink));
+}
+
+.detail-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--console-accent));
+}
+
+.detail-name {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: rgb(var(--console-ink));
+}
+
+.detail-id {
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: rgb(var(--console-ink) / 0.45);
+  word-break: break-all;
+}
+
+.detail-note {
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgb(var(--console-ink) / 0.62);
+}
+
+/* Stats: label above value, so a long label never squeezes its number onto a
+   second line the way the old inline "Label: value" rows did. */
+.detail-stats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 10px;
+}
+
+.detail-stat dt {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(var(--console-ink) / 0.45);
+  margin-bottom: 1px;
+}
+
+.detail-stat dd {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--console-ink));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.detail-section {
+  margin-top: 18px;
+  padding-top: 13px;
+  border-top: 1px solid rgb(var(--console-line) / 0.28);
+}
+
+.detail-section__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(var(--console-ink) / 0.5);
+  margin-bottom: 9px;
+}
+
+.detail-section__title span {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgb(var(--console-ink) / 0.08);
+  letter-spacing: 0;
+}
+
+.detail-arrays {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-arrays li {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgb(var(--console-ink) / 0.04);
+}
+
+.detail-array__name {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgb(var(--console-ink) / 0.88);
+}
+
+.detail-array__meta {
+  display: block;
+  font-size: 10px;
+  color: rgb(var(--console-ink) / 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-flow-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: rgb(var(--console-ink) / 0.6);
+}
+
+.detail-flow-key b {
+  color: rgb(var(--console-ink));
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Chart / scrubber alignment
+
+   The chart strip and the hour scrubber have to share one geometry, or the
+   playhead sits over a different hour than the thumb.
+
+   Two insets are involved and both matter:
+     - the card's own horizontal padding, so the boxes start at the same x
+     - half a thumb, because a range input's thumb centre travels from
+       thumb/2 to width - thumb/2, never to the very edge. The chart's plot
+       spans its full width, so without this the two disagree by ~6.5px at
+       each end - most visible at hour zero and the last hour.
+--------------------------------------------------------------------------- */
+
+:root {
+  --strip-inset: 14px;
+  --range-thumb: 13px;
+}
+
+.analytics-card,
+.timeline-bar {
+  padding-left: var(--strip-inset);
+  padding-right: var(--strip-inset);
+}
+
+/* Both the plot and the scrubber sit inside this same inset. */
+.analytics-plot,
+.timeline-scrub {
+  padding-left: calc(var(--range-thumb) / 2);
+  padding-right: calc(var(--range-thumb) / 2);
+}
+
+.timeline-scrub {
+  margin-top: 6px;
 }

@@ -2,34 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { GraphData, Node, NODE_COLORS, NODE_STROKE } from '../../types';
 import { hasFixedPosition, getFixedPosition } from '../../utils/nodePositioning';
-
-/**
- * Icon colour for a given node fill, chosen by contrast rather than fixed.
- *
- * Every fill in the neon palette fails against a white icon - the yellow at
- * 1.12:1 and the cyan at 1.28:1 are effectively invisible - while a dark ink
- * clears 4.5:1 on all of them and reaches 16:1 on the brightest. Computed so it
- * stays correct if the palette changes.
- */
-const relativeLuminance = (hex: string): number => {
-  const h = hex.replace('#', '').slice(0, 6);
-  const channels = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  const linear = channels.map((v) =>
-    v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-  );
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-};
-
-const DARK_INK = '#0f172a';
-
-const iconColorOn = (fill: string): string => {
-  const contrast = (a: number, b: number) =>
-    (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-  const bg = relativeLuminance(fill);
-  return contrast(bg, relativeLuminance(DARK_INK)) >= contrast(bg, 1)
-    ? DARK_INK
-    : '#ffffff';
-};
+import { inkOn } from '../../utils/inkOn';
 
 const getNodeRadius = (node: Node): number => {
   switch (node.type) {
@@ -375,7 +348,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'central')
           .attr('dy', '-2px')
-          .attr('fill', iconColorOn(NODE_COLORS[d.type] || '#6B7280'))
+          .attr('fill', inkOn(NODE_COLORS[d.type] || '#6B7280'))
           .style('font-size', d.type === 'building' ? '24px' : '22px')
           .style('pointer-events', 'none')
           .style('user-select', 'none')

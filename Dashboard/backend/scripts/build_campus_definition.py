@@ -57,6 +57,14 @@ INCLUDE_COMMUNITY_PV = False
 # single-storey hall clears 5.5 m, so only clearly wrong values are overridden.
 IMPLAUSIBLE_STOREY_HEIGHT = 5.5
 
+# Round-trip efficiency below this is not a battery. Lithium systems run 85-95%;
+# the Grasshopper model currently emits 20 for Battery-01, which is low enough
+# that storing energy would cost more than it saves and the optimizer would
+# rationally never cycle it. Treated as a placeholder, the same way an
+# implausible storey height is.
+IMPLAUSIBLE_ROUND_TRIP_PCT = 50.0
+DEFAULT_ROUND_TRIP_PCT = 90.0
+
 # Roof PV that exists in the Rhino model but was never wired into the
 # Grasshopper definition, so it is absent from graph.json.
 #
@@ -493,12 +501,15 @@ def build(year: str, include_without_demand: bool,
         if capacity <= 0:
             notes.append(f"{node_id}: capacity is 0, skipped")
             continue
-        efficiency = float(node.get("efficiency") or 90.0)
-        if efficiency < 50:
+        efficiency = float(node.get("efficiency") or DEFAULT_ROUND_TRIP_PCT)
+        if efficiency < IMPLAUSIBLE_ROUND_TRIP_PCT:
             notes.append(
-                f"{node_id}: round-trip efficiency is {efficiency}%, which is "
-                f"implausibly low for a battery. Check the Grasshopper input."
+                f"{node_id}: round-trip efficiency is {efficiency:.0f}%, which is "
+                f"not a battery - lithium systems are 85-95%. Treated as a "
+                f"placeholder and replaced with {DEFAULT_ROUND_TRIP_PCT:.0f}%. "
+                f"Fix the Grasshopper input to carry the real datasheet figure."
             )
+            efficiency = DEFAULT_ROUND_TRIP_PCT
         soc_kwh = float(node.get("initial_soc") or 0.0)
         battery_entry = {
             "name": str(node.get("name") or node_id[4:]),

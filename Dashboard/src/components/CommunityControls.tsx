@@ -42,7 +42,7 @@ const Slider = ({
       step={step}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full accent-blue-500"
+      className="w-full"
     />
     {hint && <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>}
   </label>
@@ -112,7 +112,7 @@ export const CommunityControls = ({
           <select
             value={activeScenario}
             onChange={(e) => onScenarioChange(e.target.value)}
-            className="mt-1 w-full text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1"
+            className="tech-select mt-1"
           >
             {scenarios.map((s) => (
               <option key={s.name} value={s.name}>
@@ -300,7 +300,7 @@ export const CommunityControls = ({
                     d.charge_points![0].ev!.v2g_enabled = e.target.checked;
                   })
                 }
-                className="accent-blue-500"
+                className="tech-check"
               />
               <span className="text-gray-700 dark:text-gray-300">
                 Vehicle-to-grid

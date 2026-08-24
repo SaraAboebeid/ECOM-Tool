@@ -32,6 +32,7 @@ from app import toolkit  # noqa: F401  - puts ECOMToolkit on sys.path
 from app.builders.community import build_community
 from app.schemas.community import CommunitySpec
 from app.services.nordpool import NordPoolClient
+from app.schemas.optimizer_params import OptimizerParameters
 
 LEC_OPT_ROOT = Path(__file__).resolve().parents[4] / "Optimization" / "LEC-Opt"
 
@@ -41,10 +42,6 @@ SEK_PER_EUR = 11.1
 HOURS_PER_YEAR = 8760
 
 DEFAULT_TEMPERATURE_C = 18.0
-
-# functions1.building.__init__ sets self.efficiency = 0.93 (functions1.py:119)
-# and the SOC balance at functions1.py:606 uses it. It is not a parameter.
-LEC_OPT_FIXED_EFFICIENCY_PCT = 93.0
 
 
 class OptimizerUnavailable(RuntimeError):
@@ -87,6 +84,41 @@ def solver_status() -> dict:
 
 
 # --------------------------------------------------------------- inputs
+
+
+# Name of the synthetic node that carries the community battery. Used as a
+# Pyomo component prefix (f'{name}_bess_soc'), so it must stay free of spaces
+# and punctuation.
+COMMUNITY_STORAGE_NODE = "Community_Storage"
+
+
+def _community_peak_kw(built) -> float:
+    """Highest total demand across all buildings at any single hour.
+
+    The sum at each hour, not the largest individual peak: buildings do not all
+    peak together, so max-of-maxima overstates what the community connection
+    ever carries and understates how small a battery is against it.
+    """
+    frames = [b.electric_demand.df["value"] for b in built.community.building]
+    if not frames:
+        return 0.0
+    total = frames[0].copy()
+    for frame in frames[1:]:
+        total = total.add(frame, fill_value=0.0)
+    return float(total.max())
+
+
+def _one_way_efficiency(spec) -> float | None:
+    """Spec round-trip percent -> the one-way fraction LEC-Opt expects.
+
+    LEC-Opt multiplies by its efficiency on charge and divides by it on
+    discharge, so the constant is one-way and the round trip is its square.
+    """
+    values = [b.efficiency for b in spec.batteries if b.efficiency]
+    if not values:
+        return None
+    mean_round_trip = sum(values) / len(values) / 100.0
+    return max(0.01, min(1.0, mean_round_trip ** 0.5))
 
 
 def _hour_index(spec: CommunitySpec, extra_hours: int) -> pd.DatetimeIndex:
@@ -134,52 +166,72 @@ def build_optimizer_inputs(
         index=index)
 
     # --- buildings ------------------------------------------------------
-    # LEC-Opt models one battery per building; a CommunitySpec battery is
-    # community-owned. Attach the total to the largest consumer and say so.
+    # The community battery gets its own node rather than being attached to the
+    # largest consumer.
+    #
+    # LEC-Opt indexes storage by building, so a shared battery has to live on
+    # some building object. Hanging it on a real one made the reported flows and
+    # the state-of-charge series look like that building's private asset. It was
+    # never physically private - power_balance sums every building's net power
+    # into one grid connection and the per-building net power is a free variable,
+    # so a discharge anywhere already offsets consumption everywhere - but the
+    # attribution was wrong and the note said so in a way that implied a
+    # distortion that does not exist.
+    #
+    # A zero-load, zero-PV node carries the battery instead, so it belongs to the
+    # community and to no member. Every constraint that touches storage is
+    # already guarded with `if building.bess_capacity == 0`, so the real
+    # buildings are unaffected.
     total_battery = sum(b.capacity for b in spec.batteries)
     total_power = sum(b.capacity for b in spec.batteries)  # 1C unless specified
-    host = None
-    if total_battery > 0 and built.community.building:
-        # Rank on the built objects: spec.demand.to_hourly_values() returns None
-        # for CSV-backed demand, which silently scored every building as zero.
-        host = max(built.community.building,
-                   key=lambda b: float(b.electric_demand.df["value"].sum())).name
+
+    if total_battery > 0:
         notes.append(
-            f"LEC-Opt puts a battery on a building, not on the community, so "
-            f"{total_battery:,.0f} kWh of storage was attached to {host!r} (the "
-            f"largest consumer). Flows between buildings and the battery will "
-            f"differ from the dispatcher's community-level model."
+            f"{total_battery:,.0f} kWh of storage is modelled as a community "
+            f"asset on the node {COMMUNITY_STORAGE_NODE!r}, not attached to any "
+            f"member building."
         )
 
-        # functions1.building.__init__ hardcodes self.efficiency = 0.93 and
-        # uses it in the SOC balance, with no way to pass another value. A spec
-        # that says otherwise is therefore honoured by the dispatcher and
-        # ignored here, so the two models silently simulate different batteries.
+        # LEC-Opt applies its efficiency on charge and divides by it on
+        # discharge, so the constant is one-way and the round-trip figure is its
+        # square. The spec quotes round-trip, hence the square root.
         spec_efficiency = {b.efficiency for b in spec.batteries}
-        if any(abs(e - LEC_OPT_FIXED_EFFICIENCY_PCT) > 0.5 for e in spec_efficiency):
+        if len(spec_efficiency) == 1:
+            round_trip_pct = next(iter(spec_efficiency))
             notes.append(
-                f"Battery round-trip efficiency is "
-                f"{', '.join(f'{e:.0f}%' for e in sorted(spec_efficiency))} in the "
-                f"spec, but LEC-Opt hardcodes "
-                f"{LEC_OPT_FIXED_EFFICIENCY_PCT:.0f}% (functions1.py:119) and "
-                f"offers no way to override it. The optimizer therefore models a "
-                f"different battery from the dispatcher; the cost comparison is "
-                f"not like for like until they agree."
+                f"Battery round-trip efficiency {round_trip_pct:.0f}% from the "
+                f"spec, applied as a one-way factor of "
+                f"{(round_trip_pct / 100.0) ** 0.5:.3f}."
+            )
+            if round_trip_pct < 50:
+                notes.append(
+                    f"{round_trip_pct:.0f}% round trip is implausibly low for a "
+                    f"battery - a lithium system is 85-95%. The value comes from "
+                    f"the Grasshopper model and is worth correcting at source, "
+                    f"because at this efficiency storing energy costs more than "
+                    f"it saves and the optimizer will leave the battery idle."
+                )
+        else:
+            notes.append(
+                f"Batteries quote different efficiencies "
+                f"({', '.join(f'{e:.0f}%' for e in sorted(spec_efficiency))}); "
+                f"LEC-Opt has one battery efficiency, so the mean is used."
             )
 
-        # Storage this small cannot shift anything, and a flat state of charge
-        # then looks like a broken model rather than an unused one.
-        peak_demand = max(
-            (float(b.electric_demand.df["value"].max()) for b in built.community.building),
-            default=0.0,
-        )
-        if peak_demand > 0 and total_battery < peak_demand * 0.25:
-            notes.append(
-                f"{total_battery:,.0f} kWh of storage against a {peak_demand:,.0f} kW "
-                f"peak is under 15 minutes at full load, so the optimizer has "
-                f"little to gain by cycling it and the state of charge may stay "
-                f"flat."
-            )
+        # Sizing, reported against the community peak. The old note compared the
+        # battery to the largest single building's peak and then printed a fixed
+        # "under 15 minutes", which is the threshold rather than the measurement.
+        community_peak = _community_peak_kw(built)
+        if community_peak > 0:
+            minutes = 60.0 * total_battery / community_peak
+            if minutes < 15:
+                notes.append(
+                    f"{total_battery:,.0f} kWh against a {community_peak:,.0f} kW "
+                    f"community peak is {minutes:.1f} minutes at full load. The "
+                    f"battery cannot shift a meaningful amount of energy at this "
+                    f"size, so a flat state of charge is the correct answer "
+                    f"rather than a broken model."
+                )
 
     building_data = {}
     for building in built.community.building:
@@ -190,12 +242,20 @@ def build_optimizer_inputs(
             for i in range(min(len(series), HOURS_PER_YEAR)):
                 pv_total[i] += series[i]
 
-        is_host = building.name == host
         building_data[building.name] = pd.DataFrame({
             "electricity_load": _slice(demand, spec, n),
             "pv_production": _slice(pv_total, spec, n),
-            "bess_capacity": [total_battery if is_host else 0.0] * n,
-            "bess_power": [total_power if is_host else 0.0] * n,
+            # Member buildings hold no storage; the community node does.
+            "bess_capacity": [0.0] * n,
+            "bess_power": [0.0] * n,
+        }, index=index)
+
+    if total_battery > 0:
+        building_data[COMMUNITY_STORAGE_NODE] = pd.DataFrame({
+            "electricity_load": [0.0] * n,
+            "pv_production": [0.0] * n,
+            "bess_capacity": [total_battery] * n,
+            "bess_power": [total_power] * n,
         }, index=index)
 
     # --- EV sessions ----------------------------------------------------
@@ -264,7 +324,10 @@ def _availability_blocks(availability, horizon: int) -> list[tuple[int, int]]:
 
 # Our parameter name -> the module-level name in functions1.py.
 _PARAMETER_MAP = {
-    "battery_efficiency": "EFFICIENCY",
+    # BESS_EFFICIENCY, not EFFICIENCY: the latter is the EV charge-point
+    # figure, and the two used to be one constant so setting a battery from
+    # its datasheet silently changed how efficiently every car charged.
+    "battery_efficiency": "BESS_EFFICIENCY",
     "battery_cost_eur_per_kwh": "BATTERY_COST_EUR_PER_KWH",
     "bess_soc_min": "BESS_SOC_MIN",
     "peak_multiplier": "PEAK_MULTIPLIER",
@@ -340,8 +403,22 @@ def run_optimization(
         progress(f"optimising {len(inputs['building_data'])} buildings over {n_days} day(s)")
 
     notes = list(inputs["notes"])
+
+    # The spec's battery efficiency is applied here rather than only warned
+    # about, so the optimizer and the dispatcher model the same battery. An
+    # explicit override from the caller still wins - model_fields_set tells a
+    # value the caller actually sent from one that is merely the schema default.
+    effective = parameters
+    one_way = _one_way_efficiency(spec)
+    if one_way is not None and (
+        parameters is None
+        or "battery_efficiency" not in parameters.model_fields_set
+    ):
+        base = parameters if parameters is not None else OptimizerParameters()
+        effective = base.model_copy(update={"battery_efficiency": one_way})
+
     sink = io.StringIO()
-    with contextlib.redirect_stdout(sink), _applied_parameters(functions1, parameters):
+    with contextlib.redirect_stdout(sink), _applied_parameters(functions1, effective):
         frame = functions1.optimization_function_lec(
             charging_point_data=inputs["charging_point_data"],
             building_data=inputs["building_data"],
