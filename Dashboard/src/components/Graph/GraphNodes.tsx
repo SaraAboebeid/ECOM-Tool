@@ -1,8 +1,61 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 import { GraphData, Node, NODE_COLORS, NODE_STROKE } from '../../types';
 import { hasFixedPosition, getFixedPosition } from '../../utils/nodePositioning';
 import { inkOn } from '../../utils/inkOn';
+
+/**
+ * A link endpoint is an id string before D3 runs and a node object after it.
+ *
+ * Six places compared `link.source === d.id` directly, which is only true until
+ * the force simulation swaps in the objects - from then on every comparison was
+ * false, so `hasFlow` never fired and every node stayed dimmed at 0.55 opacity
+ * no matter what the hour was.
+ */
+const endpointId = (end: unknown): string =>
+  typeof end === 'string' ? end : ((end as { id?: string })?.id ?? '');
+
+/** Width of the solar badge above a building, in px. */
+const PV_BADGE_WIDTH = 24;
+
+/**
+ * Solar output per hour for each host building.
+ *
+ * Roof arrays are hidden from the map (their icon is folded into the building),
+ * and every array feeds only its own host - so their links are internal and a
+ * flow line between two points would have zero length. The generation is real
+ * and has to be visible somewhere, so it is read off those links here and drawn
+ * on the host's own badge instead.
+ *
+ * Keyed by host building id, which is the part of '<host>_PV_<plant>' before
+ * the separator.
+ */
+const solarByBuilding = (data: GraphData): Map<string, number[]> => {
+  const idOf = (end: unknown): string =>
+    typeof end === 'string' ? end : ((end as { id?: string })?.id ?? '');
+  const typeOf = new Map(data.nodes.map((n) => [n.id, n.type]));
+  const out = new Map<string, number[]>();
+
+  for (const link of data.links) {
+    const source = idOf((link as any).source);
+    if (typeOf.get(source) !== 'pv') continue;
+    const host = idOf((link as any).target);
+    const flow = (link as any).flow as number[] | undefined;
+    if (!flow) continue;
+
+    const series = out.get(host) ?? [];
+    for (let h = 0; h < flow.length; h += 1) {
+      const value = Number(flow[h]);
+      series[h] = (series[h] ?? 0) + (Number.isFinite(value) && value > 0 ? value : 0);
+    }
+    out.set(host, series);
+  }
+  return out;
+};
+
+/** Brightest hour a building's arrays reach, as the badge's full-scale mark. */
+const peakOf = (series: number[] | undefined): number =>
+  series && series.length ? Math.max(...series) : 0;
 
 const getNodeRadius = (node: Node): number => {
   switch (node.type) {
@@ -248,7 +301,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .attr('opacity', (d: Node) => {
         // If this node has flow data for the current hour, make it fully opaque
         const hasFlow = data.links.some(link => {
-          const isInvolved = link.source === d.id || link.target === d.id;
+          const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
           const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
           return isInvolved && hasCurrentFlow;
         });
@@ -261,7 +314,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .style('filter', (d: Node) => {
         // If this node has flow data for the current hour, add a glow effect
         const hasFlow = data.links.some(link => {
-          const isInvolved = link.source === d.id || link.target === d.id;
+          const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
           const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
           return isInvolved && hasCurrentFlow;
         });
@@ -284,7 +337,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .attr('stroke-opacity', '0.95')
       .attr('opacity', (d: Node) => {
         const hasFlow = data.links.some(link => {
-          const isInvolved = link.source === d.id || link.target === d.id;
+          const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
           const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
           return isInvolved && hasCurrentFlow;
         });
@@ -292,7 +345,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       })
       .style('filter', (d: Node) => {
         const hasFlow = data.links.some(link => {
-          const isInvolved = link.source === d.id || link.target === d.id;
+          const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
           const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
           return isInvolved && hasCurrentFlow;
         });
@@ -311,18 +364,35 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       .attr('stroke-width', 1.4)
       .style('pointer-events', 'none');
 
-    nodeSelection.filter((d: Node) => hasBuildingPvPanels(d))
-      .append('rect')
-      .attr('class', 'node-pv-badge')
-      .attr('x', -12)
+    // Solar badge: a track that says panels exist, and a fill that says how hard
+    // they are working right now. It used to be a single flat chip driven by
+    // installed capacity alone, so a building looked identical at midnight and
+    // at midday.
+    const withPanels = nodeSelection.filter((d: Node) => hasBuildingPvPanels(d));
+
+    withPanels.append('rect')
+      .attr('class', 'node-pv-track')
+      .attr('x', -PV_BADGE_WIDTH / 2)
       .attr('y', -24)
-      .attr('width', 24)
+      .attr('width', PV_BADGE_WIDTH)
       .attr('height', 8)
       .attr('rx', 4)
       .attr('fill', NODE_COLORS.pv)
-      .attr('stroke', 'white')
-      .attr('stroke-width', '1')
-      .attr('opacity', 0.95);
+      .attr('fill-opacity', 0.22)
+      .attr('stroke', NODE_COLORS.pv)
+      .attr('stroke-opacity', 0.55)
+      .attr('stroke-width', 1)
+      .style('pointer-events', 'none');
+
+    withPanels.append('rect')
+      .attr('class', 'node-pv-badge')
+      .attr('x', -PV_BADGE_WIDTH / 2)
+      .attr('y', -24)
+      .attr('width', 0)
+      .attr('height', 8)
+      .attr('rx', 4)
+      .attr('fill', NODE_COLORS.pv)
+      .style('pointer-events', 'none');
 
     // Add text icon labels inside nodes (direct text approach instead of SVG)
     nodeSelection.each(function(d: Node) {
@@ -356,7 +426,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
           .attr('opacity', () => {
             // Check if this node has any active energy flow
             const hasFlow = data.links.some(link => {
-              const isInvolved = link.source === d.id || link.target === d.id;
+              const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
               const hasCurrentFlow = link.flow && Math.abs(link.flow[currentHour]) > 0;
               return isInvolved && hasCurrentFlow;
             });
@@ -367,14 +437,9 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       // No abbreviation label here: the chip below already carries the full
       // name, and stacking both repeated it on every node.
 
-      // Add feature indicators
-      if (d.type === 'building' && d.total_pv_capacity && d.total_pv_capacity > 0) {
-        node.append('circle')
-          .attr('r', 8)
-          .attr('cx', 25)
-          .attr('cy', -25)
-          .attr('fill', NODE_COLORS['pv']);
-      }
+      // A second PV marker used to sit here as a plain yellow circle, saying
+      // exactly what the badge above already says. Removed rather than kept in
+      // sync.
       
       if (d.type === 'charge_point' && d.is_v2g) {
         node.append('circle')
@@ -459,6 +524,10 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
 
   }, [containerRef, simulation, data.nodes, data.links, selectedNode, onNodeClick, tooltip]);
 
+  // Per-building solar output, derived once per dispatch rather than per node
+  // per hour.
+  const solarSeries = useMemo(() => solarByBuilding(data), [data]);
+
   // Update node styling when the current hour changes
   useEffect(() => {
     if (!containerRef.current) return;
@@ -479,7 +548,7 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
       
       // Check if this node has any active energy flow at current hour
       const hasFlow = data.links.some(link => {
-        const isInvolved = link.source === d.id || link.target === d.id;
+        const isInvolved = endpointId(link.source) === d.id || endpointId(link.target) === d.id;
         const hasCurrentFlow = link.flow && Math.abs(link.flow[hour]) > 0;
         return isInvolved && hasCurrentFlow;
       });
@@ -505,9 +574,20 @@ export const GraphNodes: React.FC<GraphNodesProps> = ({
             : 'drop-shadow(1px 3px 5px rgba(0,0,0,0.28))');
       }
 
+      // Fill the solar badge in proportion to what this building's arrays are
+      // producing this hour, against their own brightest hour. Relative to the
+      // building's own peak rather than to installed capacity: capacity is a
+      // nameplate figure the arrays never actually reach, so scaling to it left
+      // every badge looking nearly empty at solar noon.
       const nodeBadge = nodeElement.select('.node-pv-badge');
       if (!nodeBadge.empty()) {
-        nodeBadge.attr('opacity', hasFlow ? 1.0 : 0.85);
+        const series = solarSeries.get(d.id);
+        const peak = peakOf(series);
+        const now = series?.[hour] ?? 0;
+        const ratio = peak > 0 ? Math.max(0, Math.min(1, now / peak)) : 0;
+        nodeBadge
+          .attr('width', ratio * PV_BADGE_WIDTH)
+          .attr('opacity', ratio > 0 ? 1 : 0);
       }
 
       const nodeHalo = nodeElement.select('.node-energy-halo');
