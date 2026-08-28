@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "VR-movement",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "id": 0, "Movement": 20.0 }, "geometry": { "type": "LineString", "coordinates": [ [ 11.98109586625184, 57.688779735022337 ], [ 11.981891218148483, 57.687984397230409 ], [ 11.981911780340546, 57.688701429194914 ], [ 11.981472166667292, 57.689283951637009 ], [ 11.980614422052899, 57.689317433918859 ] ] } }
+]
+}

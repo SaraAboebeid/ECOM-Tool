@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fetch OSM Data for Table Bounds</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    .bounds-input {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin: 20px 0;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #555;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button {
+      background: #0078d4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 15px;
+    }
+    button:hover {
+      background: #005a9e;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 4px;
+      display: none;
+    }
+    .status.info { background: #e3f2fd; color: #1976d2; display: block; }
+    .status.success { background: #e8f5e9; color: #388e3c; display: block; }
+    .status.error { background: #ffebee; color: #c62828; display: block; }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 12px;
+      margin: 15px 0;
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗺️ Fetch OSM Data</h1>
+    
+    <div class="note">
+      <strong>Table Bounds (Calibrated):</strong><br>
+      Center: [11.97776652973937, 57.68838241206598]<br>
+      Zoom: 15.656176584244347<br>
+      Bearing: 87.41453613340265°
+    </div>
+
+    <p>Fetch street network or building footprints from OpenStreetMap for your table area.</p>
+    
+    <div style="margin: 20px 0;">
+      <label style="font-weight: 600; margin-bottom: 10px; display: block;">Data Type:</label>
+      <div style="display: flex; gap: 15px;">
+        <label style="cursor: pointer;">
+          <input type="radio" name="dataType" value="streets" checked> Street Network
+        </label>
+        <label style="cursor: pointer;">
+          <input type="radio" name="dataType" value="buildings"> Building Footprints
+        </label>
+      </div>
+    </div>
+
+    <div class="bounds-input">
+      <div>
+        <label for="south">South (min lat)</label>
+        <input type="number" id="south" step="0.0001" value="57.682628" placeholder="57.682628">
+      </div>
+      <div>
+        <label for="west">West (min lng)</label>
+        <input type="number" id="west" step="0.0001" value="11.971022" placeholder="11.971022">
+      </div>
+      <div>
+        <label for="north">North (max lat)</label>
+        <input type="number" id="north" step="0.0001" value="57.694141" placeholder="57.694141">
+      </div>
+      <div>
+        <label for="east">East (max lng)</label>
+        <input type="number" id="east" step="0.0001" value="11.984518" placeholder="11.984518">
+      </div>
+    </div>
+
+    <button id="fetchBtn" onclick="fetchData()">Fetch Data</button>
+    <button id="autoBtn" onclick="autoCalculateBounds()" style="margin-top: 10px; background: #28a745;">Auto-Calculate from Map Bounds</button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    // Based on your calibration values
+    const tableCenter = [11.97776652973937, 57.68838241206598];
+    const tableBearing = 87.41453613340265;
+    const tableCorners = [
+      [11.98451803339398, 57.682927961987396],
+      [11.983585758783713, 57.6941405253463],
+      [11.971022042873042, 57.693840269664186],
+      [11.971958186071914, 57.68262783563063]
+    ];
+    
+    function autoCalculateBounds() {
+      // Calculate bounds from actual table corners
+      const lngs = tableCorners.map(c => c[0]);
+      const lats = tableCorners.map(c => c[1]);
+      
+      const west = Math.min(...lngs);
+      const east = Math.max(...lngs);
+      const south = Math.min(...lats);
+      const north = Math.max(...lats);
+      
+      document.getElementById('south').value = south.toFixed(6);
+      document.getElementById('north').value = north.toFixed(6);
+      document.getElementById('west').value = west.toFixed(6);
+      document.getElementById('east').value = east.toFixed(6);
+      
+      showStatus('Bounds calculated from table corners!', 'success');
+    }
+
+    function showStatus(message, type) {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = 'status ' + type;
+    }
+
+    async function fetchData() {
+      const south = parseFloat(document.getElementById('south').value);
+      const west = parseFloat(document.getElementById('west').value);
+      const north = parseFloat(document.getElementById('north').value);
+      const east = parseFloat(document.getElementById('east').value);
+
+      if (!south || !west || !north || !east) {
+        showStatus('Please fill in all bounds values!', 'error');
+        return;
+      }
+
+      const dataType = document.querySelector('input[name="dataType"]:checked').value;
+      const bbox = `${south},${west},${north},${east}`;
+      
+      // Overpass API query
+      let query;
+      if (dataType === 'streets') {
+        query = `
+[out:json][timeout:25];
+(
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|pedestrian|footway|cycleway|path)$"](${bbox});
+);
+out geom;
+        `.trim();
+      } else {
+        // Buildings query
+        query = `
+[out:json][timeout:25];
+(
+  way["building"](${bbox});
+  relation["building"](${bbox});
+);
+out geom;
+        `.trim();
+      }
+
+      const url = 'https://overpass-api.de/api/interpreter';
+      
+      showStatus(`Fetching ${dataType} from OpenStreetMap...`, 'info');
+      document.getElementById('fetchBtn').disabled = true;
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          body: query,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const osmData = await response.json();
+        
+        // Convert OSM data to GeoJSON
+        const geojson = dataType === 'streets' ? osmToGeoJSON(osmData) : buildingsToGeoJSON(osmData);
+        
+        // Download as file
+        const filename = dataType === 'streets' ? 'street-network.geojson' : 'building-footprints.geojson';
+        const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+
+        showStatus(`✅ Success! Downloaded ${geojson.features.length} ${dataType}. Load this file in the interactive map!`, 'success');
+      } catch (error) {
+        showStatus('❌ Error: ' + error.message, 'error');
+        console.error(error);
+      } finally {
+        document.getElementById('fetchBtn').disabled = false;
+      }
+    }
+
+    function osmToGeoJSON(osmData) {
+      const geojson = {
+        type: 'FeatureCollection',
+        features: []
+      };
+
+      osmData.elements.forEach(element => {
+        if (element.type === 'way' && element.geometry) {
+          const coordinates = element.geometry.map(node => [node.lon, node.lat]);
+          
+          geojson.features.push({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            },
+            properties: {
+              highway: element.tags?.highway || 'unknown',
+              name: element.tags?.name || null,
+              osm_id: element.id
+            }
+          });
+        }
+      });
+
+      return geojson;
+    }
+
+    function buildingsToGeoJSON(osmData) {
+      const geojson = {
+        type: 'FeatureCollection',
+        features: []
+      };
+
+      osmData.elements.forEach(element => {
+        if (element.type === 'way' && element.geometry) {
+          const coordinates = element.geometry.map(node => [node.lon, node.lat]);
+          
+          // Close the polygon if not already closed
+          const first = coordinates[0];
+          const last = coordinates[coordinates.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            coordinates.push([...first]);
+          }
+          
+          geojson.features.push({
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [coordinates]
+            },
+            properties: {
+              building: element.tags?.building || 'yes',
+              name: element.tags?.name || null,
+              height: element.tags?.height || null,
+              levels: element.tags?.['building:levels'] || null,
+              osm_id: element.id
+            }
+          });
+        } else if (element.type === 'relation' && element.members) {
+          // Handle multipolygon relations (complex buildings)
+          const outer = [];
+          const inner = [];
+          
+          element.members.forEach(member => {
+            if (member.geometry) {
+              const coords = member.geometry.map(node => [node.lon, node.lat]);
+              if (member.role === 'outer') {
+                outer.push(coords);
+              } else if (member.role === 'inner') {
+                inner.push(coords);
+              }
+            }
+          });
+          
+          if (outer.length > 0) {
+            // Use first outer ring and all inner rings
+            const rings = [outer[0], ...inner];
+            geojson.features.push({
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: rings
+              },
+              properties: {
+                building: element.tags?.building || 'yes',
+                name: element.tags?.name || null,
+                height: element.tags?.height || null,
+                levels: element.tags?.['building:levels'] || null,
+                osm_id: element.id,
+                type: 'multipolygon'
+              }
+            });
+          }
+        }
+      });
+
+      return geojson;
+    }
+
+    // Auto-calculate on load
+    window.addEventListener('DOMContentLoaded', autoCalculateBounds);
+  </script>
+</body>
+</html>

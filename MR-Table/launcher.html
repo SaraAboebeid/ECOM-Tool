@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACE MR Studio Launcher</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: #242424;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-left .logo {
+            font-size: 2rem;
+        }
+
+        h1 { 
+            margin: 0; 
+            font-size: 1.5rem; 
+            color: #f0f0f0;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.75rem;
+            background: #2a2a2a;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .status-dot.open {
+            background: #52c41a;
+            box-shadow: 0 0 8px #52c41a;
+        }
+
+        /* Main content area */
+        .panel {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .panel-left {
+            background: #1a1a1a;
+            border-right: 1px solid #3a3a3a;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel-right {
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .card {
+            background: #2a2a2a;
+            padding: 1.25rem;
+            border-radius: 10px;
+            border: 1px solid #3a3a3a;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title .material-icons {
+            font-size: 18px;
+        }
+
+        /* Display list */
+        .display-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .display-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: #333;
+            border-radius: 8px;
+            border-left: 3px solid #666;
+        }
+
+        .display-item.primary {
+            border-left-color: #f59e0b;
+        }
+
+        .display-item.external {
+            border-left-color: #10b981;
+        }
+
+        .display-num {
+            background: #444;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .display-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .display-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #e0e0e0;
+        }
+
+        .display-coords {
+            font-size: 0.75rem;
+            color: #888;
+            font-family: monospace;
+        }
+
+        /* Selector rows */
+        .selector-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background: #333;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .selector-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .selector-label .material-icons {
+            font-size: 20px;
+        }
+
+        .selector-label.main .material-icons { color: #3b82f6; }
+        .selector-label.controller .material-icons { color: #8b5cf6; }
+
+        select {
+            background: #444;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            max-width: 220px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Launch buttons */
+        .launch-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .launch-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 1.25rem 2rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .launch-btn:active {
+            transform: translateY(0);
+        }
+
+        .launch-btn .material-icons {
+            font-size: 24px;
+        }
+
+        .secondary-btns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .btn-secondary {
+            background: #333;
+            border: 1px solid #444;
+            color: #e0e0e0;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-secondary:hover {
+            background: #444;
+            border-color: #555;
+        }
+
+        .btn-secondary .material-icons {
+            font-size: 18px;
+        }
+
+        .btn-secondary.danger:hover {
+            background: #5c2a2a;
+            border-color: #dc2626;
+        }
+
+        /* Instructions */
+        .instructions {
+            font-size: 0.8rem;
+            color: #888;
+            line-height: 1.6;
+        }
+
+        .instructions ol {
+            padding-left: 1.25rem;
+        }
+
+        .instructions li {
+            margin-bottom: 0.25rem;
+        }
+
+        .instructions kbd {
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        /* Footer */
+        footer {
+            grid-column: 1 / -1;
+            background: #242424;
+            padding: 0.75rem 2rem;
+            border-top: 1px solid #3a3a3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #status {
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            background: transparent;
+        }
+
+        #status.success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+
+        #status.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        #status.info {
+            background: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+        }
+
+        .footer-tip {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .footer-tip strong {
+            color: #888;
+        }
+
+        /* Permission button */
+        .permission-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+
+        .permission-btn:hover {
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .empty-state .material-icons {
+            font-size: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <span class="logo">🗺️</span>
+            <h1>ACE MR Studio Launcher</h1>
+        </div>
+        <div class="header-right">
+            <div class="status-pill">
+                <span class="status-dot" id="main-dot"></span>
+                <span>Main Display</span>
+            </div>
+            <div class="status-pill">
+                <span class="status-dot" id="controller-dot"></span>
+                <span>Controller</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="panel panel-left">
+        <div class="card">
+            <div class="card-title">
+                <span class="material-icons">monitor</span>
+                Connected Displays
+            </div>
+            <div class="display-list" id="detected-displays">
+                <div class="empty-state">
+                    <span class="material-icons">screen_search_desktop</span>
+                    <div>Detecting displays...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span class="material-icons">tune</span>
+                Window Assignment
+            </div>
+            <div class="selector-row">
+                <span class="selector-label main">
+                    <span class="material-icons">tv</span>
+                    Main (Projector)
+                </span>
+                <select id="main-display-select">
+                    <option value="0">Loading...</option>
+                </select>
+            </div>
+            <div class="selector-row">
+                <span class="selector-label controller">
+                    <span class="material-icons">tablet</span>
+                    Controller (TV)
+                </span>
+                <select id="controller-display-select">
+                    <option value="0">Loading...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card" style="flex: 1;">
+            <div class="card-title">
+                <span class="material-icons">help_outline</span>
+                Quick Setup
+            </div>
+            <div class="instructions">
+                <ol>
+                    <li>Allow <strong>"Window Management"</strong> when prompted</li>
+                    <li>Select display assignments above</li>
+                    <li>Click <strong>Launch Both Windows</strong></li>
+                    <li>Click each window once to fullscreen</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-right">
+        <div class="launch-section">
+            <button class="launch-btn" onclick="launchBoth()">
+                <span class="material-icons">rocket_launch</span>
+                Launch Both Windows
+            </button>
+
+            <div class="secondary-btns">
+                <button class="btn-secondary" onclick="launchMain()">
+                    <span class="material-icons">tv</span>
+                    Main Only
+                </button>
+                <button class="btn-secondary" onclick="launchController()">
+                    <span class="material-icons">tablet</span>
+                    Controller Only
+                </button>
+                <button class="btn-secondary" onclick="requestScreenPermission()">
+                    <span class="material-icons">security</span>
+                    Request Permission
+                </button>
+                <button class="btn-secondary danger" onclick="closeAll()">
+                    <span class="material-icons">close</span>
+                    Close All
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span class="material-icons">camera</span>
+                Auto-Calibration
+            </div>
+            <div class="selector-row">
+                <span class="selector-label">
+                    <span class="material-icons">videocam</span>
+                    Camera
+                </span>
+                <select id="calibrate-camera-select">
+                    <option value="">Select camera...</option>
+                </select>
+            </div>
+            <div id="calibrate-preview-container" style="width: 100%; aspect-ratio: 16/9; background: #1a1a1a; border-radius: 8px; margin: 0.75rem 0; overflow: hidden; position: relative;">
+                <canvas id="calibrate-preview" style="width: 100%; height: 100%; object-fit: contain;"></canvas>
+                <div id="calibrate-status" style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: #888; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">No camera</div>
+            </div>
+            <div class="secondary-btns" style="grid-template-columns: 1fr 1fr;">
+                <button class="btn-secondary" onclick="startAutoCalibrate()" id="start-calibrate-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: #10b981;">
+                    <span class="material-icons">auto_fix_high</span>
+                    Auto-Calibrate
+                </button>
+                <button class="btn-secondary" onclick="stopAutoCalibrate()" id="stop-calibrate-btn" disabled>
+                    <span class="material-icons">stop</span>
+                    Stop
+                </button>
+            </div>
+            <div style="margin-top: 0.75rem;">
+                <a href="calibration/aruco-markers.html" target="_blank" class="btn-secondary" style="text-decoration: none; display: flex;">
+                    <span class="material-icons">print</span>
+                    Print Markers
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div id="status">Ready to launch</div>
+        <div class="footer-tip">
+            <strong>Tip:</strong> Press <kbd>Enter</kbd> to launch, <kbd>Esc</kbd> to close all
+        </div>
+    </footer>
+
+    <script>
+        // Window references
+        let mainWin = null;
+        let controllerWin = null;
+
+        // Screen info
+        let screens = [];
+        let hasScreenAPI = false;
+
+        // Initialize screen detection
+        async function initScreenDetection() {
+            // Try the modern Multi-Screen Window Placement API
+            if ('getScreenDetails' in window) {
+                try {
+                    const screenDetails = await window.getScreenDetails();
+                    screens = Array.from(screenDetails.screens);
+                    hasScreenAPI = true;
+                    
+                    updateDisplayOptionsFromAPI(screens);
+                    showStatus('✓ Screen API enabled! Displays detected.', 'success');
+                    
+                    // Listen for screen changes
+                    screenDetails.addEventListener('screenschange', async () => {
+                        screens = Array.from(screenDetails.screens);
+                        updateDisplayOptionsFromAPI(screens);
+                    });
+                    return;
+                } catch (err) {
+                    console.log('Screen API permission denied:', err);
+                    showStatus('Click "Request Permission" to detect displays', 'info');
+                }
+            } else {
+                showStatus('Screen API not available - using manual mode', 'info');
+            }
+
+            // Fallback: create manual options
+            createManualScreenOptions();
+        }
+
+        function createManualScreenOptions() {
+            hasScreenAPI = false;
+            const primaryWidth = window.screen.width;
+            const primaryHeight = window.screen.height;
+
+            // Create placeholder screens
+            screens = [
+                { label: 'Primary (Laptop)', left: 0, top: 0, width: primaryWidth, height: primaryHeight, isPrimary: true },
+                { label: 'Display 2', left: primaryWidth, top: 0, width: primaryWidth, height: primaryHeight, isPrimary: false },
+                { label: 'Display 3', left: primaryWidth * 2, top: 0, width: primaryWidth, height: primaryHeight, isPrimary: false }
+            ];
+            
+            updateDisplayOptionsManual();
+        }
+
+        function updateDisplayOptionsFromAPI(apiScreens) {
+            const mainSelect = document.getElementById('main-display-select');
+            const ctrlSelect = document.getElementById('controller-display-select');
+            const displayList = document.getElementById('detected-displays');
+
+            mainSelect.innerHTML = '';
+            ctrlSelect.innerHTML = '';
+            
+            let listHtml = '';
+
+            apiScreens.forEach((s, i) => {
+                const name = s.label || `Display ${i + 1}`;
+                const primary = s.isPrimary ? ' (Primary)' : '';
+                const label = `${name}${primary}`;
+                const shortLabel = name.length > 25 ? name.substring(0, 25) + '...' : name;
+                
+                mainSelect.add(new Option(`${shortLabel}${primary}`, i));
+                ctrlSelect.add(new Option(`${shortLabel}${primary}`, i));
+                
+                listHtml += `
+                    <div class="display-item ${s.isPrimary ? 'primary' : 'external'}">
+                        <span class="display-num">${i + 1}</span>
+                        <div class="display-info">
+                            <div class="display-name">${name}${primary}</div>
+                            <div class="display-coords">${s.width}×${s.height} @ X:${s.left}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            displayList.innerHTML = listHtml;
+
+            // Auto-select: Main on second external, Controller on first external (or primary)
+            const externals = apiScreens.map((s, i) => ({ s, i })).filter(x => !x.s.isPrimary);
+            const primaryIdx = apiScreens.findIndex(s => s.isPrimary);
+            
+            if (externals.length >= 2) {
+                mainSelect.value = externals[1].i;
+                ctrlSelect.value = externals[0].i;
+            } else if (externals.length === 1) {
+                mainSelect.value = externals[0].i;
+                ctrlSelect.value = primaryIdx >= 0 ? primaryIdx : 0;
+            } else {
+                mainSelect.value = 0;
+                ctrlSelect.value = 0;
+            }
+        }
+
+        function updateDisplayOptionsManual() {
+            const mainSelect = document.getElementById('main-display-select');
+            const ctrlSelect = document.getElementById('controller-display-select');
+            const displayList = document.getElementById('detected-displays');
+
+            mainSelect.innerHTML = '';
+            ctrlSelect.innerHTML = '';
+
+            screens.forEach((s, i) => {
+                const label = `${s.label}`;
+                mainSelect.add(new Option(label, i));
+                ctrlSelect.add(new Option(label, i));
+            });
+
+            displayList.innerHTML = `
+                <div class="empty-state">
+                    <span class="material-icons">screen_search_desktop</span>
+                    <div>Permission needed for accurate detection</div>
+                    <button onclick="requestScreenPermission()" class="permission-btn">
+                        Grant Permission
+                    </button>
+                </div>
+            `;
+
+            mainSelect.value = 1;
+            ctrlSelect.value = 2;
+        }
+
+        async function requestScreenPermission() {
+            if ('getScreenDetails' in window) {
+                try {
+                    const screenDetails = await window.getScreenDetails();
+                    screens = Array.from(screenDetails.screens);
+                    hasScreenAPI = true;
+                    
+                    updateDisplayOptionsFromAPI(screens);
+                    showStatus('✓ Permission granted! Displays detected.', 'success');
+                } catch (err) {
+                    showStatus('Permission denied. Check browser settings.', 'error');
+                }
+            } else {
+                showStatus('Screen API not supported in this browser.', 'error');
+            }
+        }
+
+        function getScreenInfo(index) {
+            if (index < screens.length) {
+                return screens[index];
+            }
+            return screens[0] || { left: 0, top: 0, width: window.screen.width, height: window.screen.height };
+        }
+
+        async function launchWindowOnScreen(url, windowName, screenIndex) {
+            const screenInfo = getScreenInfo(screenIndex);
+            const fullscreenUrl = url + (url.includes('?') ? '&' : '?') + 'autofullscreen=1';
+            
+            console.log(`Launching ${windowName} on screen ${screenIndex}:`, screenInfo);
+            
+            if (hasScreenAPI) {
+                const features = [
+                    `left=${screenInfo.left}`,
+                    `top=${screenInfo.top}`,
+                    `width=${screenInfo.width}`,
+                    `height=${screenInfo.height}`,
+                    'menubar=no',
+                    'toolbar=no',
+                    'location=no',
+                    'status=no'
+                ].join(',');
+                
+                const win = window.open(fullscreenUrl, windowName, features);
+                return win;
+            } else {
+                const win = window.open(fullscreenUrl, windowName, 
+                    `width=${screenInfo.width},height=${screenInfo.height},menubar=no,toolbar=no,location=no,status=no`
+                );
+                
+                if (win) {
+                    setTimeout(() => {
+                        try {
+                            win.moveTo(screenInfo.left, screenInfo.top);
+                            win.resizeTo(screenInfo.width, screenInfo.height);
+                        } catch (e) {
+                            console.log('Could not move window:', e);
+                        }
+                    }, 200);
+                }
+                return win;
+            }
+        }
+
+        async function launchMain() {
+            const displayIndex = parseInt(document.getElementById('main-display-select').value);
+            
+            if (mainWin && !mainWin.closed) {
+                mainWin.focus();
+                showStatus('Main window already open. Focusing...', 'info');
+                return mainWin;
+            }
+
+            const screenInfo = getScreenInfo(displayIndex);
+            mainWin = await launchWindowOnScreen('index.html', 'ACE_Main_Display', displayIndex);
+
+            if (mainWin) {
+                updateWindowStatus();
+                showStatus(`Main opened at X:${screenInfo.left}. Click to fullscreen.`, 'success');
+                
+                const checkClosed = setInterval(() => {
+                    if (mainWin && mainWin.closed) {
+                        mainWin = null;
+                        updateWindowStatus();
+                        clearInterval(checkClosed);
+                    }
+                }, 1000);
+            } else {
+                showStatus('❌ Popup blocked! Allow popups and try again.', 'error');
+            }
+            
+            return mainWin;
+        }
+
+        async function launchController() {
+            const displayIndex = parseInt(document.getElementById('controller-display-select').value);
+            
+            if (controllerWin && !controllerWin.closed) {
+                controllerWin.focus();
+                showStatus('Controller already open. Focusing...', 'info');
+                return controllerWin;
+            }
+
+            const screenInfo = getScreenInfo(displayIndex);
+            controllerWin = await launchWindowOnScreen('controller.html', 'ACE_Controller', displayIndex);
+
+            if (controllerWin) {
+                updateWindowStatus();
+                showStatus(`Controller opened at X:${screenInfo.left}. Click to fullscreen.`, 'success');
+                
+                const checkClosed = setInterval(() => {
+                    if (controllerWin && controllerWin.closed) {
+                        controllerWin = null;
+                        updateWindowStatus();
+                        clearInterval(checkClosed);
+                    }
+                }, 1000);
+            } else {
+                showStatus('❌ Popup blocked! Allow popups and try again.', 'error');
+            }
+            
+            return controllerWin;
+        }
+
+        async function launchBoth() {
+            showStatus('Launching both windows...', 'info');
+            
+            const main = await launchMain();
+            
+            if (!main) {
+                showStatus('❌ Main blocked. Allow popups and try again.', 'error');
+                return;
+            }
+            
+            await new Promise(r => setTimeout(r, 400));
+            
+            const ctrl = await launchController();
+            
+            if (main && ctrl) {
+                showStatus('✓ Both launched! Click each window to fullscreen.', 'success');
+            } else if (main && !ctrl) {
+                showStatus('⚠ Main opened. Click "Controller Only" for the second.', 'error');
+            }
+        }
+
+        function closeAll() {
+            let closed = 0;
+            
+            if (mainWin && !mainWin.closed) {
+                mainWin.close();
+                mainWin = null;
+                closed++;
+            }
+            
+            if (controllerWin && !controllerWin.closed) {
+                controllerWin.close();
+                controllerWin = null;
+                closed++;
+            }
+            
+            updateWindowStatus();
+            showStatus(closed > 0 ? `Closed ${closed} window(s).` : 'No windows to close.', 'info');
+        }
+
+        function updateWindowStatus() {
+            const mainDot = document.getElementById('main-dot');
+            const ctrlDot = document.getElementById('controller-dot');
+            
+            mainDot.classList.toggle('open', mainWin && !mainWin.closed);
+            ctrlDot.classList.toggle('open', controllerWin && !controllerWin.closed);
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type || '';
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.repeat) {
+                document.querySelector('.launch-btn').click();
+            } else if (e.key === 'Escape') {
+                closeAll();
+            }
+        });
+
+        // Initialize on load
+        initScreenDetection();
+
+        // Periodically check window status
+        setInterval(updateWindowStatus, 2000);
+
+        // ===========================================
+        // Auto-Calibration from Launcher
+        // ===========================================
+        
+        let launcherCalibrator = null;
+        const calibrateChannel = new BroadcastChannel('map_controller_channel');
+        
+        async function initCalibratorFromLauncher() {
+            // Load the auto-calibrate script
+            return new Promise((resolve, reject) => {
+                if (window.AutoCalibrator) {
+                    resolve(true);
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'calibration/auto-calibrate.js';
+                script.onload = () => {
+                    console.log('[Launcher] AutoCalibrator loaded');
+                    resolve(true);
+                };
+                script.onerror = () => reject(new Error('Failed to load auto-calibrate.js'));
+                document.head.appendChild(script);
+            });
+        }
+        
+        async function populateCameraList() {
+            const select = document.getElementById('calibrate-camera-select');
+            try {
+                // Request permission first
+                await navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => stream.getTracks().forEach(t => t.stop()))
+                    .catch(() => {});
+                    
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                
+                select.innerHTML = '<option value="">Select camera...</option>';
+                cameras.forEach((cam, i) => {
+                    const option = document.createElement('option');
+                    option.value = cam.deviceId;
+                    option.textContent = cam.label || `Camera ${i + 1}`;
+                    select.appendChild(option);
+                });
+                
+                // Auto-select first non-built-in camera if available (prefer external cameras)
+                if (cameras.length > 0) {
+                    const builtInKeywords = ['facetime', 'macbook', 'built-in', 'isight', 'internal', 'iphone'];
+                    const externalCamera = cameras.find(cam => {
+                        const label = (cam.label || '').toLowerCase();
+                        return !builtInKeywords.some(keyword => label.includes(keyword));
+                    });
+                    
+                    if (externalCamera) {
+                        select.value = externalCamera.deviceId;
+                        await startCameraPreviewLauncher(externalCamera.deviceId);
+                    } else {
+                        // Fallback to manual selection if only built-in found don't auto-start
+                        select.value = ""; 
+                        const statusEl = document.getElementById('calibrate-status');
+                        if (statusEl) statusEl.textContent = 'Select an external camera to start preview';
+                    }
+                }
+            } catch (err) {
+                console.error('Camera enumeration error:', err);
+            }
+        }
+        
+        async function startCameraPreviewLauncher(deviceId) {
+            const statusEl = document.getElementById('calibrate-status');
+            const canvas = document.getElementById('calibrate-preview');
+            
+            // Safety check
+            if (!deviceId) return;
+
+            try {
+                await initCalibratorFromLauncher();
+                
+                // Stop previous instance if exists to prevent flickering
+                if (launcherCalibrator) {
+                    launcherCalibrator.stopPreview();
+                }
+                
+                launcherCalibrator = new window.AutoCalibrator({ debug: true });
+                
+                launcherCalibrator.onDebugFrame = (debugCanvas) => {
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = debugCanvas.width;
+                    canvas.height = debugCanvas.height;
+                    ctx.drawImage(debugCanvas, 0, 0);
+                };
+                
+                launcherCalibrator.onStatusUpdate = (msg) => {
+                    statusEl.textContent = msg;
+                };
+                
+                await launcherCalibrator.startPreview(deviceId);
+                statusEl.textContent = 'Camera ready';
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+            }
+        }
+        
+        async function startAutoCalibrate() {
+            const startBtn = document.getElementById('start-calibrate-btn');
+            const stopBtn = document.getElementById('stop-calibrate-btn');
+            const statusEl = document.getElementById('calibrate-status');
+            const cameraId = document.getElementById('calibrate-camera-select').value;
+            
+            if (!mainWin || mainWin.closed) {
+                showStatus('Launch Main Display first!', 'error');
+                return;
+            }
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            try {
+                await initCalibratorFromLauncher();
+                
+                if (!launcherCalibrator) {
+                    launcherCalibrator = new window.AutoCalibrator({ debug: true });
+                }
+                
+                const canvas = document.getElementById('calibrate-preview');
+                launcherCalibrator.onDebugFrame = (debugCanvas) => {
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = debugCanvas.width;
+                    canvas.height = debugCanvas.height;
+                    ctx.drawImage(debugCanvas, 0, 0);
+                };
+                
+                launcherCalibrator.onStatusUpdate = (msg) => {
+                    statusEl.textContent = msg;
+                    showStatus(msg, 'info');
+                };
+                
+                // Get current calibration
+                const currentCal = {
+                    center: { lng: 11.977770568930168, lat: 57.68839377903814 },
+                    zoom: 15.806953679037164,
+                    bearing: -92.58546386659737
+                };
+                
+                const result = await launcherCalibrator.calibrate(calibrateChannel, currentCal, cameraId);
+                
+                statusEl.textContent = `Done! Zoom: ${result.zoom.toFixed(3)}`;
+                showStatus('Calibration complete!', 'success');
+                
+                // Restart preview
+                if (cameraId) {
+                    setTimeout(() => startCameraPreviewLauncher(cameraId), 500);
+                }
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+                showStatus('Calibration error: ' + err.message, 'error');
+            } finally {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+        
+        function stopAutoCalibrate() {
+            if (launcherCalibrator) {
+                launcherCalibrator.cancel();
+            }
+            document.getElementById('start-calibrate-btn').disabled = false;
+            document.getElementById('stop-calibrate-btn').disabled = true;
+            
+            // Hide markers on main
+            calibrateChannel.postMessage({
+                type: 'calibrate_action',
+                action: 'hide_calibration_markers'
+            });
+        }
+        
+        // Camera select change handler
+        document.getElementById('calibrate-camera-select').addEventListener('change', (e) => {
+            if (e.target.value) {
+                startCameraPreviewLauncher(e.target.value);
+            }
+        });
+        
+        // Init camera list
+        populateCameraList();
+    </script>
+</body>
+</html>

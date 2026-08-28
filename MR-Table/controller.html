@@ -1,0 +1,1035 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map Controller</title>
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            display: grid;
+            grid-template-columns: 120px 1fr 120px;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1.25rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: #242424;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 { margin: 0; font-size: 1.8rem; color: #f0f0f0; }
+
+        #controls-panel, #right-panel {
+            background: #242424;
+            border-right: 1px solid #3a3a3a;
+            padding: 1.5rem 0.75rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        #right-panel {
+            border-right: none;
+            border-left: 1px solid #3a3a3a;
+        }
+
+        #main-panel {
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1.5rem;
+            background: #1a1a1a;
+            position: relative;
+        }
+
+        /* Debug - ensure sections are visible */
+        #legend-section,
+        #dashboard-section,
+        #metadata-section {
+            position: relative;
+            z-index: 1;
+        }
+
+        .panel-section {
+            background: #2a2a2a;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border: 1px solid #3a3a3a;
+            overflow: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        .control-group h3 {
+            display: none; /* Hide labels for compact view */
+        }
+
+        button.control-btn {
+            width: 70px;
+            height: 70px;
+            padding: 0;
+            border: 2px solid #4a4a4a;
+            background: #333;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            color: #e0e0e0;
+            position: relative;
+        }
+
+        button.control-btn .material-icons {
+            font-size: 32px;
+        }
+
+        button.control-btn:hover {
+            background: #444;
+            border-color: #5a5a5a;
+        }
+
+        /* Animation buttons (toggleable visualizations) - active state */
+        button.control-btn.animation-btn.active {
+            background: #1e3a5f;
+            border-color: #3b82f6;
+            color: #60a5fa;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Function buttons (non-toggleable actions) - different style */
+        button.control-btn.function-btn {
+            border-style: dashed;
+            border-color: #555;
+        }
+
+        button.control-btn.function-btn:hover {
+            border-color: #777;
+            background: #3a3a3a;
+        }
+
+        /* Function button selected state (for showing dashboard) */
+        button.control-btn.function-btn.selected {
+            background: #2a3a2a;
+            border-color: #4a9a4a;
+            color: #7adb7a;
+            border-style: solid;
+        }
+
+        /* Animation order badge - shows when multiple animations are active */
+        .animation-order-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 20px;
+            height: 20px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-indicator.connected {
+            background: #52c41a;
+        }
+
+        #legend-container, #dashboard-container, #metadata-container {
+            height: 100%;
+        }
+        
+        h2 { margin-top: 0; font-size: 1.4rem; border-bottom: 1px solid #3a3a3a; padding-bottom: 0.75rem; color: #f0f0f0; }
+
+        .metadata-item {
+            margin-bottom: 0.75rem;
+        }
+        .metadata-label {
+            font-weight: bold;
+            font-size: 1rem;
+            color: #888;
+        }
+        .metadata-value {
+            font-size: 1.15rem;
+            color: #d0d0d0;
+        }
+
+        #welcome-screen {
+            grid-column: 1 / -1;
+            grid-row: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a1a;
+            border-radius: 8px;
+            z-index: 10;
+            position: absolute;
+            inset: 0;
+            padding: 2rem;
+        }
+
+        #welcome-screen.hidden {
+            display: none !important;
+        }
+
+        .welcome-logo {
+            height: 60px;
+            width: auto;
+            object-fit: contain;
+            filter: brightness(0.9);
+        }
+
+        .welcome-title {
+            font-size: 5rem;
+            font-weight: 800;
+            color: #f0f0f0;
+            margin: 0;
+            text-align: center;
+            line-height: 1.1;
+            margin-bottom: 2rem;
+            animation: titleEntrance 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo-container {
+            position: absolute;
+            bottom: 2rem;
+            left: 2rem;
+            right: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin: 0;
+            opacity: 0;
+            animation: logoEntrance 1s ease-out 0.6s forwards;
+            z-index: 2;
+        }
+
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        @keyframes titleEntrance {
+            0% {
+                opacity: 0;
+                transform: translateY(40px) scale(0.95);
+                filter: blur(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0);
+            }
+        }
+
+        @keyframes logoEntrance {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tour-info {
+            text-align: center;
+            height: 150px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 800px;
+        }
+
+        .tour-info.active {
+            opacity: 1;
+        }
+
+        .tour-title {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 0.75rem;
+        }
+
+        .tour-desc {
+            font-size: 1.5rem;
+            color: #aaa;
+            line-height: 1.5;
+        }
+
+        /* Note: tour-highlight styling removed - we no longer highlight buttons during tour
+           to avoid confusion with actually active animations */
+        
+        .hidden {
+            display: none !important;
+        }
+
+        /* Modern Dashboard Styles */
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            height: 100%;
+        }
+
+        .dashboard-card {
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .dashboard-section-title {
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
+
+        .control-label {
+            font-size: 1.15rem;
+            font-weight: 500;
+            color: #d0d0d0;
+            flex: 1;
+        }
+
+        .control-value {
+            font-family: monospace;
+            background: #444;
+            padding: 0.35rem 0.6rem;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            color: #f0f0f0;
+        }
+
+        .modern-range {
+            flex: 2;
+            -webkit-appearance: none;
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .modern-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #1a1a1a;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            transition: transform 0.1s;
+        }
+
+        .modern-range::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            background: #60a5fa;
+        }
+
+        .modern-date {
+            padding: 0.5rem;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-family: inherit;
+            color: #e0e0e0;
+            background: #333;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .modern-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            padding: 1rem 1.25rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1.15rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #333;
+            border: 1px solid #444;
+            color: #d0d0d0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .modern-btn:hover {
+            background: #444;
+            border-color: #555;
+        }
+
+        .modern-btn.primary {
+            background: #3b82f6;
+            color: white;
+            border: 1px solid #2563eb;
+        }
+
+        .modern-btn.primary:hover {
+            background: #2563eb;
+        }
+
+        .modern-btn.active {
+            background: #1e3a5f;
+            border-color: #3b82f6;
+            color: #60a5fa;
+        }
+
+        .info-box {
+            background: #333;
+            border-left: 4px solid #3b82f6;
+            padding: 1rem;
+            border-radius: 0 8px 8px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .info-title {
+            font-weight: 600;
+            color: #f0f0f0;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-text {
+            font-size: 1.15rem;
+            line-height: 1.6;
+            color: #aaa;
+            margin: 0;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem;
+            background: #333;
+            border-radius: 8px;
+            border: 1px solid #444;
+            margin-bottom: 0.5rem;
+        }
+        
+        .legend-color {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+            flex-shrink: 0;
+        }
+        
+        .legend-label {
+            font-size: 1.15rem;
+            color: #d0d0d0;
+            font-weight: 500;
+        }
+
+        .legend-phase {
+            transition: all 0.3s ease;
+        }
+
+        .credits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .credit-item {
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .credit-role {
+            font-size: 1rem;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .credit-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #f0f0f0;
+        }
+
+        .credit-contribution {
+            font-size: 1.1rem;
+            color: #aaa;
+            margin-top: 0.25rem;
+            font-style: italic;
+        }
+
+        /* Sun Study - Weather App Layout */
+        #main-panel.sun-study-mode {
+            grid-template-columns: 1fr;
+            grid-template-rows: minmax(360px, 1fr) auto;
+        }
+
+        #main-panel.sun-study-mode .sun-study-hidden {
+            display: none !important;
+        }
+
+        #main-panel.sun-study-mode .sun-study-hero {
+            grid-column: 1 / -1 !important;
+            grid-row: 1 !important;
+            padding: 1.25rem;
+            display: flex !important;
+            flex-direction: column;
+            min-height: 350px;
+        }
+
+        #main-panel.sun-study-mode .sun-study-hero #dashboard-title {
+            flex-shrink: 0;
+        }
+
+        #main-panel.sun-study-mode .sun-study-hero #dashboard-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #main-panel.sun-study-mode .sun-study-bottom {
+            grid-column: 1 / -1 !important;
+            grid-row: 2 !important;
+            padding: 1rem 1.25rem 1.5rem;
+            display: block !important;
+        }
+
+        .sun-sky-card {
+            position: relative;
+            width: 100%;
+            flex: 1;
+            min-height: 320px;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid #2f3647;
+            background: #0b1020;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }
+
+        .sun-sky {
+            --sky-top: #0b1020;
+            --sky-mid: #1b2b55;
+            --sky-bottom: #2b3b6b;
+            --sun-x: 50%;
+            --sun-y: 70%;
+            --sun-opacity: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 45%, var(--sky-bottom) 100%);
+            transition: background 0.6s ease;
+        }
+
+        .sun-sky::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 80%, rgba(255,255,255,0.12), transparent 55%);
+            pointer-events: none;
+        }
+
+        .sun-orb {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            left: var(--sun-x);
+            top: var(--sun-y);
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle, #fff7cc 0%, #ffd36a 50%, #ffb347 100%);
+            box-shadow: 0 0 40px rgba(255, 200, 100, 0.6);
+            opacity: var(--sun-opacity);
+            /* No transition - direct positioning for smooth slider interaction */
+        }
+
+        .sun-orb::after {
+            content: '';
+            position: absolute;
+            inset: -30px;
+            background: radial-gradient(circle, rgba(255, 200, 100, 0.35) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(2px);
+        }
+
+        .sun-path {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .sun-horizon {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 18%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 25%, rgba(255,255,255,0.35) 75%, transparent 100%);
+        }
+
+        .sun-cloud {
+            position: absolute;
+            top: 20%;
+            width: 180px;
+            height: 60px;
+            background: rgba(255,255,255,0.16);
+            border-radius: 50px;
+            filter: blur(1px);
+            animation: cloudDrift 30s linear infinite;
+        }
+
+        .sun-cloud::before,
+        .sun-cloud::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.18);
+            border-radius: 50%;
+        }
+
+        .sun-cloud::before {
+            width: 80px;
+            height: 80px;
+            left: 20px;
+            top: -30px;
+        }
+
+        .sun-cloud::after {
+            width: 60px;
+            height: 60px;
+            left: 90px;
+            top: -20px;
+        }
+
+        .sun-cloud.cloud-2 {
+            top: 35%;
+            width: 220px;
+            height: 70px;
+            opacity: 0.6;
+            animation-duration: 38s;
+        }
+
+        @keyframes cloudDrift {
+            0% { transform: translateX(-220px); }
+            100% { transform: translateX(120vw); }
+        }
+
+        .sun-time-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #f8fafc;
+            z-index: 2;
+            backdrop-filter: blur(6px);
+            background: rgba(15, 23, 42, 0.35);
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .sun-time-center .sun-time {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .sun-time-center .sun-date {
+            font-size: 1rem;
+            color: #cbd5f5;
+            margin-top: 0.25rem;
+        }
+
+        .sunrise-label,
+        .sunset-label {
+            position: absolute;
+            bottom: 10%;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+            background: rgba(15, 23, 42, 0.35);
+            padding: 0.35rem 0.6rem;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .sunrise-label {
+            left: 8%;
+        }
+
+        .sunset-label {
+            right: 8%;
+        }
+
+        .sun-study-bottom-grid {
+            display: grid;
+            grid-template-columns: 2.2fr 1fr 1.2fr;
+            gap: 1rem;
+        }
+
+        .sun-compact-card {
+            background: #232a3b;
+            border: 1px solid #2f3647;
+            border-radius: 14px;
+            padding: 1rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        }
+
+        .sun-compact-title {
+            font-size: 0.9rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .sun-compact-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .sun-compact-row label,
+        .sun-compact-row span {
+            font-size: 0.95rem;
+            color: #e2e8f0;
+        }
+
+        .sun-compact-legend {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .sun-compact-legend .legend-item {
+            background: #1b2232;
+            border: 1px solid #2b3244;
+            padding: 0.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            .sun-study-bottom-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button id="home-btn" style="background: none; border: none; cursor: pointer; font-size: 2rem; padding: 0; display: flex; align-items: center;" title="Home">
+                <span class="material-icons" style="font-size: 32px;">home</span>
+            </button>
+            <h1>MR Studio Dashboard</h1>
+        </div>
+        <div style="font-size: 1.2rem;">
+            <span id="connection-status" class="status-indicator" style="width: 14px; height: 14px;"></span>
+            <span id="connection-text">Disconnected</span>
+        </div>
+    </header>
+
+    <aside id="controls-panel">
+        <div class="control-group">
+            <h3>Simulations</h3>
+            <button class="control-btn animation-btn" data-action="click" data-target="cfd-simulation-btn" title="CFD Wind Simulation">
+                <span class="material-icons">air</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="stormwater-btn" title="Stormwater Flow">
+                <span class="material-icons">water_drop</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="sun-study-btn" title="Sun Study">
+                <span class="material-icons">wb_sunny</span>
+            </button>
+        </div>
+
+        <div class="control-group">
+            <h3>Visualization</h3>
+            <button class="control-btn animation-btn" data-action="click" data-target="slideshow-btn" title="Slideshow">
+                <span class="material-icons">slideshow</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="grid-animation-btn" title="Grid Animation">
+                <span class="material-icons">grid_on</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="isovist-btn" title="Interactive Isovist">
+                <span class="material-icons">visibility</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="bird-sounds-btn" title="Bird Sounds">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="width: 24px; height: 24px;">
+                    <path d="M21 5c-1.1 0.9-2.3 1.5-3.6 1.7 1.3-0.8 2.3-2 2.7-3.5-1.2 0.7-2.5 1.2-3.9 1.5-1.1-1.2-2.7-1.9-4.5-1.9-3.4 0-6.1 2.7-6.1 6.1 0 0.5 0.1 0.9 0.2 1.4-5.1-0.3-9.6-2.7-12.6-6.4-0.5 0.9-0.8 2-0.8 3.2 0 2.1 1.1 4 2.7 5.1-1 0-2-0.3-2.8-0.8 0 0 0 0.1 0 0.1 0 3 2.1 5.5 4.9 6.1-0.5 0.1-1 0.2-1.6 0.2-0.4 0-0.8 0-1.2-0.1 0.8 2.4 3.1 4.2 5.8 4.2-2.1 1.6-4.7 2.6-7.6 2.6-0.5 0-1 0-1.5-0.1 2.7 1.7 5.9 2.7 9.4 2.7 11.3 0 17.4-9.3 17.4-17.4 0-0.3 0-0.5 0-0.8 1.2-0.9 2.2-1.9 3-3.2z"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="control-group">
+            <h3>Map Controls</h3>
+             <button class="control-btn function-btn" id="reset-view-btn" title="Reset View">
+                <span class="material-icons">restart_alt</span>
+            </button>
+             <button class="control-btn function-btn" id="fullscreen-btn" title="Toggle Full Screen">
+                <span class="material-icons">fullscreen</span>
+            </button>
+            <button class="control-btn function-btn" data-action="click" data-target="calibrate-btn" title="Calibrate">
+                <span class="material-icons">settings_overscan</span>
+            </button>
+        </div>
+
+        <div class="control-group">
+            <h3>About</h3>
+            <button class="control-btn function-btn" data-action="click" data-target="credits-btn" title="Credits">
+                <span class="material-icons">groups</span>
+            </button>
+        </div>
+    </aside>
+
+    <main id="main-panel">
+        <div id="welcome-screen">
+            <canvas id="bg-canvas"></canvas>
+            <h1 class="welcome-title">Welcome to the ACE MR Studio</h1>
+            
+            <div id="tour-info" class="tour-info" style="position: relative; z-index: 2;">
+                <div id="tour-title" class="tour-title"></div>
+                <div id="tour-desc" class="tour-desc"></div>
+            </div>
+
+            <div class="logo-container">
+                <img src="media/chalmers_logo.png" alt="Chalmers University of Technology" class="welcome-logo">
+                <img src="media/dtcc_logo.png" alt="DTCC" class="welcome-logo" style="height: 100px;">
+            </div>
+        </div>
+
+        <section id="legend-section" class="panel-section" style="grid-column: 1; grid-row: 1;">
+            <h2 id="legend-title">Legend</h2>
+            <div id="legend-content">
+                <p>Select a simulation to view its legend.</p>
+            </div>
+            <!-- Campus Demo Legend (hidden by default) -->
+            <div id="campus-demo-legend" style="display: none;">
+                <div class="legend-phase" data-phase="boundary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: linear-gradient(90deg, hsl(205, 50%, 70%), hsl(255, 50%, 70%));"></div><div class="legend-label">Project Boundary</div></div>
+                </div>
+                <div class="legend-phase" data-phase="living-primary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(219, 87, 19);"></div><div class="legend-label">Living Campus - Primary Routes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="living-secondary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgba(219, 87, 19, 0.7);"></div><div class="legend-label">Living Campus - Secondary Routes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="living-points" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(237, 192, 6); border-radius: 50%;"></div><div class="legend-label">Living Campus - Points</div></div>
+                </div>
+                <div class="legend-phase" data-phase="living-asterix" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: radial-gradient(circle, #e6a832 30%, transparent 70%);"></div><div class="legend-label">Living Campus - Activity Nodes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="health-primary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(86, 130, 0);"></div><div class="legend-label">Health Campus - Primary Routes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="health-secondary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgba(86, 130, 0, 0.7);"></div><div class="legend-label">Health Campus - Secondary Routes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="health-tertiary" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(226, 144, 77);"></div><div class="legend-label">Health Campus - Tertiary Routes</div></div>
+                </div>
+                <div class="legend-phase" data-phase="health-points" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(183, 179, 99); border-radius: 50%;"></div><div class="legend-label">Health Campus - Points</div></div>
+                </div>
+                <div class="legend-phase" data-phase="green-spaces" style="display:none;">
+                    <div class="legend-item"><div class="legend-color" style="background: rgb(140, 186, 99); border-radius: 30%;"></div><div class="legend-label">Green Meeting Spaces</div></div>
+                </div>
+            </div>
+        </section>
+
+
+        <section id="dashboard-section" class="panel-section" style="grid-column: 2; grid-row: 1;">
+            <h2 id="dashboard-title">Dashboard</h2>
+            <div id="dashboard-content">
+                <p>No active data.</p>
+            </div>
+            <!-- SAM Segmentation Section (only for Street View) -->
+            <div id="sam-segmentation-section" style="display:none; margin-top:2rem;">
+                <h3 style="margin-bottom:0.5rem; color:#60a5fa;">Street View Segmentation</h3>
+                    <button id="sam-segment-btn" type="button" class="modern-btn primary" style="margin-bottom:1rem;">Segment Street View</button>
+                <div id="sam-server-status" style="font-size:1rem; color:#aaa; margin-bottom:0.5rem;"></div>
+                <div id="sam-mask-container" style="margin-bottom:0.5rem;"></div>
+                <div id="sam-pie-chart" style="margin-bottom:0.5rem;"></div>
+                <div id="sam-class-table"></div>
+            </div>
+        </section>
+
+        <section id="metadata-section" class="panel-section" style="grid-column: 1 / -1; grid-row: 2;">
+            <h2>Metadata</h2>
+            <div id="metadata-content">
+                <div class="metadata-item">
+                    <div class="metadata-label">Current View</div>
+                    <div class="metadata-value" id="meta-view">Default</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Active Layer</div>
+                    <div class="metadata-value" id="meta-layer">None</div>
+                </div>
+                 <div class="metadata-item">
+                    <div class="metadata-label">Description</div>
+                    <div class="metadata-value" id="meta-desc">Interactive map of the district. Use controls to toggle layers.</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <aside id="right-panel">
+        <div class="control-group">
+            <h3>Demos</h3>
+            <button class="control-btn animation-btn" data-action="click" data-target="fcc-demo-btn" title="FCC VR Demo">
+                <span class="material-icons">videocam</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="campus-demo-btn" title="Chalmers Campus Vision">
+                <span class="material-icons">school</span>
+            </button>
+            <button class="control-btn animation-btn" data-action="click" data-target="street-view-btn" title="Google Street View">
+                <span class="material-icons">streetview</span>
+            </button>
+        </div>
+    </aside>
+
+    <script src="controller/sun-study-ui.js"></script>
+    <script src="controller/isovist-dashboard.js"></script>
+    <script src="controller/bird-dashboard.js"></script>
+    <script src="controller/campus-demo-legend.js"></script>
+    <script src="controller/slideshow-dashboard.js"></script>
+    <script src="controller/street-view.js"></script>
+    <script src="controller/fcc-demo-dashboard.js"></script>
+    <script src="controller/auto-calibration.js"></script>
+    <script src="controller/tour.js"></script>
+    <script src="controller/bg-animation.js"></script>
+    <script src="controller.js"></script>
+    
+    <!-- Auto-fullscreen when launched from launcher -->
+    <script>
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('autofullscreen') === '1') {
+            // Show a brief overlay prompting user to click for fullscreen
+            const overlay = document.createElement('div');
+            overlay.id = 'fullscreen-overlay';
+            overlay.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(0,0,0,0.9);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 99999;
+                    cursor: pointer;
+                    flex-direction: column;
+                    gap: 1rem;
+                ">
+                    <div style="font-size: 3rem;">🎛️</div>
+                    <div style="color: white; font-size: 1.5rem; font-weight: bold;">Click anywhere for fullscreen</div>
+                    <div style="color: #888; font-size: 1rem;">Controller</div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            
+            overlay.addEventListener('click', function() {
+                document.documentElement.requestFullscreen().then(() => {
+                    overlay.remove();
+                }).catch(err => {
+                    console.log('Fullscreen error:', err);
+                    overlay.remove();
+                });
+            });
+            
+            // Auto-remove after 10 seconds if not clicked
+            setTimeout(() => {
+                if (document.getElementById('fullscreen-overlay')) {
+                    overlay.remove();
+                }
+            }, 10000);
+        }
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Map — dtcc-table</title>
+    <!-- Load Leaflet CSS from CDN (no SRI attribute to avoid integrity mismatch blocks) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+    <!-- Import map for Three.js ES modules -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+    <script>
+    // Spacebar in main view triggers segmentation in controller via BroadcastChannel
+    (function() {
+      const channel = new BroadcastChannel('map_controller_channel');
+      document.addEventListener('keydown', (e) => {
+        if (e.code !== 'Space' && e.key !== ' ') return;
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+        e.preventDefault();
+        channel.postMessage({ type: 'sam_segment' });
+      });
+    })();
+    </script>
+  </head>
+  <body>
+    <!-- Left sidebar -->
+    <div id="left-sidebar">
+      <img src="media/dtcc_logo.png" alt="DTCC" class="sidebar-logo logo-top">
+      
+      <!-- Left sidebar controls (top group) -->
+      <div class="icon-controls icon-controls-top">
+        <button id="cfd-simulation-btn" class="icon-btn" title="CFD Wind Simulation">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+            <path d="M2 12h20M7 8h15M7 16h15"/>
+          </svg>
+        </button>
+        
+        <button id="stormwater-btn" class="icon-btn" title="Stormwater Flow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+            <path d="M12 2v10"/>
+            <circle cx="12" cy="16" r="1" fill="currentColor"/>
+            <circle cx="9" cy="19" r="1" fill="currentColor"/>
+            <circle cx="15" cy="19" r="1" fill="currentColor"/>
+          </svg>
+        </button>
+        
+        <button id="slideshow-btn" class="icon-btn" title="Slideshow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+            <polygon points="10,8 10,14 15,11" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="sidebar-title">ACE MR Studio</div>
+      
+      <!-- Left sidebar controls (bottom group) -->
+      <div class="icon-controls icon-controls-bottom">
+        <button id="grid-animation-btn" class="icon-btn" title="Play Grid Animation">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </button>
+        
+        <button id="isovist-btn" class="icon-btn" title="Interactive Isovist">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2 L19 9 L19 15 L12 22 L5 15 L5 9 Z"/>
+            <line x1="12" y1="12" x2="12" y2="6"/>
+          </svg>
+        </button>
+        
+        <button id="fcc-demo-btn" class="icon-btn" title="FCC VR Demo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="14" rx="2"/>
+            <polygon points="10,8 10,14 15,11" fill="currentColor"/>
+            <path d="M6 20h12"/>
+            <path d="M12 18v2"/>
+          </svg>
+        </button>
+        
+        <button id="street-view-btn" class="icon-btn" title="Google Street View">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="3"/>
+            <path d="M12 11v5"/>
+            <circle cx="12" cy="20" r="2"/>
+            <path d="M5 12c0-3.9 3.1-7 7-7s7 3.1 7 7"/>
+          </svg>
+        </button>
+        
+        <button id="bird-sounds-btn" class="icon-btn" title="Bird Sounds">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M21 5c-1.1 0.9-2.3 1.5-3.6 1.7 1.3-0.8 2.3-2 2.7-3.5-1.2 0.7-2.5 1.2-3.9 1.5-1.1-1.2-2.7-1.9-4.5-1.9-3.4 0-6.1 2.7-6.1 6.1 0 0.5 0.1 0.9 0.2 1.4-5.1-0.3-9.6-2.7-12.6-6.4-0.5 0.9-0.8 2-0.8 3.2 0 2.1 1.1 4 2.7 5.1-1 0-2-0.3-2.8-0.8 0 0 0 0.1 0 0.1 0 3 2.1 5.5 4.9 6.1-0.5 0.1-1 0.2-1.6 0.2-0.4 0-0.8 0-1.2-0.1 0.8 2.4 3.1 4.2 5.8 4.2-2.1 1.6-4.7 2.6-7.6 2.6-0.5 0-1 0-1.5-0.1 2.7 1.7 5.9 2.7 9.4 2.7 11.3 0 17.4-9.3 17.4-17.4 0-0.3 0-0.5 0-0.8 1.2-0.9 2.2-1.9 3-3.2z"/>
+          </svg>
+        </button>
+      </div>
+      
+      <img src="media/chalmers_logo.png" alt="Chalmers" class="sidebar-logo logo-bottom">
+    </div>
+
+    <!-- Right sidebar with icon controls -->
+    <div id="right-sidebar">
+      <img src="media/chalmers_logo.png" alt="Chalmers" class="sidebar-logo logo-top">
+      
+      <!-- Right sidebar controls (top group) -->
+      <div class="icon-controls icon-controls-top">
+        <!-- Sun Study button -->
+        <button id="sun-study-btn" class="icon-btn" title="Sun Study">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+        
+        <!-- Hidden GeoJSON import button -->
+        <button id="load-geojson-btn" class="icon-btn" title="Load GeoJSON" style="display:none">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+        </button>
+        <input id="geojson-input" type="file" accept="application/geo+json,application/json,.geojson" style="display:none" />
+        
+        <button id="basemap-toggle" class="icon-btn" title="Switch Basemap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7"/>
+            <path d="M3 7l9-4 9 4M12 3v18"/>
+            <path d="M7 10l5 3 5-3"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="sidebar-title">ACE MR Studio</div>
+      
+      <!-- Right sidebar controls (bottom group) -->
+      <div class="icon-controls icon-controls-bottom">
+        <button id="fullscreen-toggle" class="icon-btn" title="Fullscreen">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          </svg>
+        </button>
+      </div>
+      
+      <img src="media/dtcc_logo.png" alt="DTCC" class="sidebar-logo logo-bottom">
+    </div>
+
+    <!-- Start Overlay for Audio Context -->
+    <div id="start-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; color: white; flex-direction: column; cursor: pointer;">
+      <div style="font-size: 2rem; margin-bottom: 1rem;">Click to Start</div>
+      <div style="font-size: 1rem; opacity: 0.8;">Enables audio and interaction</div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Laser pointer cursor -->
+    <div id="laser-pointer"></div>
+
+    <!-- Grid animation overlay -->
+    <canvas id="grid-animation-canvas"></canvas>
+
+    <!-- CFD simulation canvas -->
+    <canvas id="cfd-simulation-canvas"></canvas>
+
+    <!-- Stormwater flow canvas -->
+    <canvas id="stormwater-canvas"></canvas>
+
+    <!-- Slideshow canvas -->
+    <canvas id="slideshow-canvas"></canvas>
+
+    <!-- Bird Sounds canvas -->
+    <canvas id="bird-sounds-canvas"></canvas>
+
+    <!-- Slideshow metadata overlay -->
+    <div id="slideshow-metadata" class="slideshow-metadata bottom-right"></div>
+
+    <!-- Calibration overlay and panel -->
+    <div id="table-overlay" aria-hidden="true"></div>
+
+    <!-- Controller Link -->
+    <div style="position: fixed; bottom: 10px; right: 70px; z-index: 2000;">
+        <a href="controller.html" target="_blank" style="color: #333; background: rgba(255,255,255,0.8); padding: 5px 10px; text-decoration: none; border-radius: 4px; font-size: 12px; font-family: sans-serif;">Open Controller</a>
+    </div>
+
+    <!-- Load MapLibre GL JS (replaces Leaflet for native rotation/bearing support) -->
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <!-- GeoTIFF.js for reading DEM files directly in browser -->
+    <script src="https://unpkg.com/geotiff@2.1.0/dist-browser/geotiff.js"></script>
+    <script src="main.js"></script>
+    <script src="animations/grid-animation.js"></script>
+    <script src="animations/street-glow-animation.js"></script>
+    <script src="animations/isovist.js"></script>
+    <script src="animations/street_view.js"></script>
+    <script src="animations/fcc-demo.js"></script>
+    <script src="animations/cfd-simulation.js"></script>
+    <script src="animations/stormwater-flow.js"></script>
+    <script src="animations/slideshow.js"></script>
+    <script src="animations/bird-sounds.js"></script>
+    <script src="animations/street-life.js"></script>
+    <script src="animations/trafik.js"></script>
+    <script src="animations/campus-demo.js"></script>
+    <script type="module" src="animations/sun-study.js"></script>
+    
+    <!-- Auto-fullscreen when launched from launcher -->
+    <script>
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('autofullscreen') === '1') {
+            // Show a brief overlay prompting user to click for fullscreen
+            const overlay = document.createElement('div');
+            overlay.id = 'fullscreen-overlay';
+            overlay.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(0,0,0,0.9);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 99999;
+                    cursor: pointer;
+                    flex-direction: column;
+                    gap: 1rem;
+                ">
+                    <div style="font-size: 3rem;">🖥️</div>
+                    <div style="color: white; font-size: 1.5rem; font-weight: bold;">Click anywhere for fullscreen</div>
+                    <div style="color: #888; font-size: 1rem;">Main Display</div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            
+            overlay.addEventListener('click', function() {
+                document.documentElement.requestFullscreen().then(() => {
+                    overlay.remove();
+                }).catch(err => {
+                    console.log('Fullscreen error:', err);
+                    overlay.remove();
+                });
+            });
+            
+            // Auto-remove after 10 seconds if not clicked
+            setTimeout(() => {
+                if (document.getElementById('fullscreen-overlay')) {
+                    overlay.remove();
+                }
+            }, 10000);
+        }
+    })();
+    </script>
+  </body>
+</html>

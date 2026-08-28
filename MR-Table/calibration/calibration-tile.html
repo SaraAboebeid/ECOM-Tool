@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>20×20cm Calibration Tile with ArUco Markers (Large)</title>
+    <style>
+        @media print {
+            @page { 
+                size: A4;
+                margin: 0;
+            }
+            body { 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
+            .no-print { display: none !important; }
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .instructions {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .instructions h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #4CAF50;
+        }
+        
+        .instructions p {
+            margin-bottom: 0.75rem;
+            line-height: 1.6;
+        }
+        
+        .instructions .highlight {
+            background: #333;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .print-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        
+        .print-btn:hover {
+            background: #45a049;
+        }
+        
+        /* The actual tile to print */
+        .print-page {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            margin: 0 auto;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .tile {
+            width: 200mm;
+            height: 200mm;
+            border: 1px dashed #ccc;
+            position: relative;
+            background: white;
+        }
+        
+        /* ArUco markers - 75mm x 75mm each for better camera detection */
+        .aruco-marker {
+            position: absolute;
+            width: 75mm;
+            height: 75mm;
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            border: 1.5mm solid black;
+            background: white;
+        }
+        
+        .aruco-marker .cell {
+            background: white;
+        }
+        
+        .aruco-marker .cell.b {
+            background: black;
+        }
+        
+        .marker-tl { top: 0; left: 0; }
+        .marker-tr { top: 0; right: 0; }
+        .marker-br { bottom: 0; right: 0; }
+        .marker-bl { bottom: 0; left: 0; }
+        
+        /* Marker labels */
+        .marker-label {
+            position: absolute;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .label-tl { top: 77mm; left: 0; }
+        .label-tr { top: 77mm; right: 0; text-align: right; }
+        .label-br { bottom: 77mm; right: 0; text-align: right; }
+        .label-bl { bottom: 77mm; left: 0; }
+        
+        /* Center crosshair for alignment reference */
+        .center-cross {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .center-cross::before,
+        .center-cross::after {
+            content: '';
+            position: absolute;
+            background: #ddd;
+        }
+        
+        .center-cross::before {
+            width: 40mm;
+            height: 0.5mm;
+            left: -20mm;
+            top: -0.25mm;
+        }
+        
+        .center-cross::after {
+            width: 0.5mm;
+            height: 40mm;
+            top: -20mm;
+            left: -0.25mm;
+        }
+        
+        /* Dimension labels */
+        .dim-label {
+            position: absolute;
+            font-size: 10px;
+            color: #999;
+        }
+        
+        .dim-top {
+            top: -8mm;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .dim-left {
+            left: -12mm;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+        }
+        
+        /* Cut line indicators */
+        .cut-corner {
+            position: absolute;
+            width: 5mm;
+            height: 5mm;
+            border: 1px solid #999;
+        }
+        
+        .cut-corner.tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+        .cut-corner.tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+        .cut-corner.br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+        .cut-corner.bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+        
+        /* Info text at bottom of page */
+        .page-info {
+            position: absolute;
+            bottom: 10mm;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            color: #999;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions no-print">
+        <h1>🎯 20×20cm Calibration Tile (Large 7.5cm ArUco Markers)</h1>
+        
+        <div class="highlight">
+            <p><strong>Extra-large markers for reliable detection!</strong> Each 7.5cm marker fills the corners for easy camera identification.</p>
+            <p>Each corner has a unique pattern the camera can identify.</p>
+        </div>
+        
+        <p><strong>Printing:</strong></p>
+        <p>1. Click Print below</p>
+        <p>2. Set scale to <strong>100%</strong> or <strong>Actual Size</strong> (NOT "Fit to Page")</p>
+        <p>3. Grayscale or color - both work!</p>
+        <p>4. Cut along the dashed border</p>
+        
+        <p><strong>Placement:</strong></p>
+        <p>Place the tile with marker #0 (TL) at top-left of your calibration area.</p>
+        <p>Position: 5cm from left edge, 5cm from top edge of the model.</p>
+        
+        <button class="print-btn" onclick="window.print()">🖨️ Print Tile</button>
+    </div>
+    
+    <div class="print-page">
+        <div class="tile">
+            <!-- ArUco markers at corners -->
+            <div class="aruco-marker marker-tl" id="marker-0"></div>
+            <div class="aruco-marker marker-tr" id="marker-1"></div>
+            <div class="aruco-marker marker-br" id="marker-2"></div>
+            <div class="aruco-marker marker-bl" id="marker-3"></div>
+            
+            <!-- Marker labels -->
+            <div class="marker-label label-tl">#0 TL</div>
+            <div class="marker-label label-tr">#1 TR</div>
+            <div class="marker-label label-br">#2 BR</div>
+            <div class="marker-label label-bl">#3 BL</div>
+            
+            <!-- Center cross for reference -->
+            <div class="center-cross"></div>
+            
+            <!-- Dimension labels -->
+            <div class="dim-label dim-top">← 20 cm →</div>
+            <div class="dim-label dim-left">← 20 cm →</div>
+            
+            <!-- Cut corners -->
+            <div class="cut-corner tl"></div>
+            <div class="cut-corner tr"></div>
+            <div class="cut-corner br"></div>
+            <div class="cut-corner bl"></div>
+        </div>
+        
+        <div class="page-info">
+            Calibration Tile 20×20cm with ArUco DICT_4X4_50 | Print at 100% scale | Cut along dashed line
+        </div>
+    </div>
+    
+    <script>
+        // ArUco 4x4 marker patterns (DICT_4X4_50, IDs 0-3)
+        // 6x6 grid: outer ring is always black border, inner 4x4 is the data
+        // 1 = black, 0 = white
+        const arucoPatterns = {
+            0: [
+                [1,1,1,1,1,1],
+                [1,0,1,0,0,1],
+                [1,1,0,1,1,1],
+                [1,0,1,1,0,1],
+                [1,0,1,0,0,1],
+                [1,1,1,1,1,1]
+            ],
+            1: [
+                [1,1,1,1,1,1],
+                [1,1,0,1,1,1],
+                [1,0,0,0,1,1],
+                [1,1,1,1,0,1],
+                [1,0,0,1,1,1],
+                [1,1,1,1,1,1]
+            ],
+            2: [
+                [1,1,1,1,1,1],
+                [1,1,0,0,0,1],
+                [1,0,1,0,0,1],
+                [1,0,0,0,1,1],
+                [1,1,0,0,1,1],
+                [1,1,1,1,1,1]
+            ],
+            3: [
+                [1,1,1,1,1,1],
+                [1,0,0,0,0,1],
+                [1,1,1,0,0,1],
+                [1,0,0,1,1,1],
+                [1,0,1,1,0,1],
+                [1,1,1,1,1,1]
+            ]
+        };
+        
+        function generateMarker(id) {
+            const container = document.getElementById(`marker-${id}`);
+            const pattern = arucoPatterns[id];
+            
+            for (let row = 0; row < 6; row++) {
+                for (let col = 0; col < 6; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell' + (pattern[row][col] ? ' b' : '');
+                    container.appendChild(cell);
+                }
+            }
+        }
+        
+        // Generate all markers
+        generateMarker(0);
+        generateMarker(1);
+        generateMarker(2);
+        generateMarker(3);
+    </script>
+</body>
+</html>

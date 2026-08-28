@@ -1,0 +1,150 @@
+{
+  "slides": [
+    {
+      "media": "building-footprints.geojson",
+      "type": "geojson",
+      "duration": 8000,
+      "transition": "fade",
+      "metadata": {
+        "title": "Building Footprints",
+        "description": "Building footprint data for the study area",
+        "legend": {
+          "items": [
+            { "color": "#ff6600", "label": "Bostad (316 buildings)" },
+            { "color": "#999999", "label": "Komplementbyggnad (224 buildings)" },
+            { "color": "#9966ff", "label": "Samhällsfunktion (186 buildings)" },
+            { "color": "#3388ff", "label": "Verksamhet (53 buildings)" },
+            { "color": "#ffcc00", "label": "Övrig byggnad (5 buildings)" },
+            { "color": "#cc3399", "label": "Industri (3 buildings)" },
+            { "color": "#66cc66", "label": "Ekonomibyggnad (1 building)" }
+          ]
+        },
+        "style": {
+          "colorProperty": "objekttyp",
+          "colorMap": {
+            "Bostad": "#ff6600",
+            "Komplementbyggnad": "#999999",
+            "Samhällsfunktion": "#9966ff",
+            "Verksamhet": "#3388ff",
+            "Övrig byggnad": "#ffcc00",
+            "Industri": "#cc3399",
+            "Ekonomibyggnad": "#66cc66"
+          },
+          "fillOpacity": 0.5,
+          "strokeWidth": 1
+        }
+      }
+    },
+    {
+      "media": "street-network.geojson",
+      "type": "geojson",
+      "duration": 8000,
+      "transition": "fade",
+      "metadata": {
+        "title": "Street Network",
+        "description": "Road and path network in the study area",
+        "legend": {
+          "items": [
+            { "color": "#ff4444", "label": "Footway (602 segments)" },
+            { "color": "#4444ff", "label": "Service roads (214 segments)" },
+            { "color": "#44ff44", "label": "Residential (153 segments)" },
+            { "color": "#ff8800", "label": "Path (149 segments)" },
+            { "color": "#8844ff", "label": "Tertiary (63 segments)" },
+            { "color": "#ffff44", "label": "Living street (37 segments)" },
+            { "color": "#00ffff", "label": "Cycleway (15 segments)" },
+            { "color": "#ff44ff", "label": "Unclassified (11 segments)" },
+            { "color": "#888888", "label": "Pedestrian (2 segments)" }
+          ]
+        },
+        "style": {
+          "colorProperty": "highway",
+          "colorMap": {
+            "footway": "#ff4444",
+            "service": "#4444ff",
+            "residential": "#44ff44",
+            "path": "#ff8800",
+            "tertiary": "#8844ff",
+            "living_street": "#ffff44",
+            "cycleway": "#00ffff",
+            "unclassified": "#ff44ff",
+            "pedestrian": "#888888"
+          },
+          "strokeWidth": 3,
+          "strokeOpacity": 0.8
+        }
+      }
+    },
+    {
+      "media": "satellite_current.png",
+      "type": "image",
+      "duration": 6000,
+      "transition": "fade",
+      "rotation": 90,
+      "fitMode": "stretch",
+      "metadata": {
+        "title": "Current Satellite Imagery",
+        "description": "Recent aerial photography of the study area",
+        "source": "Lantmäteriet (Swedish Land Survey)"
+      }
+    },
+    {
+      "media": "satellite_historic.png",
+      "type": "image",
+      "duration": 6000,
+      "transition": "fade",
+      "rotation": 90,
+      "fitMode": "stretch",
+      "metadata": {
+        "title": "Historic Satellite Imagery",
+        "description": "Composite aerial photography from 1960 ±5 years",
+        "source": "Lantmäteriet (Swedish Land Survey)"
+      }
+    },
+    {
+      "media": "terrain_current.png",
+      "type": "image",
+      "duration": 6000,
+      "transition": "fade",
+      "rotation": 90,
+      "fitMode": "stretch",
+      "metadata": {
+        "title": "Current Terrain",
+        "description": "Terrain elevation map of the study area",
+        "source": "Lantmäteriet (Swedish Land Survey)"
+      }
+    },
+    {
+      "media": "sunstudy.mp4",
+      "type": "video",
+      "duration": 10000,
+      "transition": "fade",
+      "rotation": 0,
+      "fitMode": "stretch",
+      "metadata": {
+        "title": "Sun Study - Winter Solstice",
+        "description": "Solar analysis for winter solstice",
+        "source": "Created by Sanjay Somanath using Ladybug Tools"
+      }
+    },
+    {
+      "media": "wind_simulation.png",
+      "type": "image",
+      "duration": 8000,
+      "transition": "fade",
+      "rotation": 0,
+      "fitMode": "stretch",
+      "metadata": {
+        "title": "Wind Simulation",
+        "description": "Wind velocity at a height of 1.5m above ground",
+        "source": "Chalmers Fraunhofer - Franziska Hunger, Andreas Mark"
+      }
+    }
+  ],
+  "settings": {
+    "loop": true,
+    "autoAdvance": false,
+    "showMetadata": true,
+    "metadataPosition": "bottom-right",
+    "fitMode": "contain"
+  }
+}
