@@ -218,6 +218,17 @@ function updateDashboard(targetId) {
         samSection.style.display = 'none';
     }
     
+    // ECOM energy community dashboard (controller/ecom-dashboard.js)
+    if (targetId === 'ecom-energy-btn') {
+        if (typeof renderEcomDashboard === 'function') {
+            renderEcomDashboard();
+            // The layer may already be up from a previous session of this
+            // panel, in which case it still holds the totals.
+            channel.postMessage({ type: 'ecom_request_summary' });
+        }
+        return;
+    }
+
     // Campus Demo dashboard
     if (targetId === 'campus-demo-btn') {
         if (dashboardTitle) dashboardTitle.textContent = 'Campus Vision';

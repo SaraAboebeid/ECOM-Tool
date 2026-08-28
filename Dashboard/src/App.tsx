@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { Graph } from './components/Graph/';
 import { AnalyticsRow } from './components/analytics/AnalyticsRow';
+import { MRTablePanel } from './components/MRTablePanel';
 import { FlowLegend } from './components/analytics/FlowLegend';
 import { TimelineBar } from './components/TimelineBar';
 import { Legend } from './components/Legend';
@@ -41,6 +42,7 @@ const PanelIcon = ({ d }: { d: string }) => (
 const MembersGlyph = () => <PanelIcon d="M4 21V7l6-3v17M14 21V10l6 3v8M7 10h.01M7 14h.01M17 15h.01" />;
 const GridGlyph = () => <PanelIcon d="M13 2 L4 14h7l-1 8 9-12h-7z" />;
 const OptimizeGlyph = () => <PanelIcon d="M4 19h16M6 15l4-5 3 3 5-7" />;
+const TableGlyph = () => <PanelIcon d="M4 6h16v7H4zM9 17h6M12 13v4M7 20h10" />;
 const ParamsGlyph = () => <PanelIcon d="M4 7h9M17 7h3M4 17h4M12 17h8M15 4v6M8 14v6" />;
 
 /** A quiet heading that groups the console panels below it. */
@@ -430,6 +432,19 @@ function App() {
                         scenarios={scenarios}
                         activeScenario={activeScenario}
                         onScenarioChange={setActiveScenario}
+                      />
+                    </ConsolePanel>
+
+                    <ConsolePanel
+                      title="MR table"
+                      subtitle="project onto the model"
+                      icon={<TableGlyph />}
+                      accent="amber"
+                      maxBodyHeight={340}
+                    >
+                      <MRTablePanel
+                        currentHour={currentHour}
+                        totalHours={meta?.hours ?? 24}
                       />
                     </ConsolePanel>
 

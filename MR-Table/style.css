@@ -153,6 +153,18 @@ html, body {
   background: #d97706;
 }
 
+/* ECOM energy button active state. Needed explicitly: .active is only styled
+   per-button here, so a layer that sets the class without a matching rule
+   toggles silently and looks broken. */
+#ecom-energy-btn.active {
+  background: #00ffe5;
+  color: #0b1020;
+}
+
+#ecom-energy-btn.active:hover {
+  background: #00d9c3;
+}
+
 #map { 
   position: fixed;
   left: 60px;

@@ -14,6 +14,18 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // The MR Studio projection table (MR-Table/, served statically).
+      //   cd MR-Table && python -m http.server 8090
+      //
+      // Proxied rather than linked so the table and this dashboard share an
+      // origin. They talk over BroadcastChannel, which is same-origin only -
+      // opening the table on :8090 directly would put it in a different origin
+      // and no message would ever arrive.
+      '/mr': {
+        target: 'http://localhost:8090',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/mr/, ''),
+      },
     },
   },
 })

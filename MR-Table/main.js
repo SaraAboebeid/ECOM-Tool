@@ -70,6 +70,11 @@ const map = new maplibregl.Map({
   container: 'map',
   style: {
     version: 8,
+    // Declared up front because the CARTO vector basemaps below carry 27 symbol
+    // layers, and MapLibre resolves fonts and icons against the map's style,
+    // not the source's. Without these every label silently fails to draw.
+    glyphs: 'https://tiles.basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf',
+    sprite: 'https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/sprite',
     sources: {},
     layers: []
   },
@@ -94,26 +99,21 @@ const basemaps = {
     tileSize: 256,
     attribution: '&copy; OpenStreetMap contributors'
   },
+  // CARTO's raster CDN now stamps every tile "API KEY REQUIRED" and ignores an
+  // api_key parameter entirely - a fake key returns a byte-identical tile to no
+  // key at all. Their GL vector tiles are the current free service and are
+  // unwatermarked, so these two use the vector style instead of raster tiles.
+  // They are flagged `vector` because they are added a different way below.
   cartoPositron: {
     id: 'carto-pos-source',
-    tiles: [
-      'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-      'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-      'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-      'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
-    ],
-    tileSize: 256,
+    vector: true,
+    styleUrl: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
     attribution: '&copy; CARTO & OpenStreetMap'
   },
   cartoDark: {
     id: 'carto-dark-source',
-    tiles: [
-      'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-      'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-      'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-      'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
-    ],
-    tileSize: 256,
+    vector: true,
+    styleUrl: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
     attribution: '&copy; CARTO & OpenStreetMap'
   },
   esri: {
@@ -139,6 +139,11 @@ map.on('load', () => {
   // add each source and a raster layer; only cartoDark will be visible by default
   Object.keys(basemaps).forEach(key => {
     const bm = basemaps[key];
+    if (bm.vector) {
+      // Only the one that starts visible; the others load when selected.
+      if (key === currentBasemapKey) addVectorBasemap(key, bm);
+      return;
+    }
     map.addSource(bm.id, { type: 'raster', tiles: bm.tiles, tileSize: bm.tileSize });
     map.addLayer({
       id: bm.id + '-layer',
@@ -199,10 +204,87 @@ map.on('load', () => {
 });
 
 // Simple basemap switcher (call setBasemap('cartoDark') etc.)
+// Pull a GL style's sources and layers into the running map.
+//
+// Not map.setStyle: that replaces the whole style and would drop every
+// animation layer added on top. The style's own sources and layers are grafted
+// in instead, prefixed so two basemaps cannot collide, and inserted beneath
+// whatever is already drawn.
+//
+// Loaded lazily - each CARTO style is 93 layers, and adding both up front for
+// the sake of one visible basemap costs a great deal for nothing.
+async function addVectorBasemap(key, bm) {
+  if (bm.added || bm.loading) return;
+  bm.loading = true;
+
+  try {
+    const response = await fetch(bm.styleUrl);
+    if (!response.ok) throw new Error(response.status + ' ' + response.statusText);
+    const style = await response.json();
+
+    Object.keys(style.sources || {}).forEach(name => {
+      const sourceId = bm.id + '-' + name;
+      if (!map.getSource(sourceId)) map.addSource(sourceId, style.sources[name]);
+    });
+
+    // Everything the app draws sits above the basemap, so each layer goes
+    // before the first non-basemap layer already on the map.
+    const existing = map.getStyle().layers || [];
+    const firstAppLayer = existing.find(l => !l.id.startsWith(bm.id + '-'));
+    const beforeId = firstAppLayer ? firstAppLayer.id : undefined;
+
+    bm.layerIds = [];
+    (style.layers || []).forEach(layer => {
+      const copy = Object.assign({}, layer);
+      copy.id = bm.id + '-' + layer.id;
+      if (copy.source) copy.source = bm.id + '-' + copy.source;
+      copy.layout = Object.assign({}, copy.layout, {
+        visibility: key === currentBasemapKey ? 'visible' : 'none'
+      });
+      try {
+        map.addLayer(copy, beforeId);
+        bm.layerIds.push(copy.id);
+      } catch (err) {
+        // One unsupported layer should not cost the whole basemap.
+        console.warn('Basemap layer skipped:', copy.id, err.message);
+      }
+    });
+
+    bm.added = true;
+  } catch (err) {
+    console.error('Could not load vector basemap ' + key, err);
+    if (typeof showToast === 'function') showToast('Basemap ' + key + ' failed to load');
+  } finally {
+    bm.loading = false;
+  }
+}
+
+let currentBasemapKey = 'cartoDark';
+
 function setBasemap(key) {
+  currentBasemapKey = key;
+
   Object.keys(basemaps).forEach(k => {
-    const layerId = basemaps[k].id + '-layer';
-    if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', k === key ? 'visible' : 'none');
+    const bm = basemaps[k];
+    const visible = k === key;
+
+    if (bm.vector) {
+      if (visible && !bm.added) {
+        addVectorBasemap(k, bm);
+        return;
+      }
+      (bm.layerIds || []).forEach(id => {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+        }
+      });
+      return;
+    }
+
+    const layerId = bm.id + '-layer';
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+    }
   });
 }
 

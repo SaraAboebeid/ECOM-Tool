@@ -334,6 +334,99 @@
             padding: 1.25rem;
         }
 
+        .ecom-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        .ecom-metric {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+        .ecom-metric-value {
+            display: block;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #60a5fa;
+            line-height: 1.1;
+        }
+        .ecom-metric-label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+        .ecom-clock {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.75rem;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #60a5fa;
+            font-variant-numeric: tabular-nums;
+        }
+        .ecom-clock-note {
+            font-size: 0.78rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+        }
+        .ecom-period {
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            color: #888;
+        }
+        .ecom-empty {
+            font-size: 0.9rem;
+            color: #888;
+            padding: 0.5rem 0;
+        }
+        .ecom-selected-name {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #f0f0f0;
+            margin-bottom: 0.75rem;
+        }
+        .ecom-selected-rows > div {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid #3a3a3a;
+            font-size: 0.9rem;
+        }
+        .ecom-selected-rows > div:last-child { border-bottom: none; }
+        .ecom-selected-rows span { color: #aaa; }
+        .ecom-selected-rows b { color: #e0e0e0; font-variant-numeric: tabular-nums; }
+        .ecom-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .ecom-legend-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: #d0d0d0;
+        }
+        .ecom-swatch {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+        .ecom-legend-note {
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            color: #888;
+            line-height: 1.45;
+        }
         .dashboard-section-title {
             font-size: 1.1rem;
             text-transform: uppercase;
@@ -828,6 +921,13 @@
         </div>
 
         <div class="control-group">
+            <h3>Energy</h3>
+            <button class="control-btn animation-btn" data-action="click" data-target="ecom-energy-btn" title="ECOM Energy Community">
+                <span class="material-icons">bolt</span>
+            </button>
+        </div>
+
+        <div class="control-group">
             <h3>Visualization</h3>
             <button class="control-btn animation-btn" data-action="click" data-target="slideshow-btn" title="Slideshow">
                 <span class="material-icons">slideshow</span>
@@ -973,6 +1073,7 @@
         </div>
     </aside>
 
+    <script src="controller/ecom-dashboard.js"></script>
     <script src="controller/sun-study-ui.js"></script>
     <script src="controller/isovist-dashboard.js"></script>
     <script src="controller/bird-dashboard.js"></script>
