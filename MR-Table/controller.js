@@ -211,6 +211,16 @@ function updateDashboard(targetId) {
     // Reset titles by default
     if (dashboardTitle) dashboardTitle.textContent = 'Dashboard';
     if (legendTitle) legendTitle.textContent = 'Legend';
+
+    // Hand the metadata band back. Done for every layer rather than on the way
+    // out of the energy one, because there is no "on the way out" - a layer
+    // switch is one button press and this function is all of it.
+    const ecomGroups = document.getElementById('ecom-groups');
+    const metadataTitle = document.getElementById('metadata-title');
+    const metadataBody = document.getElementById('metadata-content');
+    if (ecomGroups) ecomGroups.style.display = 'none';
+    if (metadataBody) metadataBody.style.display = '';
+    if (metadataTitle) metadataTitle.textContent = 'Metadata';
     
     // Hide SAM segmentation section by default (only shown for street-view-btn)
     const samSection = document.getElementById('sam-segmentation-section');
@@ -218,14 +228,32 @@ function updateDashboard(targetId) {
         samSection.style.display = 'none';
     }
     
-    // ECOM energy community dashboard (controller/ecom-dashboard.js)
+    // ECOM energy community dashboard (controller/ecom-dashboard.js) and the
+    // parameter console beside it (controller/ecom-controls.js).
     if (targetId === 'ecom-energy-btn') {
+        // Campus Demo swaps the legend column for its own container and never
+        // puts it back. Restored here, or the console renders into an element
+        // that is still display:none from a previous layer.
+        const campusLegend = document.getElementById('campus-demo-legend');
+        if (campusLegend) campusLegend.style.display = 'none';
+        if (legendContent) legendContent.style.display = '';
+
+        // The parameters take this band while the layer is up; Current View /
+        // Active Layer say nothing the title bar does not already say.
+        if (ecomGroups) ecomGroups.style.display = '';
+        if (metadataBody) metadataBody.style.display = 'none';
+        if (metadataTitle) metadataTitle.textContent = 'Community Parameters';
+
         if (typeof renderEcomDashboard === 'function') {
             renderEcomDashboard();
             // The layer may already be up from a previous session of this
             // panel, in which case it still holds the totals.
             channel.postMessage({ type: 'ecom_request_summary' });
         }
+        // Opening the panel is the signal someone wants the knobs, so the
+        // scenario is fetched now rather than waiting for the layer to be
+        // switched on - the controls are the thing that switches it on.
+        if (window.ecomControls) window.ecomControls.load();
         return;
     }
 
@@ -1637,6 +1665,13 @@ function updateMetadata(layerId) {
     let legend = '<p>Select a simulation to view its legend.</p>';
 
     switch(layerId) {
+        case 'ecom-energy-btn':
+            name = 'Energy Community';
+            desc = 'Hourly electricity flows between campus members, their roof '
+                 + 'arrays, the battery and the grid.';
+            // The controls own this column - see controller/ecom-controls.js.
+            legend = '';
+            break;
         case 'cfd-simulation-btn':
             name = 'CFD Wind Simulation';
             desc = 'Computational Fluid Dynamics simulation showing wind flow patterns around buildings. Colors indicate wind speed.';

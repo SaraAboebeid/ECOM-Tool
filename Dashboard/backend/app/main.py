@@ -24,6 +24,7 @@ from app.schemas.community import CommunitySpec
 from app.services.dispatch import run_dispatch
 from app.services.nordpool import NordPoolClient, NordPoolUnavailable
 from app.services.jobs import runner
+from app.services.mr_layer import build_layer
 from app.services.optimize import run_optimization, solver_status
 from app.services.sweep import run_sweep
 from app.schemas.optimizer_params import OptimizerParameters, describe_parameters
@@ -50,10 +51,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# The Vite dev server runs on a different port.
+# Every dev origin that talks to this API, each on a different port.
+#
+# The MR table is served by its own static server and its controller calls
+# /api/mr/layer directly. Opening it through the dashboard proxy makes it
+# same-origin and needs nothing here, but it is just as often opened straight
+# off :8090 - without that origin listed, the browser blocks the call and the
+# panel can only report that it found no backend.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=[
+        "http://localhost:5173", "http://localhost:5174",   # Vite
+        "http://127.0.0.1:5173", "http://127.0.0.1:5174",
+        "http://localhost:8090", "http://127.0.0.1:8090",   # MR-Table
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -307,3 +318,82 @@ def preview(spec: CommunitySpec) -> dict:
                   for node_id, kind in sorted(built.node_kinds.items())],
         "validation": built.community.validate(),
     }
+
+
+@app.get("/api/scenarios/{name}/years")
+def scenario_years(name: str) -> dict:
+    """Which years of measured demand this scenario can be run for.
+
+    Buildings carry a csv_path ending in the year, and the measured files sit
+    beside each other - _2022.csv, _2023.csv. Rather than let the controller
+    guess, or offer a year picker full of years nobody has data for, the set is
+    derived from the files on disk: a year counts only if EVERY building has one,
+    because a partial year would silently drop members from the community.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise HTTPException(status_code=400, detail="invalid scenario name")
+
+    path = SCENARIO_DIR / f"{name}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no scenario named {name!r}")
+
+    definition = json.loads(path.read_text(encoding="utf-8"))
+    buildings = definition.get("buildings") or []
+
+    year_pattern = re.compile(r"^(?P<stem>.*_)(?P<year>\d{4})(?P<ext>\.csv)$")
+    current: set[str] = set()
+    per_building: list[set[str]] = []
+
+    for building in buildings:
+        csv_path = (building.get("demand") or {}).get("csv_path")
+        if not csv_path:
+            # Demand given as an annual total and a shape has no year to vary.
+            continue
+        match = year_pattern.match(csv_path)
+        if not match:
+            continue
+        current.add(match.group("year"))
+
+        folder = Path(match.group("stem")).parent
+        prefix = Path(match.group("stem")).name
+        found = set()
+        if folder.is_dir():
+            for candidate in folder.glob(f"{prefix}*.csv"):
+                other = year_pattern.match(str(candidate))
+                if other and other.group("stem") == match.group("stem"):
+                    found.add(other.group("year"))
+        per_building.append(found)
+
+    # Only years every building can supply.
+    complete = set.intersection(*per_building) if per_building else set()
+
+    return {
+        "years": sorted(int(y) for y in complete),
+        "current": int(sorted(current)[0]) if len(current) == 1 else None,
+        "buildings_with_measured_demand": len(per_building),
+    }
+
+# --------------------------------------------------------------- MR table
+
+
+@app.post("/api/mr/layer")
+def mr_layer(spec: CommunitySpec) -> dict:
+    """Dispatch a community and return it as the MR table's three GeoJSON layers.
+
+    The table is a static site with no build step and no access to this app's
+    code, so it cannot do the dispatch-to-map transform itself. Its controller
+    posts a definition here and broadcasts the result to the display, which is
+    the same path scripts/export_mr_layer.py takes offline - one transform, so a
+    slider moved at the table and the committed export cannot disagree.
+
+    A one-day campus dispatch is about a second, which is what makes a slider
+    on the controller worth having.
+    """
+    try:
+        dispatch = run_dispatch(spec, nordpool=nordpool)
+    except (CommunityBuildError, PVGISUnavailable, NordPoolUnavailable) as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+
+    return build_layer(dispatch)

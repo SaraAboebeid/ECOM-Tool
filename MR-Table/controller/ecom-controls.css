@@ -1,0 +1,925 @@
+/* ECOM parameter console - controller/ecom-controls.js
+   =====================================================
+   Its own file rather than another block in controller.html: that page already
+   carries 700 lines of inline style, and this panel is a component with a
+   script beside it.
+
+   Sized for fingers on the table's touch screen - 44 px on anything tappable,
+   and a slider tall enough to catch without looking down at it. Colours follow
+   the controller's existing dark panels, and the node colours match the layer
+   so a chip and the marker it hides are the same swatch. */
+
+.ecom-ctl {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.ecom-ctl-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ecom-ctl-btn {
+    flex: 1;
+    min-height: 38px;
+    padding: 0 0.9rem;
+    border-radius: 8px;
+    border: 1px solid #4a4a4a;
+    background: #333;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ecom-ctl-btn:hover { background: #3c3c3c; }
+.ecom-ctl-btn:disabled { opacity: 0.5; cursor: default; }
+.ecom-ctl-btn--primary {
+    background: #1d4ed8;
+    border-color: #2563eb;
+    color: #fff;
+}
+.ecom-ctl-btn--primary:hover { background: #2563eb; }
+
+.ecom-ctl-status {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border-left: 3px solid #4a4a4a;
+    background: #2f2f2f;
+    color: #aaa;
+    /* Backend validation errors name a field path and run long. Wrapped, so a
+       422 is readable at the table instead of clipped to its first clause. */
+    word-break: break-word;
+}
+.ecom-ctl-status--busy { border-left-color: #60a5fa; color: #cfe0ff; }
+.ecom-ctl-status--ok { border-left-color: #00ff5e; color: #cfeedb; }
+.ecom-ctl-status--error { border-left-color: #fa3600; color: #ffd4c8; }
+
+/* ------------------------------------------------------------- accordion */
+
+.ecom-ctl-group {
+    border: 1px solid #3f3f3f;
+    border-radius: 10px;
+    background: #303030;
+    overflow: hidden;
+}
+.ecom-ctl-group.is-open { border-color: #4d5b7a; }
+
+.ecom-ctl-head {
+    width: 100%;
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0 0.85rem;
+    background: none;
+    border: none;
+    color: #e8e8e8;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+.ecom-ctl-head:hover { background: #383838; }
+
+.ecom-ctl-note {
+    margin-left: auto;
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: #8b8b8b;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-ctl-caret {
+    width: 1.1rem;
+    text-align: center;
+    color: #8b8b8b;
+    font-size: 1.05rem;
+}
+
+.ecom-ctl-body {
+    padding: 0.4rem 0.85rem 0.9rem;
+    border-top: 1px solid #3f3f3f;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+/* --------------------------------------------------------------- sliders */
+
+.ecom-ctl-slider { display: block; }
+
+.ecom-ctl-slider-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.85rem;
+    color: #c8c8c8;
+    margin-bottom: 0.2rem;
+}
+.ecom-ctl-slider-head b {
+    color: #60a5fa;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-ctl-slider input[type=range] {
+    width: 100%;
+    height: 30px;
+    accent-color: #60a5fa;
+}
+
+.ecom-ctl-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: #8b8b8b;
+    line-height: 1.45;
+}
+
+.ecom-ctl-sub {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b8b8b;
+    margin-top: 0.3rem;
+}
+
+.ecom-ctl-empty { font-size: 0.85rem; color: #8b8b8b; }
+.ecom-ctl-error { color: #ffb4a0; }
+
+.ecom-ctl-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 40px;
+    font-size: 0.9rem;
+    color: #d8d8d8;
+    cursor: pointer;
+}
+.ecom-ctl-check--inline { min-height: 38px; padding: 0 0.4rem; }
+.ecom-ctl-check input { width: 20px; height: 20px; accent-color: #60a5fa; }
+
+.ecom-ctl-actions { display: flex; gap: 0.5rem; }
+
+/* --------------------------------------------------------------- members */
+
+.ecom-ctl-members {
+    /* 36 buildings do not fit a grid cell. The list scrolls inside its own
+       group rather than pushing every group below it off the screen. */
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #3f3f3f;
+    border-radius: 8px;
+}
+
+.ecom-ctl-member {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 40px;
+    padding: 0 0.6rem;
+    border-bottom: 1px solid #383838;
+    font-size: 0.85rem;
+    color: #d8d8d8;
+    cursor: pointer;
+}
+.ecom-ctl-member:last-child { border-bottom: none; }
+.ecom-ctl-member input { width: 18px; height: 18px; accent-color: #ff00a6; }
+.ecom-ctl-member.is-off { color: #6d6d6d; }
+.ecom-ctl-member-name { flex: 1; }
+.ecom-ctl-member-owner { font-size: 0.72rem; color: #7d7d7d; }
+
+/* ---------------------------------------------------------------- chips */
+
+.ecom-ctl-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.ecom-ctl-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 38px;
+    padding: 0 0.7rem;
+    border-radius: 999px;
+    border: 1px solid #4a4a4a;
+    background: #2b2b2b;
+    color: #8b8b8b;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.ecom-ctl-chip.is-on { background: #3a3a3a; color: #eee; border-color: #6a6a6a; }
+.ecom-ctl-dot { width: 10px; height: 10px; border-radius: 3px; }
+.ecom-ctl-chip:not(.is-on) .ecom-ctl-dot { opacity: 0.35; }
+
+/* ------------------------------------------------------------ optimizer */
+
+.ecom-ctl-params { display: flex; flex-direction: column; gap: 0.15rem; }
+
+.ecom-ctl-param {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 38px;
+    font-size: 0.8rem;
+    color: #c0c0c0;
+}
+.ecom-ctl-param span { flex: 1; }
+.ecom-ctl-param input {
+    width: 86px;
+    padding: 0.3rem 0.4rem;
+    text-align: right;
+    border-radius: 6px;
+    border: 1px solid #4a4a4a;
+    background: #262626;
+    color: #e8e8e8;
+    font-variant-numeric: tabular-nums;
+}
+.ecom-ctl-param.is-changed input { border-color: #60a5fa; }
+.ecom-ctl-param em {
+    width: 62px;
+    font-style: normal;
+    font-size: 0.7rem;
+    color: #7d7d7d;
+}
+.ecom-ctl-stale { color: #fbbf24; }
+
+.ecom-ctl-result {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+.ecom-ctl-result > div {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 0.5rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+}
+.ecom-ctl-result span { font-size: 0.7rem; color: #8b8b8b; }
+.ecom-ctl-result b {
+    font-size: 1rem;
+    color: #60a5fa;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- offline */
+
+.ecom-ctl-offline { font-size: 0.85rem; color: #aaa; line-height: 1.55; }
+.ecom-ctl-offline b { color: #ffb4a0; display: block; margin-bottom: 0.4rem; }
+.ecom-ctl-offline p { margin: 0.5rem 0; }
+
+/* A command to run, on its own line. Only a direct child - a block box dropped
+   into the middle of a sentence breaks it into fragments, which is what the
+   run-it-like-this line and an inline mention of an endpoint used to share. */
+.ecom-ctl-offline > code {
+    display: block;
+    margin: 0.3rem 0;
+    padding: 0.4rem 0.55rem;
+    border-radius: 6px;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    color: #9fd0ff;
+    font-size: 0.78rem;
+    word-break: break-all;
+    user-select: all;
+}
+
+/* A name mentioned mid-sentence. */
+.ecom-ctl-offline p code {
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background: #262626;
+    color: #9fd0ff;
+    font-size: 0.78rem;
+}
+
+.ecom-ctl-offline .ecom-ctl-btn { margin-top: 0.7rem; }
+
+/* ----------------------------------------------------------- the sky hero
+
+   The sun study already draws a sky, and it is the same sky: reusing .sun-sky,
+   .sun-orb, .sun-path, .sun-horizon and .sun-cloud from controller.html means
+   one set of gradients and one sun, not two that drift apart. Only the card
+   around it is new - the sun study fills a hero panel, this has to sit at the
+   top of a console column. */
+
+.ecom-sky-card {
+    position: relative;
+    width: 100%;
+    height: 124px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #2f3647;
+    background: #0b1020;
+}
+
+/* The sun study sizes its orb for a full-width hero; at this scale that one
+   is most of the sky. */
+.ecom-sky-card .sun-orb { width: 34px; height: 34px; }
+.ecom-sky-card .sun-orb::after { inset: -13px; }
+.ecom-sky-card .sun-cloud { width: 84px; height: 26px; }
+
+.ecom-sky-card .sun-time-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    padding: 0.25rem 0.7rem;
+    border-radius: 9px;
+    background: rgba(20, 28, 45, 0.42);
+    backdrop-filter: blur(2px);
+}
+.ecom-sky-card .sun-time {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+}
+.ecom-sky-card .sun-date {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.ecom-sky-card .sunrise-label,
+.ecom-sky-card .sunset-label {
+    position: absolute;
+    bottom: 0.5rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: rgba(20, 28, 45, 0.42);
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.88);
+    font-variant-numeric: tabular-nums;
+}
+.ecom-sky-card .sunrise-label { left: 0.5rem; }
+.ecom-sky-card .sunset-label { right: 0.5rem; }
+
+/* What the roofs are making at the hour the sun is drawn at. Without it the
+   sky is decoration on an energy panel. */
+.ecom-sky-pv {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    text-align: right;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(20, 28, 45, 0.42);
+}
+.ecom-sky-pv b {
+    display: block;
+    font-size: 0.95rem;
+    color: #ffe08a;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+.ecom-sky-pv span {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* ------------------------------------------------------- when: date + hour */
+
+.ecom-when {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem 0.5rem;
+    border: 1px solid #3f3f3f;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    background: #303030;
+    margin-top: -0.55rem;
+}
+
+.ecom-when-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 34px;
+}
+.ecom-when-row label {
+    width: 3rem;
+    flex: none;
+    font-size: 0.78rem;
+    color: #9b9b9b;
+}
+.ecom-when-row input[type=range] {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    accent-color: #60a5fa;
+}
+.ecom-when-row input[type=date] {
+    flex: 1;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 7px;
+    border: 1px solid #4a4a4a;
+    background: #262626;
+    color: #e8e8e8;
+    font-size: 0.85rem;
+    /* The native picker indicator is near-black on this panel. */
+    color-scheme: dark;
+}
+
+.ecom-when-value {
+    width: 4.2rem;
+    flex: none;
+    text-align: right;
+    font-size: 0.8rem;
+    color: #60a5fa;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Says which control costs a round trip, so nobody waits on the free one. */
+.ecom-when-cost {
+    width: 4.2rem;
+    flex: none;
+    text-align: right;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #7d7d7d;
+    line-height: 1.15;
+}
+
+.ecom-when-play {
+    width: 38px;
+    height: 32px;
+    flex: none;
+    border-radius: 8px;
+    border: 1px solid #4a4a4a;
+    background: #333;
+    color: #e0e0e0;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.ecom-when-play:hover { background: #3c3c3c; }
+
+.ecom-when-note {
+    font-size: 0.7rem;
+    color: #fbbf24;
+    line-height: 1.4;
+}
+
+/* Whether a display is actually listening. BroadcastChannel fails silently
+   across origins, so without this the panel looks identical when every control
+   is going nowhere. */
+.ecom-ctl-link {
+    flex: none;
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    cursor: help;
+}
+.ecom-ctl-link.is-live {
+    background: rgba(0, 255, 94, 0.14);
+    border-color: rgba(0, 255, 94, 0.45);
+    color: #7dffb0;
+}
+.ecom-ctl-link.is-idle {
+    background: rgba(96, 165, 250, 0.14);
+    border-color: rgba(96, 165, 250, 0.45);
+    color: #9fd0ff;
+}
+.ecom-ctl-link.is-down {
+    background: rgba(250, 54, 0, 0.14);
+    border-color: rgba(250, 54, 0, 0.5);
+    color: #ffb4a0;
+}
+
+.ecom-when-select {
+    flex: 1;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0.25rem 0.4rem;
+    border-radius: 7px;
+    border: 1px solid #4a4a4a;
+    background: #262626;
+    color: #e8e8e8;
+    font-size: 0.85rem;
+}
+.ecom-when-select--day { flex: 0 0 4.2rem; }
+
+/* ------------------------------------------------------------------ KPIs
+
+   The figures the ECOM dashboard prints in its header, in the controller's
+   metadata band. Same numbers, same formatting, same dispatch - a value read
+   off the table and the same value read off the dashboard must not appear to
+   disagree. Wide band, so tiles across the top and three columns beneath. */
+
+.ecom-kpis { transition: opacity 0.2s ease; }
+
+/* Pending edits mean these describe the previous run. */
+.ecom-kpis.is-stale { opacity: 0.45; }
+
+.ecom-kpi-empty { font-size: 0.9rem; color: #888; }
+
+.ecom-kpi-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.ecom-kpi-tile {
+    position: relative;
+    padding: 0.45rem 0.55rem;
+    border-radius: 9px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-left-width: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.ecom-kpi-icon {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.65rem;
+    font-size: 20px !important;
+    opacity: 0.35;
+}
+
+.ecom-kpi-value {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-kpi-label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8b8b8b;
+}
+
+/* Tinted to the layer's own palette, so a tile and the thing it counts on the
+   table are the same colour. */
+.ecom-kpi-tile--green { border-left-color: #00ff5e; }
+.ecom-kpi-tile--green .ecom-kpi-value,
+.ecom-kpi-tile--green .ecom-kpi-icon { color: #7dffb0; }
+.ecom-kpi-tile--pink { border-left-color: #ff00a6; }
+.ecom-kpi-tile--pink .ecom-kpi-value,
+.ecom-kpi-tile--pink .ecom-kpi-icon { color: #ff86d5; }
+.ecom-kpi-tile--yellow { border-left-color: #eaff00; }
+.ecom-kpi-tile--yellow .ecom-kpi-value,
+.ecom-kpi-tile--yellow .ecom-kpi-icon { color: #f2ff7a; }
+.ecom-kpi-tile--cyan { border-left-color: #00ffe5; }
+.ecom-kpi-tile--cyan .ecom-kpi-value,
+.ecom-kpi-tile--cyan .ecom-kpi-icon { color: #7dfff2; }
+.ecom-kpi-tile--blue { border-left-color: #60a5fa; }
+.ecom-kpi-tile--blue .ecom-kpi-value,
+.ecom-kpi-tile--blue .ecom-kpi-icon { color: #9fd0ff; }
+
+.ecom-kpi-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.5rem 1.1rem;
+}
+
+.ecom-kpi-heading {
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b8b8b;
+    padding-bottom: 0.22rem;
+    margin-bottom: 0.12rem;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.ecom-kpi-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.16rem 0;
+    font-size: 0.78rem;
+    color: #b8b8b8;
+    /* One line per figure: a wrapped label pushed its whole column down and
+       misaligned it against the columns beside it. */
+    white-space: nowrap;
+}
+.ecom-kpi-row span:nth-of-type(2) { overflow: hidden; text-overflow: ellipsis; }
+.ecom-kpi-row span:nth-of-type(2) { flex: 1; }
+.ecom-kpi-row b {
+    color: #e8e8e8;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.ecom-kpi-row-icon {
+    font-size: 16px !important;
+    color: #6d6d6d;
+}
+
+.ecom-kpi-stale {
+    margin-top: 0.7rem;
+    font-size: 0.78rem;
+    color: #fbbf24;
+}
+
+/* --------------------------------------------------- the parameter band
+
+   Seven groups across the full width of the bottom panel. In the narrow column
+   they used to live in, reaching the seventh meant scrolling past six; here
+   they sit side by side and an open one grows without moving the others.
+
+   align-items: start so a closed group keeps its own height instead of
+   stretching to match the tallest open one in its row. */
+
+.ecom-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    align-items: start;
+    gap: 0.6rem;
+}
+
+/* The members list is the one group tall enough to set the row height on its
+   own, so it gets a shorter window here than it had in the column. */
+.ecom-groups .ecom-ctl-members { max-height: 210px; }
+
+/* In the band a group is a card in its own right, not one of a stack. */
+.ecom-groups .ecom-ctl-group { background: #2f2f2f; }
+
+/* --------------------------------------------- colour and branding
+
+   Each parameter group takes the colour of what it governs, so a group header
+   and the markers it moves on the table are the same colour. The palette is the
+   layer's own (animations/ecom-energy.js KIND_COLORS), not a second one. */
+
+.ecom-ctl-head-icon {
+    font-size: 18px !important;
+    color: #8b8b8b;
+    transition: color 0.15s ease;
+}
+
+.ecom-ctl-group {
+    border-left-width: 3px;
+    border-left-color: #4a4a4a;
+}
+
+.ecom-ctl-group--pink   { border-left-color: #ff00a6; }
+.ecom-ctl-group--yellow { border-left-color: #eaff00; }
+.ecom-ctl-group--orange { border-left-color: #fa3600; }
+.ecom-ctl-group--cyan   { border-left-color: #00ffe5; }
+.ecom-ctl-group--green  { border-left-color: #00ff5e; }
+.ecom-ctl-group--violet { border-left-color: #a78bfa; }
+.ecom-ctl-group--slate  { border-left-color: #7d8da3; }
+
+/* The icon only takes the accent once the group is open, so a band of seven
+   closed groups is not seven competing colours. */
+.ecom-ctl-group--pink.is-open   .ecom-ctl-head-icon { color: #ff86d5; }
+.ecom-ctl-group--yellow.is-open .ecom-ctl-head-icon { color: #f2ff7a; }
+.ecom-ctl-group--orange.is-open .ecom-ctl-head-icon { color: #ff9b7a; }
+.ecom-ctl-group--cyan.is-open   .ecom-ctl-head-icon { color: #7dfff2; }
+.ecom-ctl-group--green.is-open  .ecom-ctl-head-icon { color: #7dffb0; }
+.ecom-ctl-group--violet.is-open .ecom-ctl-head-icon { color: #c4b5fd; }
+.ecom-ctl-group--slate.is-open  .ecom-ctl-head-icon { color: #b8c4d4; }
+
+.ecom-ctl-group.is-open { border-color: #4d5b7a; }
+.ecom-ctl-group--pink.is-open   { border-left-color: #ff00a6; }
+.ecom-ctl-group--yellow.is-open { border-left-color: #eaff00; }
+.ecom-ctl-group--orange.is-open { border-left-color: #fa3600; }
+.ecom-ctl-group--cyan.is-open   { border-left-color: #00ffe5; }
+.ecom-ctl-group--green.is-open  { border-left-color: #00ff5e; }
+.ecom-ctl-group--violet.is-open { border-left-color: #a78bfa; }
+.ecom-ctl-group--slate.is-open  { border-left-color: #7d8da3; }
+
+/* Which control costs a dispatch, in one line instead of a hint per row. */
+.ecom-when-legend {
+    display: flex;
+    gap: 0.8rem;
+    padding-top: 0.15rem;
+    font-size: 0.66rem;
+    color: #7d7d7d;
+}
+.ecom-when-legend span { display: flex; align-items: center; gap: 0.3rem; }
+.ecom-when-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.ecom-when-dot--cost { background: #fbbf24; }
+.ecom-when-dot--free { background: #00ff5e; }
+
+.ecom-when-select--year { flex: 0 0 5rem; }
+
+/* -------------------------------------------------------------- roof PV
+
+   One row per building: how much roof it has, how much of it is covered, and
+   what that comes to in kW. The old control was a single "total roof area"
+   that scaled every existing array in proportion - it moved a number without
+   ever saying which building the panels went on. */
+
+.ecom-roofs {
+    /* Taller now that the chrome above it is one line. */
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid #3f3f3f;
+    border-radius: 8px;
+}
+
+.ecom-roof {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4.6rem minmax(70px, 1.1fr) 3.6rem;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 36px;
+    padding: 0 0.55rem;
+    border-bottom: 1px solid #383838;
+    font-size: 0.8rem;
+    color: #9b9b9b;
+}
+.ecom-roof:last-child { border-bottom: none; }
+
+/* Carrying panels reads brighter than not. */
+.ecom-roof.is-on { color: #e0e0e0; }
+.ecom-roof.is-on .ecom-roof-kw { color: #f2ff7a; }
+
+.ecom-roof-name {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A measured array, not one this panel invented from a footprint. */
+.ecom-roof-tag {
+    flex: none;
+    font-style: normal;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.05rem 0.28rem;
+    border-radius: 4px;
+    background: rgba(234, 255, 0, 0.14);
+    color: #f2ff7a;
+    cursor: help;
+}
+
+.ecom-roof-area {
+    font-size: 0.7rem;
+    color: #7d7d7d;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-roof input[type=range] {
+    width: 100%;
+    height: 22px;
+    accent-color: #eaff00;
+}
+
+.ecom-roof-kw {
+    text-align: right;
+    font-size: 0.75rem;
+    color: #7d7d7d;
+    font-variant-numeric: tabular-nums;
+}
+
+/* No footprint in the campus file, so no roof area we can size from. */
+.ecom-roof.is-blocked { opacity: 0.45; }
+.ecom-roof-blocked { text-align: center; color: #6d6d6d; }
+
+/* -------------------------------------------------- legend & view, merged */
+
+.ecom-view { display: flex; flex-direction: column; gap: 0.35rem; }
+.ecom-view .ecom-ctl-chip { min-height: 34px; }
+
+/* The building tapped on the table, inside Performance rather than in a card
+   that said "tap a building" whether or not anything had been. */
+.ecom-pick {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+    padding: 0.5rem 0.65rem;
+    margin-bottom: 0.7rem;
+    border-radius: 9px;
+    background: rgba(255, 0, 166, 0.09);
+    border: 1px solid rgba(255, 0, 166, 0.35);
+    font-size: 0.78rem;
+    color: #b8b8b8;
+}
+.ecom-pick-icon { font-size: 17px !important; color: #ff86d5; }
+.ecom-pick-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #f0f0f0;
+    margin-right: 0.2rem;
+}
+.ecom-pick b { color: #e8e8e8; font-variant-numeric: tabular-nums; }
+
+/* The roof list is the control in this tab, so the chrome around it is one
+   line: a count and three small buttons, not a paragraph, a sub-heading and
+   three full-width ones. */
+.ecom-roof-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.ecom-roof-bar > span {
+    flex: 1;
+    font-size: 0.72rem;
+    color: #8b8b8b;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-mini {
+    min-height: 30px;
+    padding: 0 0.55rem;
+    border-radius: 7px;
+    border: 1px solid #4a4a4a;
+    background: #333;
+    color: #d0d0d0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ecom-mini:hover { background: #3c3c3c; }
+
+.ecom-tabs + .ecom-roof-bar { margin-top: 0.1rem; }
+
+/* The two cards in the right column carry the controller's default 1.25rem
+   card padding, which at this density is most of the space between them. */
+#dashboard-content .dashboard-card { padding: 0.75rem 0.85rem; }
+#dashboard-content .dashboard-container { gap: 0.6rem; }
+#dashboard-content .dashboard-section-title { margin-bottom: 0.5rem; }
+
+.ecom-view { gap: 0.3rem; }
+.ecom-view .ecom-ctl-chip { min-height: 30px; font-size: 0.75rem; }
+.ecom-view .ecom-legend-note { margin-top: 0.35rem; font-size: 0.72rem; }
+
+/* ------------------------------------------------------------------ busy
+
+   Shown from the touch until the display confirms it has redrawn. Fixed to the
+   viewport rather than placed in a panel: a re-render replaces panel contents,
+   and the one thing that must not blink out mid-flight is the indicator that
+   something is in flight. */
+
+.ecom-busy {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translate(-50%, -14px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 1.1rem;
+    border-radius: 999px;
+    background: rgba(20, 24, 34, 0.94);
+    border: 1px solid #4d5b7a;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+    color: #e8e8e8;
+    font-size: 0.9rem;
+    font-weight: 600;
+    /* Not display:none - it fades, so a fast dispatch does not flash. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.ecom-busy.is-on {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.ecom-busy-spinner {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    border-top-color: #60a5fa;
+    animation: ecomSpin 0.7s linear infinite;
+}
+
+@keyframes ecomSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* The projector runs unattended; a reader who cannot see motion still gets
+   the text, and the spinner simply stops. */
+@media (prefers-reduced-motion: reduce) {
+    .ecom-busy-spinner { animation: none; }
+    .ecom-busy { transition: none; }
+}

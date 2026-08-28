@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Map Controller</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="controller/ecom-controls.css" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         *, *::before, *::after {
@@ -1040,7 +1041,15 @@
         </section>
 
         <section id="metadata-section" class="panel-section" style="grid-column: 1 / -1; grid-row: 2;">
-            <h2>Metadata</h2>
+            <h2 id="metadata-title">Metadata</h2>
+            <!-- The energy community's parameter groups take this band while
+                 that layer is up. Full width suits them: seven groups in a
+                 column meant scrolling past six to reach the seventh.
+                 A sibling of #metadata-content rather than a replacement for
+                 it, following #campus-demo-legend: updateMetadata() writes into
+                 #meta-layer and #meta-desc on every button press and bails out
+                 if they have gone, so they have to survive. -->
+            <div id="ecom-groups" class="ecom-groups" style="display: none;"></div>
             <div id="metadata-content">
                 <div class="metadata-item">
                     <div class="metadata-label">Current View</div>
@@ -1073,6 +1082,7 @@
         </div>
     </aside>
 
+    <script src="controller/ecom-controls.js"></script>
     <script src="controller/ecom-dashboard.js"></script>
     <script src="controller/sun-study-ui.js"></script>
     <script src="controller/isovist-dashboard.js"></script>

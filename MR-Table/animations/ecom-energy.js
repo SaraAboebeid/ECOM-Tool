@@ -49,6 +49,14 @@
     const LABEL_INK = '#eef6ff';
     const LABEL_CHIP = '#1e293b';
 
+    // A layer's own reason to hide a feature, kept apart from the view
+    // filters the controller sends. The two are combined rather than one
+    // overwriting the other: without this, filtering to "buildings only" would
+    // also drop the hasData test and start drawing footprints with no dispatch.
+    const FILL_BASE_FILTER = ['==', ['get', 'hasData'], 1];
+    const SOLAR_BASE_FILTER = ['==', ['get', 'has_pv'], 1];
+    const NODE_BASE_FILTER = ['!=', ['get', 'kind'], 'pv'];
+
     const ecomChannel = new BroadcastChannel('map_controller_channel');
 
     let layerData = null;
@@ -86,6 +94,15 @@
             return false;
         }
 
+        prepare();
+        isLoaded = true;
+        return true;
+    }
+
+    // The per-feature fields the paint expressions read, derived once whichever
+    // way the data arrived - fetched from the export, or pushed by the
+    // controller after a slider moved.
+    function prepare() {
         hourCount = (layerData.ecom_meta && layerData.ecom_meta.hours) || 24;
 
         // Flows start at zero width; setHour fills them in.
@@ -107,8 +124,16 @@
             feature.properties.solarNow = 0;
         });
 
-        isLoaded = true;
-        return true;
+        // The scale every line width and the "hide small flows" filter are
+        // measured against. Derived here rather than on the first setFlowHour,
+        // because applyFilters can run before any hour has been set - against a
+        // ceiling of zero it would measure the threshold in kW instead of as a
+        // share, and hide almost nothing.
+        flowCeiling = 0;
+        flowData.features.forEach(function (feature) {
+            const peak = feature.properties.peak || 0;
+            if (peak > flowCeiling) flowCeiling = peak;
+        });
     }
 
     // --------------------------------------------------------------- layers
@@ -131,7 +156,7 @@
                 id: FILL_LAYER_ID,
                 type: 'fill',
                 source: SOURCE_ID,
-                filter: ['==', ['get', 'hasData'], 1],
+                filter: FILL_BASE_FILTER,
                 paint: { 'fill-opacity': 0 }
             });
         }
@@ -312,7 +337,7 @@
                 id: SOLAR_LAYER_ID,
                 type: 'circle',
                 source: NODES_SOURCE_ID,
-                filter: ['==', ['get', 'has_pv'], 1],
+                filter: SOLAR_BASE_FILTER,
                 paint: {
                     'circle-color': KIND_COLORS.pv,
                     'circle-blur': 0.75,
@@ -330,7 +355,7 @@
                 id: NODE_LAYER_ID,
                 type: 'symbol',
                 source: NODES_SOURCE_ID,
-                filter: ['!=', ['get', 'kind'], 'pv'],
+                filter: NODE_BASE_FILTER,
                 layout: {
                     'icon-image': [
                         'case',
@@ -455,13 +480,6 @@
         const source = map.getSource(FLOWS_SOURCE_ID);
         if (!source) return;
 
-        if (!flowCeiling) {
-            flowData.features.forEach(function (feature) {
-                const peak = feature.properties.peak || 0;
-                if (peak > flowCeiling) flowCeiling = peak;
-            });
-        }
-
         flowData.features.forEach(function (feature) {
             const series = feature.properties.flow_hourly || [];
             const now = series[hour] || 0;
@@ -550,6 +568,132 @@
         });
     }
 
+    // ------------------------------------------------- live layer + filters
+
+    // A layer pushed by the controller, already dispatched by the backend.
+    //
+    // This is the same payload the committed export holds, built by the same
+    // app/services/mr_layer.py, so a slider moved at the table and a file
+    // written by export_mr_layer.py cannot draw two different pictures.
+    function applyLayer(layer) {
+        if (!layer || !layer.buildings || !layer.nodes || !layer.flows) return;
+
+        layerData = layer.buildings;
+        nodeData = layer.nodes;
+        flowData = layer.flows;
+
+        // prepare() re-derives flowCeiling from these flows, so the width scale
+        // follows the new community rather than the one it replaced.
+        prepare();
+
+        // Marked loaded so a later activate() uses what was pushed rather than
+        // fetching the export over the top of it.
+        isLoaded = true;
+
+        // Sources are written even while the layer is off. They outlive a
+        // deactivation - only their visibility is toggled - so skipping this
+        // would leave the previous community sitting in them, and switching the
+        // layer back on would draw it.
+        const fillSource = map.getSource(SOURCE_ID);
+        const nodeSource = map.getSource(NODES_SOURCE_ID);
+        const flowSource = map.getSource(FLOWS_SOURCE_ID);
+        if (fillSource) fillSource.setData(layerData);
+        if (nodeSource) nodeSource.setData(nodeData);
+        if (flowSource) flowSource.setData(flowData);
+
+        if (!isActive) return;
+
+        applyFilters(viewFilters);
+        setHour(currentHour % hourCount);
+
+        ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });
+
+        // Sent after the sources are written, not before: this is the
+        // controller's evidence that the table actually redrew, rather than
+        // that a message was sent into the void.
+        ecomChannel.postMessage({
+            type: 'ecom_applied',
+            period: (layer.meta && layer.meta.period) || '',
+            hours: hourCount,
+            nodes: nodeData.features.length,
+            flows: flowData.features.length
+        });
+    }
+
+    // What the controller's View group hides. Held so a layer swap can put the
+    // same filters back - MapLibre filters live on the layer, and the data
+    // under them changing does not re-apply them, but a re-added layer starts
+    // unfiltered.
+    let viewFilters = null;
+
+    function applyFilters(filters) {
+        viewFilters = filters || null;
+        if (!map.getLayer(NODE_LAYER_ID)) return;
+
+        if (!filters) {
+            map.setFilter(NODE_LAYER_ID, NODE_BASE_FILTER);
+            map.setFilter(SOLAR_LAYER_ID, SOLAR_BASE_FILTER);
+            map.setFilter(FLOW_LAYER_ID, null);
+            map.setFilter(FLOW_GLOW_ID, null);
+            return;
+        }
+
+        const kinds = filters.kinds || null;
+        const owners = filters.owners || null;
+        // A fraction of the largest flow in the horizon, matching how the line
+        // widths are scaled - an absolute kW threshold would mean something
+        // different every time the community is resized.
+        const minShare = filters.minFlow || 0;
+
+        const nodeTests = [NODE_BASE_FILTER];
+        const solarTests = [SOLAR_BASE_FILTER];
+        if (kinds && kinds.length) {
+            nodeTests.push(['in', ['get', 'kind'], ['literal', kinds]]);
+        }
+        if (owners && owners.length) {
+            // Community assets - the grid tie, the battery, the charge point -
+            // carry an owner only sometimes. Keeping the unowned ones visible
+            // stops an owner filter from cutting the flows off at both ends.
+            nodeTests.push(['any',
+                ['==', ['get', 'owner'], ''],
+                ['in', ['get', 'owner'], ['literal', owners]]
+            ]);
+            solarTests.push(['any',
+                ['==', ['get', 'owner'], ''],
+                ['in', ['get', 'owner'], ['literal', owners]]
+            ]);
+        }
+        if (typeof filters.minCapacity === 'number' && filters.minCapacity > 0) {
+            nodeTests.push(['any',
+                ['!', ['has', 'capacity']],
+                ['>=', ['get', 'capacity'], filters.minCapacity]
+            ]);
+        }
+
+        const ceiling = flowCeiling || 1;
+        const flowTests = [];
+        if (kinds && kinds.length) {
+            flowTests.push(['in', ['get', 'kind'], ['literal', kinds]]);
+        }
+        if (owners && owners.length) {
+            flowTests.push(['any',
+                ['==', ['get', 'source_owner'], ''],
+                ['in', ['get', 'source_owner'], ['literal', owners]],
+                ['==', ['get', 'target_owner'], ''],
+                ['in', ['get', 'target_owner'], ['literal', owners]]
+            ]);
+        }
+        if (minShare > 0) {
+            flowTests.push(['>=', ['get', 'peak'], minShare * ceiling]);
+        }
+
+        map.setFilter(NODE_LAYER_ID, ['all'].concat(nodeTests));
+        map.setFilter(SOLAR_LAYER_ID, ['all'].concat(solarTests));
+        const flowFilter = flowTests.length ? ['all'].concat(flowTests) : null;
+        map.setFilter(FLOW_LAYER_ID, flowFilter);
+        map.setFilter(FLOW_GLOW_ID, flowFilter);
+    }
+
     // -------------------------------------------------------------- control
 
     async function activate() {
@@ -557,6 +701,9 @@
         if (!ok) return;
 
         addLayers();
+        // Filters can be set before the layer is switched on; the layers are
+        // built unfiltered, so they are re-applied here rather than lost.
+        applyFilters(viewFilters);
         setLayerVisibility(true);
         isActive = true;
         setHour(currentHour);
@@ -686,6 +833,30 @@
         if (data.type === 'ecom_request_summary' && isActive) {
             ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });
         }
+
+        // A re-dispatched community, sent by the controller's parameter panel.
+        if (data.type === 'ecom_layer' && data.layer) {
+            applyLayer(data.layer);
+        }
+
+        // View filters. These hide what is already on the table, so they need
+        // no dispatch and are applied as the control moves.
+        if (data.type === 'ecom_filters') {
+            applyFilters(data.filters || null);
+        }
+
+        // "Is anyone out there?" - answered whether or not the layer is on, so
+        // the controller can tell a display that is present but idle from no
+        // display at all. A page loaded before this handler existed stays
+        // silent, which is the answer the controller needs about that too.
+        if (data.type === 'ecom_ping') {
+            ecomChannel.postMessage({
+                type: 'ecom_pong',
+                active: isActive,
+                hours: hourCount,
+                hour: currentHour
+            });
+        }
     });
 
     window.ecomEnergyLayer = {
@@ -693,6 +864,8 @@
         deactivate: deactivate,
         toggle: toggle,
         setHour: setHour,
+        applyLayer: applyLayer,
+        applyFilters: applyFilters,
         getSummary: buildSummary,
         isActive: function () { return isActive; }
     };

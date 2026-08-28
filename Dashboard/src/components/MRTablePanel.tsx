@@ -117,13 +117,13 @@ export const MRTablePanel: React.FC<MRTablePanelProps> = ({ currentHour, totalHo
             : 'Nothing sent yet.'}
       </p>
 
-      {/* Honest about what exists: the transport works today, the layer it
-          targets is the next piece of work in MR-Table/animations/. */}
-      <p className="mr-note mr-note--pending">
-        <b>Reset view</b> works against the table as it stands. <b>Toggle energy
-        layer</b> and <b>Follow the timeline</b> are wired here but need
-        <code> animations/ecom-energy.js</code> on the table side before they do
-        anything.
+      {/* The layer these target now exists, so the note says where the knobs
+          live rather than what is missing. */}
+      <p className="mr-note mr-note--callout">
+        The table has its own copy of this console: open its controller and the
+        Community Controls column drives the same parameters, re-dispatching
+        through <code>/api/mr/layer</code>. Editing here and editing there are
+        two hands on one table - the last apply wins.
       </p>
     </div>
   );

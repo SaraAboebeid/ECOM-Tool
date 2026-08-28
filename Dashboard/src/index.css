@@ -1609,7 +1609,7 @@ input[type='range']:active:not(:disabled)::-moz-range-thumb {
   color: rgb(var(--console-ink) / 0.62);
 }
 
-.mr-note--pending {
+.mr-note--callout {
   padding: 7px 8px;
   border-radius: 8px;
   background: rgb(var(--console-ink) / 0.05);
