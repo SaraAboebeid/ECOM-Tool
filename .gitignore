@@ -23,6 +23,12 @@
 !/Optimization/LEC-Opt/
 !/Optimization/GH_Components/
 
+# The ACE MR Studio interactive map (Nodal-Works/interactive_map, branch dev),
+# grafted with its history. Its media/ is ~169 MB of demo video, GIFs and STL
+# meshes; that is large but every file is under GitHub's 100 MB limit and the
+# app will not run without it, so it is committed rather than ignored.
+!/MR-Table/
+
 # LEC-Opt ships sample workbooks; they are small and belong with the model.
 # Its own .gitignore still applies inside that tree.
 
