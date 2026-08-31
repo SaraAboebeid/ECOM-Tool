@@ -35,19 +35,47 @@
     const FLOW_LAYER_ID = 'ecom-flows';
     const FLOW_GLOW_ID = 'ecom-flows-glow';
 
-    // The grid tie, kept from the light design. Everything else went back to
-    // icons; this one did not, because the grid connection is the only node
-    // whose behaviour is worth watching rather than identifying - it is where
-    // the campus is drawing from the outside world, and how hard.
-    const GRID_RING_IDS = ['ecom-grid-ring-a', 'ecom-grid-ring-b'];
-    const GRID_HALO_ID = 'ecom-grid-halo';
-    const GRID_CORE_ID = 'ecom-grid-core';
-    const GRID_FILTER = ['==', ['get', 'kind'], 'grid'];
+    // Two nodes get a pulse rather than just a marker: the grid tie and the
+    // battery. Both are places energy passes THROUGH in a direction, and the
+    // direction is the thing worth watching - every other node is identified
+    // well enough by an icon.
+    //
+    // One rule for both, which is what lets them be read together:
+    //
+    //     rings travelling outward   energy leaving this node
+    //     rings travelling inward    energy arriving at it
+    //
+    // So the grid pushes rings out while it supplies the campus and draws them
+    // in while the campus exports; the battery pushes out while discharging and
+    // draws in while charging.
+    const PULSES = [
+        { key: 'grid', kind: 'grid' },
+        { key: 'battery', kind: 'battery' }
+    ].map(function (spec) {
+        return {
+            key: spec.key,
+            kind: spec.kind,
+            filter: ['==', ['get', 'kind'], spec.kind],
+            // Each node needs its own field: the two can be moving energy in
+            // opposite directions in the same hour, which is exactly what a
+            // battery charging off the grid looks like.
+            field: spec.key + 'Now',
+            haloId: 'ecom-' + spec.key + '-halo',
+            coreId: 'ecom-' + spec.key + '-core',
+            ringIds: ['ecom-' + spec.key + '-ring-a', 'ecom-' + spec.key + '-ring-b'],
+            direction: 1
+        };
+    });
 
-    // Node and flow colours follow the 2D dashboard, so a building is the same
-    // colour in both tools. A link takes the colour of the node it flows out
-    // of, which is the rule the dashboard's map uses.
-    const KIND_COLORS = {
+    const PULSE_LAYER_IDS = PULSES.reduce(function (ids, pulse) {
+        return ids.concat([pulse.haloId, pulse.coreId], pulse.ringIds);
+    }, []);
+
+    // A link takes the colour of the node it flows out of, which is the rule
+    // the dashboard's map uses. The values come from ecom-palette.js so the
+    // legend on the controller cannot drift from what the table draws; the
+    // literals are a fallback for the layer being loaded on its own.
+    const KIND_COLORS = (window.ECOM_PALETTE && window.ECOM_PALETTE.semantic) || {
         building: '#ff00a6',
         pv: '#eaff00',
         grid: '#00ffe5',
@@ -131,8 +159,14 @@
 
         nodeData.features.forEach(function (feature) {
             feature.properties.solarNow = 0;
-            feature.properties.gridNow = 0;
+            feature.properties.storedNow = 0;
+            feature.properties.fillStep = 0;
+            PULSES.forEach(function (pulse) {
+                feature.properties[pulse.field] = 0;
+            });
         });
+
+        buildStorageCurve();
 
         // The scale every line width and the "hide small flows" filter are
         // measured against. Derived here rather than on the first setFlowHour,
@@ -143,6 +177,69 @@
         flowData.features.forEach(function (feature) {
             const peak = feature.properties.peak || 0;
             if (peak > flowCeiling) flowCeiling = peak;
+        });
+    }
+
+    // -------------------------------------------------------------- storage
+
+    // How full the battery is, hour by hour.
+    //
+    // Charge is not reported: the export carries flows, not a state of charge.
+    // So it is integrated from what goes in and out, against the battery's own
+    // capacity, which the node does carry. The starting level is taken as the
+    // least that keeps the run non-negative - a battery cannot discharge energy
+    // it never had. That is a floor rather than a reading, so a battery that
+    // starts fuller than it ever needs looks emptier here than it is.
+    let storageCurve = null;
+
+    function buildStorageCurve() {
+        storageCurve = null;
+        if (!nodeData || !flowData) return;
+
+        const battery = nodeData.features.find(function (feature) {
+            return feature.properties.kind === 'battery';
+        });
+        if (!battery) return;
+
+        const id = battery.properties.id;
+        const hours = (flowData.features[0] &&
+                       (flowData.features[0].properties.flow_hourly || []).length) || 0;
+        if (!hours) return;
+
+        const net = new Array(hours).fill(0);
+        flowData.features.forEach(function (feature) {
+            const props = feature.properties;
+            const series = props.flow_hourly || [];
+            const sign = props.target === id ? 1 : (props.source === id ? -1 : 0);
+            if (!sign) return;
+            for (let h = 0; h < hours; h += 1) net[h] += sign * (series[h] || 0);
+        });
+
+        // The level at the START of each hour, so a discharge during hour h
+        // reads as the drop between h and h+1 rather than having already
+        // happened before the hour is drawn.
+        let level = 0;
+        const before = net.map(function (delta) {
+            const at = level;
+            level += delta;
+            return at;
+        });
+
+        const capacity = battery.properties.capacity || 0;
+        const floor = Math.max(0, -Math.min.apply(null, before.concat([level])));
+
+        if (capacity > 0) {
+            storageCurve = before.map(function (value) {
+                return Math.max(0, Math.min(1, (floor + value) / capacity));
+            });
+            return;
+        }
+
+        const low = Math.min.apply(null, before);
+        const high = Math.max.apply(null, before);
+        const span = high - low;
+        storageCurve = before.map(function (value) {
+            return span > 0 ? (value - low) / span : 0;
         });
     }
 
@@ -177,7 +274,7 @@
         // an error event and drops the layer - so the halo, core and rings were
         // silently never added while every other layer came up fine.
         ensureNodesSource();
-        addGridPulse();
+        addPulseLayers();
         addNodeLayers();
         bindInteraction();
     }
@@ -189,6 +286,12 @@
     //
     // Colour follows the source node, and width follows magnitude, matching
     // the 2D viewer exactly.
+    //
+    // A gradient from the source colour to the target colour was tried here and
+    // taken out again. It needed one layer per source/target pair, because
+    // line-gradient cannot be data-driven, and it could not be dashed at all -
+    // line-dasharray disables line-gradient. Losing the travelling dash cost
+    // more legibility than the second colour bought.
     function addFlowLayers() {
         if (!map.getSource(FLOWS_SOURCE_ID)) {
             map.addSource(FLOWS_SOURCE_ID, { type: 'geojson', data: flowData });
@@ -210,9 +313,12 @@
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': colorByKind,
-                    'line-width': ['+', 2, ['*', 16, ['get', 'share']]],
-                    'line-opacity': ['*', 0.22, ['get', 'share']],
-                    'line-blur': 5
+                    // Narrow and faint: around the grid tie a dozen glows
+                    // overlapped into one mass and the individual runs stopped
+                    // being separable.
+                    'line-width': ['+', 1.5, ['*', 11, ['get', 'share']]],
+                    'line-opacity': ['*', 0.16, ['get', 'share']],
+                    'line-blur': 4
                 }
             });
         }
@@ -225,8 +331,10 @@
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': colorByKind,
-                    'line-width': ['+', 0.8, ['*', 7, ['get', 'share']]],
-                    'line-opacity': ['*', 0.95, ['get', 'share']]
+                    'line-width': ['+', 0.8, ['*', 6.5, ['get', 'share']]],
+                    // Just short of full, so two crossing lines still read as
+                    // two rather than as a join.
+                    'line-opacity': ['*', 0.82, ['get', 'share']]
                 }
             });
         }
@@ -324,7 +432,85 @@
         return ctx.getImageData(0, 0, size, size);
     }
 
+    // The battery marker, drawn at a given charge.
+    //
+    // A ring says which way energy is moving; it cannot say how much is in
+    // there. This is the marker itself filling from the bottom, which is the
+    // one reading a battery has that nothing else on the table does.
+    //
+    // Eleven images rather than one animated shape: MapLibre has no way to
+    // paint part of a symbol, so the level is baked in and the layer picks the
+    // nearest tenth. Registered once, at activation.
+    const FILL_STEPS = 10;
+
+    function makeBatteryIcon(level) {
+        const size = ICON_SIZE * ICON_SCALE;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const colour = KIND_COLORS.battery;
+
+        const r = 7 * ICON_SCALE;
+        const pad = 1.5 * ICON_SCALE;
+        const w = size - pad * 2;
+
+        const shell = function () {
+            ctx.beginPath();
+            ctx.moveTo(pad + r, pad);
+            ctx.arcTo(pad + w, pad, pad + w, pad + w, r);
+            ctx.arcTo(pad + w, pad + w, pad, pad + w, r);
+            ctx.arcTo(pad, pad + w, pad, pad, r);
+            ctx.arcTo(pad, pad, pad + w, pad, r);
+            ctx.closePath();
+        };
+
+        // An empty vessel: outline only, so an empty battery still reads as a
+        // battery rather than disappearing.
+        shell();
+        ctx.fillStyle = 'rgba(10, 20, 24, 0.72)';
+        ctx.fill();
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = 1.8 * ICON_SCALE;
+        ctx.stroke();
+
+        // The charge, rising from the bottom.
+        if (level > 0) {
+            ctx.save();
+            shell();
+            ctx.clip();
+            const height = w * level;
+            ctx.fillStyle = colour;
+            ctx.globalAlpha = 0.9;
+            ctx.fillRect(pad, pad + w - height, w, height);
+            ctx.restore();
+        }
+
+        // The glyph over the top, in whichever ink stays legible against the
+        // part of the marker it happens to sit on.
+        ctx.strokeStyle = level > 0.55 ? '#04212a' : colour;
+        ctx.lineWidth = 1.9 * ICON_SCALE;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.save();
+        const inset = 4 * ICON_SCALE;
+        ctx.translate(inset, inset);
+        ctx.scale((size - inset * 2) / 24, (size - inset * 2) / 24);
+        ctx.stroke(new Path2D(GLYPHS.battery));
+        ctx.restore();
+
+        return ctx.getImageData(0, 0, size, size);
+    }
+
     function registerIcons() {
+        for (let step = 0; step <= FILL_STEPS; step += 1) {
+            const name = 'ecom-battery-fill-' + step;
+            if (!map.hasImage(name)) {
+                map.addImage(name, makeBatteryIcon(step / FILL_STEPS),
+                             { pixelRatio: ICON_SCALE });
+            }
+        }
+
         Object.keys(GLYPHS).forEach(function (kind) {
             const name = 'ecom-' + kind;
             if (!map.hasImage(name)) {
@@ -344,99 +530,100 @@
     // as the travelling dashes - MapLibre cannot keyframe a paint property, and
     // one timer keeps the two motions in step instead of beating against each
     // other.
-    const GRID_RING_MIN = 11;
-    const GRID_RING_MAX = 52;
+    const RING_MIN = 11;
+    const RING_MAX = 52;
 
-    function addGridPulse() {
-        if (!map.getLayer(GRID_HALO_ID)) {
-            map.addLayer({
-                id: GRID_HALO_ID,
-                type: 'circle',
-                source: NODES_SOURCE_ID,
-                filter: GRID_FILTER,
-                paint: {
-                    'circle-color': KIND_COLORS.grid,
-                    'circle-radius': ['+', 18, ['*', 30, ['get', 'gridNow']]],
-                    'circle-opacity': ['+', 0.18, ['*', 0.42, ['get', 'gridNow']]],
-                    'circle-blur': 1
-                }
-            });
-        }
+    function addPulseLayers() {
+        PULSES.forEach(function (pulse) {
+            const colour = KIND_COLORS[pulse.kind];
+            const level = ['get', pulse.field];
 
-        // A lit disc for the marker to sit on. The halo alone reads as a smudge
-        // behind an icon; this is what makes the grid tie look like a source
-        // rather than another square.
-        if (!map.getLayer(GRID_CORE_ID)) {
-            map.addLayer({
-                id: GRID_CORE_ID,
-                type: 'circle',
-                source: NODES_SOURCE_ID,
-                filter: GRID_FILTER,
-                paint: {
-                    'circle-color': KIND_COLORS.grid,
-                    'circle-radius': ['+', 9, ['*', 4, ['get', 'gridNow']]],
-                    'circle-opacity': ['+', 0.45, ['*', 0.35, ['get', 'gridNow']]],
-                    'circle-blur': 0.55
-                }
-            });
-        }
+            if (!map.getLayer(pulse.haloId)) {
+                map.addLayer({
+                    id: pulse.haloId,
+                    type: 'circle',
+                    source: NODES_SOURCE_ID,
+                    filter: pulse.filter,
+                    paint: {
+                        'circle-color': colour,
+                        'circle-radius': ['+', 18, ['*', 30, level]],
+                        'circle-opacity': ['+', 0.18, ['*', 0.42, level]],
+                        'circle-blur': 1
+                    }
+                });
+            }
 
-        GRID_RING_IDS.forEach(function (id) {
-            if (map.getLayer(id)) return;
-            map.addLayer({
-                id: id,
-                type: 'circle',
-                source: NODES_SOURCE_ID,
-                filter: GRID_FILTER,
-                paint: {
-                    'circle-color': 'rgba(0,0,0,0)',
-                    'circle-stroke-color': KIND_COLORS.grid,
-                    'circle-stroke-width': 2.6,
-                    'circle-stroke-opacity': 0,
-                    'circle-radius': GRID_RING_MIN,
-                    'circle-blur': 0.15
-                }
+            // A lit disc for the marker to sit on. The halo alone reads as a
+            // smudge behind an icon; this is what makes the node look like
+            // something energy is passing through.
+            if (!map.getLayer(pulse.coreId)) {
+                map.addLayer({
+                    id: pulse.coreId,
+                    type: 'circle',
+                    source: NODES_SOURCE_ID,
+                    filter: pulse.filter,
+                    paint: {
+                        'circle-color': colour,
+                        'circle-radius': ['+', 9, ['*', 4, level]],
+                        'circle-opacity': ['+', 0.45, ['*', 0.35, level]],
+                        'circle-blur': 0.55
+                    }
+                });
+            }
+
+            pulse.ringIds.forEach(function (id) {
+                if (map.getLayer(id)) return;
+                map.addLayer({
+                    id: id,
+                    type: 'circle',
+                    source: NODES_SOURCE_ID,
+                    filter: pulse.filter,
+                    paint: {
+                        'circle-color': 'rgba(0,0,0,0)',
+                        'circle-stroke-color': colour,
+                        'circle-stroke-width': 2.6,
+                        'circle-stroke-opacity': 0,
+                        'circle-radius': RING_MIN,
+                        'circle-blur': 0.15
+                    }
+                });
             });
         });
     }
 
-    // Half a cycle apart, so one ring is always going out as the other fades.
-    // A single ring reads as a blink.
     // Slower than the travelling dashes: a ring has to be followable across its
-    // whole run, and at 34 steps it crossed before the eye could track it.
-    const GRID_RING_STEPS = 52;
-    let gridRingStep = 0;
+    // whole run, and faster than this it crossed before the eye could track it.
+    const RING_STEPS = 52;
+    let ringStep = 0;
 
-    // +1 while the grid supplies the campus, -1 while the campus feeds it back.
-    let gridDirection = 1;
+    function paintRings() {
+        PULSES.forEach(function (pulse) {
+            pulse.ringIds.forEach(function (id, index) {
+                if (!map.getLayer(id)) return;
 
-    function paintGridRings() {
-        GRID_RING_IDS.forEach(function (id, index) {
-            if (!map.getLayer(id)) return;
-            let phase = ((gridRingStep / GRID_RING_STEPS) + index * 0.5) % 1;
+                // Half a cycle apart, so one ring is always going out as the
+                // other fades. A single ring reads as a blink.
+                let phase = ((ringStep / RING_STEPS) + index * 0.5) % 1;
 
-            // Direction carries the meaning. Rings leave the grid tie while it
-            // is supplying the campus, and travel back into it when the campus
-            // is feeding the grid instead. Without this the animation looked
-            // the same either way, which is worse than no animation.
-            if (gridDirection < 0) phase = 1 - phase;
+                // Direction is the meaning. Inward means energy arriving: the
+                // campus exporting to the grid, or the battery charging.
+                if (pulse.direction < 0) phase = 1 - phase;
 
-            map.setPaintProperty(id, 'circle-radius',
-                GRID_RING_MIN + phase * (GRID_RING_MAX - GRID_RING_MIN));
+                map.setPaintProperty(id, 'circle-radius',
+                    RING_MIN + phase * (RING_MAX - RING_MIN));
 
-            // Faint at both ends, brightest in the middle of the run.
-            //
-            // Ramping straight down from full made the ring brightest when it
-            // was smallest, so the eye caught each new one at the centre and
-            // read the whole thing as collapsing inward. Peaking mid-flight
-            // gives it something to follow across.
-            const travel = gridDirection < 0 ? 1 - phase : phase;
-            const visibility = Math.sin(Math.PI * travel);
-            map.setPaintProperty(id, 'circle-stroke-opacity',
-                ['*', visibility * 0.95,
-                     ['+', 0.4, ['*', 0.6, ['get', 'gridNow']]]]);
-            // Thinning as it goes reads as spreading out rather than looming.
-            map.setPaintProperty(id, 'circle-stroke-width', 3.2 - travel * 1.8);
+                // Faint at both ends, brightest in the middle of the run.
+                // Ramping down from full made the ring brightest when it was
+                // smallest, so the eye caught each new one at the centre and
+                // read the whole thing as collapsing inward.
+                const travel = pulse.direction < 0 ? 1 - phase : phase;
+                const visibility = Math.sin(Math.PI * travel);
+                map.setPaintProperty(id, 'circle-stroke-opacity',
+                    ['*', visibility * 0.95,
+                         ['+', 0.4, ['*', 0.6, ['get', pulse.field]]]]);
+                // Thinning as it goes reads as spreading out rather than looming.
+                map.setPaintProperty(id, 'circle-stroke-width', 3.2 - travel * 1.8);
+            });
         });
     }
 
@@ -483,6 +670,10 @@
                     'icon-image': [
                         'case',
                         ['==', ['get', 'has_pv'], 1], 'ecom-building-pv',
+                        // The battery picks the image for its current charge.
+                        ['==', ['get', 'kind'], 'battery'],
+                        ['concat', 'ecom-battery-fill-',
+                            ['to-string', ['get', 'fillStep']]],
                         ['concat', 'ecom-', ['get', 'kind']]
                     ],
                     // Community assets read a step larger - they serve every
@@ -520,9 +711,9 @@
     function setLayerVisibility(visible) {
         const value = visible ? 'visible' : 'none';
         [
-            FILL_LAYER_ID, SOLAR_LAYER_ID, GRID_HALO_ID, GRID_CORE_ID,
+            FILL_LAYER_ID, SOLAR_LAYER_ID,
             FLOW_GLOW_ID, FLOW_LAYER_ID, NODE_LAYER_ID
-        ].concat(GRID_RING_IDS).forEach(function (id) {
+        ].concat(PULSE_LAYER_IDS).forEach(function (id) {
             if (map.getLayer(id)) {
                 map.setLayoutProperty(id, 'visibility', value);
             }
@@ -552,17 +743,19 @@
         [0, 3, 3, 1], [0, 3.5, 3, 0.5]
     ];
 
-    let pulseTimer = null;
     let pulseStep = 0;
+
+    let pulseTimer = null;
 
     function startPulse() {
         if (pulseTimer !== null) return;
         pulseTimer = setInterval(function () {
             if (!map.getLayer(FLOW_LAYER_ID)) return;
             pulseStep = (pulseStep + 1) % DASH_SEQUENCE.length;
-            map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray', DASH_SEQUENCE[pulseStep]);
-            gridRingStep = (gridRingStep + 1) % GRID_RING_STEPS;
-            paintGridRings();
+            map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray',
+                                 DASH_SEQUENCE[pulseStep]);
+            ringStep = (ringStep + 1) % RING_STEPS;
+            paintRings();
         }, 55);
     }
 
@@ -587,45 +780,73 @@
         // own busiest hour. Scaled to itself rather than to the largest flow on
         // the table: the question the pulse answers is "is the campus leaning
         // on the grid right now", which is about this node over the day.
-        // Net across the grid tie: what it sends the campus, less what the
-        // campus sends back. Counting only outgoing flows made an exporting
-        // campus look identical to an idle one.
-        let gridNow = 0;
+        // Net through each pulsing node: what it sends out, less what it takes
+        // in. Counting one direction only made an importing node and an
+        // exporting one look identical, which is the whole point of the pulse.
+        const level = {};
         if (flowData) {
-            const netAt = function (h) {
-                let net = 0;
-                flowData.features.forEach(function (feature) {
-                    const props = feature.properties;
-                    const value = (props.flow_hourly || [])[h] || 0;
-                    if (props.source === 'GRID') net += value;
-                    else if (props.target === 'GRID') net -= value;
-                });
-                return net;
-            };
-
             const hours = (flowData.features[0] &&
                 (flowData.features[0].properties.flow_hourly || []).length) || 0;
 
-            // Against the busiest hour either way, so import and export share
-            // one scale and a big export is not dwarfed by a bigger import.
-            let peak = 0;
-            for (let h = 0; h < hours; h += 1) {
-                const magnitude = Math.abs(netAt(h));
-                if (magnitude > peak) peak = magnitude;
-            }
+            PULSES.forEach(function (pulse) {
+                const node = nodeData.features.find(function (feature) {
+                    return feature.properties.kind === pulse.kind;
+                });
+                if (!node) {
+                    pulse.direction = 1;
+                    level[pulse.field] = 0;
+                    return;
+                }
+                const id = node.properties.id;
 
-            const net = netAt(hour);
-            gridDirection = net < 0 ? -1 : 1;
-            gridNow = peak > 0 ? Math.abs(net) / peak : 0;
+                const netAt = function (h) {
+                    let net = 0;
+                    flowData.features.forEach(function (feature) {
+                        const props = feature.properties;
+                        const value = (props.flow_hourly || [])[h] || 0;
+                        if (props.source === id) net += value;
+                        else if (props.target === id) net -= value;
+                    });
+                    return net;
+                };
+
+                // Against its own busiest hour in either direction, so each
+                // node is measured against itself. The battery moves three
+                // orders of magnitude less than the grid tie and on a shared
+                // scale would never light at all.
+                let peak = 0;
+                for (let h = 0; h < hours; h += 1) {
+                    const magnitude = Math.abs(netAt(h));
+                    if (magnitude > peak) peak = magnitude;
+                }
+
+                const net = netAt(hour);
+                // Positive means energy leaving the node: the grid supplying
+                // the campus, or the battery discharging.
+                pulse.direction = net < 0 ? -1 : 1;
+                level[pulse.field] = peak > 0 ? Math.abs(net) / peak : 0;
+            });
         }
+
+        const stored = storageCurve ? (storageCurve[hour] || 0) : 0;
 
         nodeData.features.forEach(function (feature) {
             const series = feature.properties.solar_hourly || [];
             const peak = series.length ? Math.max.apply(null, series) : 0;
             const now = series[hour] || 0;
             feature.properties.solarNow = peak > 0 ? now / peak : 0;
-            feature.properties.gridNow =
-                feature.properties.kind === 'grid' ? gridNow : 0;
+            if (feature.properties.kind === 'battery') {
+                feature.properties.storedNow = stored;
+                // Which of the eleven images to show. Rounded rather than
+                // floored so a nearly full battery does not read as 90%.
+                feature.properties.fillStep = Math.round(stored * FILL_STEPS);
+            }
+
+            PULSES.forEach(function (pulse) {
+                feature.properties[pulse.field] =
+                    feature.properties.kind === pulse.kind
+                        ? (level[pulse.field] || 0) : 0;
+            });
         });
 
         source.setData(nodeData);

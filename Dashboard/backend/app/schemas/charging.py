@@ -126,6 +126,28 @@ class ChargePointSpec(BaseModel):
 
     location: Optional[Coordinates] = None
 
+    # Where it actually stands, in WGS84. `location` above is a Rhino-frame
+    # x/y like the buildings carry, which means nothing to a map; these are what
+    # the MR table places the marker by. Optional, because a charger with no
+    # position still dispatches perfectly well - it just gets drawn with the
+    # other community assets at the middle of the campus.
+    #
+    # Named lat/lon rather than reusing Coordinates so it cannot be confused
+    # with the Rhino frame, matching PVPlantSpec which already does this.
+    lat: Optional[Annotated[float, Field(ge=-90, le=90)]] = None
+    lon: Optional[Annotated[float, Field(ge=-180, le=180)]] = None
+
+    @model_validator(mode="after")
+    def _position_is_complete(self) -> "ChargePointSpec":
+        # Half a coordinate places nothing, and silently falling back to the
+        # campus centre would hide the typo that caused it.
+        if (self.lat is None) != (self.lon is None):
+            raise ValueError(
+                "a charge point needs both lat and lon, or neither; "
+                f"got lat={self.lat!r} lon={self.lon!r}"
+            )
+        return self
+
     @model_validator(mode="after")
     def _v2g_flags_must_agree(self) -> "ChargePointSpec":
         # ChargePoint sizes the daily budget from ev.v2g_enabled and ignores its

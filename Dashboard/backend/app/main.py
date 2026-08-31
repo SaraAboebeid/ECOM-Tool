@@ -396,4 +396,11 @@ def mr_layer(spec: CommunitySpec) -> dict:
     except ValueError as err:
         raise HTTPException(status_code=422, detail=str(err)) from err
 
-    return build_layer(dispatch)
+    # Assets that know where they stand. The dispatcher prefixes charge point
+    # ids with CP_, matching builders/community.py.
+    placements = {
+        f"CP_{cp.name}": (cp.lon, cp.lat)
+        for cp in spec.charge_points
+        if cp.lat is not None and cp.lon is not None
+    }
+    return build_layer(dispatch, placements=placements)

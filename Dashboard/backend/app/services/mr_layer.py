@@ -143,13 +143,18 @@ def _endpoint(value):
     return value if isinstance(value, str) else value.get("id", "")
 
 
-def build_layer(dispatch: dict) -> dict:
+def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
     """{buildings, nodes, flows, meta} from a /api/dispatch result.
 
     `buildings` is the footprint collection with an `ecom` block per member and
     an explicit null on everything else, so the table can style "not a member"
     rather than drawing it as zero demand.
+
+    `placements` maps a node id to (lon, lat) for assets that know where they
+    stand - a charge point on a particular street, say. Anything without one
+    keeps the old behaviour and is spread around the middle of the campus.
     """
+    placements = placements or {}
     nodes = {n["id"]: n for n in dispatch["nodes"] if n.get("type") == "building"}
     type_of = {n["id"]: n.get("type") for n in dispatch["nodes"]}
     owner_of = {n["id"]: (n.get("owner") or "") for n in dispatch["nodes"]}
@@ -263,9 +268,15 @@ def build_layer(dispatch: dict) -> dict:
               if n.get("type") in ("grid", "battery", "charge_point")
               or is_community_pv(n)]
     for index, node in enumerate(assets):
-        angle = (2 * math.pi * index) / max(1, len(assets))
-        lon = anchor[0] + ANCHOR_SPREAD_DEG * math.cos(angle) * 1.85
-        lat = anchor[1] + ANCHOR_SPREAD_DEG * math.sin(angle)
+        fixed = placements.get(node["id"])
+        if fixed is not None:
+            lon, lat = fixed
+        else:
+            # No position of its own: out on the ring with the rest, so the
+            # markers and the lines between them do not collapse onto a point.
+            angle = (2 * math.pi * index) / max(1, len(assets))
+            lon = anchor[0] + ANCHOR_SPREAD_DEG * math.cos(angle) * 1.85
+            lat = anchor[1] + ANCHOR_SPREAD_DEG * math.sin(angle)
         placed[node["id"]] = (lon, lat)
         node_features.append({
             "type": "Feature",
@@ -327,6 +338,10 @@ def build_layer(dispatch: dict) -> dict:
                 "source": source,
                 "target": target,
                 "kind": type_of.get(source) or "unknown",
+                # Both ends, so the table can run a line as a gradient from the
+                # colour of what it leaves to the colour of what it reaches.
+                # `kind` alone said only where it came from.
+                "target_kind": type_of.get(target) or "unknown",
                 "source_owner": owner_of.get(source, ""),
                 "target_owner": owner_of.get(target, ""),
                 "peak": round(max(series), 2),

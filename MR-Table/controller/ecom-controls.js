@@ -76,12 +76,16 @@
     // value the finger came to rest on is worth sending.
     const APPLY_DEBOUNCE_MS = 450;
 
+    // Colours from ecom-palette.js, so a swatch here is the same colour the
+    // table draws. They used to be a second hardcoded list, which is how a
+    // legend ends up describing a picture nobody is looking at.
+    const PALETTE = (window.ECOM_PALETTE && window.ECOM_PALETTE.semantic) || {};
     const NODE_KINDS = [
-        { key: 'building', label: 'Buildings', color: '#ff00a6' },
-        { key: 'pv', label: 'Solar', color: '#eaff00' },
-        { key: 'grid', label: 'Grid', color: '#00ffe5' },
-        { key: 'battery', label: 'Battery', color: '#fa3600' },
-        { key: 'charge_point', label: 'Charging', color: '#00ff5e' }
+        { key: 'building', label: 'Buildings', color: PALETTE.building || '#ff00a6' },
+        { key: 'pv', label: 'Solar', color: PALETTE.pv || '#eaff00' },
+        { key: 'grid', label: 'Grid', color: PALETTE.grid || '#00ffe5' },
+        { key: 'battery', label: 'Battery', color: PALETTE.battery || '#fa3600' },
+        { key: 'charge_point', label: 'Charging', color: PALETTE.charge_point || '#00ff5e' }
     ];
 
     const state = {
@@ -291,6 +295,120 @@
     // added roof matches what the backend would assume on its own.
     const ADDED_ROOF_TILT = 30;
 
+    // The most of a roof that can actually carry panels.
+    //
+    // 100% is not a roof anyone can build: plant, walkways, access, edge
+    // setbacks and self-shading between rows all take space. The surveyed
+    // arrays on this campus sit at 70-93% of their own measured mounting
+    // surface, and those surfaces already exclude the obstructions - a whole
+    // footprint does not. 80 is the honest ceiling for a footprint-sized roof,
+    // and offering 100 invited a number nobody could build.
+    const MAX_ROOF_COVERAGE = 80;
+
+    // Where a charge point can go.
+    //
+    // Read out of the same street network the table draws, rather than a list
+    // of coordinates typed in here: a charger belongs on a road, and this is
+    // the road they are being put on. A position along it is one number, which
+    // is a far easier thing to set on a touch screen than a pair of decimals.
+    const CP_STREET = 'Gibraltarvallsvägen';
+    const STREET_URL = 'media/street-network.geojson';
+
+    let streetPath = null;          // [[lon, lat], ...] south to north
+
+    async function loadStreet() {
+        if (streetPath) return streetPath;
+        try {
+            const response = await fetch(STREET_URL, { cache: 'no-store' });
+            if (!response.ok) throw new Error(STREET_URL + ': ' + response.status);
+            const data = await response.json();
+            const points = [];
+            (data.features || []).forEach(function (feature) {
+                const name = (feature.properties || {}).name || '';
+                // The file is latin-1 in places, so match on the stem rather
+                // than the accented spelling.
+                if (name.indexOf('Gibraltarvallsv') !== 0) return;
+                const coords = feature.geometry.coordinates;
+                const flat = typeof coords[0][0] === 'number'
+                    ? coords
+                    : coords.reduce(function (all, part) { return all.concat(part); }, []);
+                points.push.apply(points, flat);
+            });
+            points.sort(function (a, b) { return a[1] - b[1]; });
+            streetPath = points.length ? points : null;
+        } catch (error) {
+            streetPath = null;
+        }
+        return streetPath;
+    }
+
+    /** A point some fraction of the way along the street, 0 south to 1 north. */
+    function alongStreet(fraction) {
+        if (!streetPath || !streetPath.length) return null;
+        const at = Math.max(0, Math.min(1, fraction));
+        const index = Math.round(at * (streetPath.length - 1));
+        return streetPath[index];
+    }
+
+    /** How far along the street a charge point currently sits. */
+    function streetPosition(cp) {
+        if (!streetPath || cp.lat == null) return 0.5;
+        let best = 0;
+        let bestGap = Infinity;
+        streetPath.forEach(function (point, index) {
+            const gap = Math.abs(point[1] - cp.lat) + Math.abs(point[0] - cp.lon);
+            if (gap < bestGap) { bestGap = gap; best = index; }
+        });
+        return streetPath.length > 1 ? best / (streetPath.length - 1) : 0.5;
+    }
+
+    function chargePoints() {
+        return state.working.charge_points || [];
+    }
+
+    /** A charger like the ones already there, on a free stretch of the street. */
+    function addChargePoint() {
+        const points = chargePoints();
+        const template = points[0];
+
+        let name = 'CP ' + (points.length + 1);
+        const taken = new Set(points.map(function (cp) { return cp.name; }));
+        let n = points.length + 1;
+        while (taken.has(name)) { n += 1; name = 'CP ' + n; }
+
+        // Spread down the street rather than stacked on the last one.
+        const spot = alongStreet((points.length + 1) / 6) || [null, null];
+
+        const cp = {
+            name: name,
+            capacity: template ? template.capacity : 22,
+            charger_type: template ? template.charger_type : 'A',
+            is_v2g: false,
+            owner: template ? template.owner : 'Akademiska Hus',
+            ev: {
+                // A vehicle per charger: the toolkit computes demand for
+                // exactly one, so a charger without it draws nothing at all.
+                name: name + ' EV',
+                capacity: 60,
+                max_charging_power: 11,
+                daily_distance: 40,
+                v2g_enabled: false,
+                availability: template && template.ev && template.ev.availability
+                    ? template.ev.availability.slice()
+                    : [1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+            }
+        };
+        if (spot[0] != null) { cp.lon = spot[0]; cp.lat = spot[1]; }
+
+        state.working.charge_points = points.concat([cp]);
+    }
+
+    function removeChargePoint(name) {
+        state.working.charge_points = chargePoints().filter(function (cp) {
+            return cp.name !== name;
+        });
+    }
+
     /** Plants belonging to a building, in the working definition. */
     function roofPlants(name) {
         const building = (state.working.buildings || []).find(function (b) {
@@ -340,6 +458,9 @@
 
     /** Set a building's roof coverage, creating or removing the plant. */
     function setRoofCoverage(name, percent) {
+        // Clamped here as well as on the control, so a surveyed roof that
+        // already sits above the ceiling is not pushed higher by a bulk action.
+        percent = Math.min(percent, MAX_ROOF_COVERAGE);
         const building = (state.working.buildings || []).find(function (b) {
             return b.name === name;
         });
@@ -397,7 +518,6 @@
     }
 
     function battery() { return (state.working.batteries || [])[0] || null; }
-    function chargePoint() { return (state.working.charge_points || [])[0] || null; }
 
     /** How many days the period really covers.
      *
@@ -969,8 +1089,15 @@
                         (((state.working.grid || {}).selling_price || {}).fixed === undefined
                          ? 'N/A'
                          : state.working.grid.selling_price.fixed.toFixed(2) + ' SEK/kWh')) +
-                    row('ev_station', 'Vehicle-to-grid',
-                        (chargePoint() ? (chargePoint().is_v2g ? 'on' : 'off') : 'none')) +
+                    row('ev_station', 'Charge points',
+                        (function () {
+                            const points = chargePoints();
+                            if (!points.length) return 'none';
+                            const v2g = points.filter(function (cp) {
+                                return cp.is_v2g;
+                            }).length;
+                            return points.length + (v2g ? ', ' + v2g + ' V2G' : '');
+                        }())) +
                 '</div>' +
             '</div>' +
 
@@ -1192,7 +1319,8 @@
                     '</span>' +
                     (usable
                         ? '<input type="range" data-roof="' + esc(b.name) + '"' +
-                              ' min="0" max="100" step="5" value="' + coverage + '">' +
+                              ' min="0" max="' + MAX_ROOF_COVERAGE + '" step="5"' +
+                              ' value="' + Math.min(coverage, MAX_ROOF_COVERAGE) + '">' +
                           '<b class="ecom-roof-kw">' +
                               (coverage > 0 ? Math.round(roofKw(b.name)) + ' kW' : 'off') +
                           '</b>'
@@ -1204,8 +1332,9 @@
             Math.round(roofTotal).toLocaleString() + ' kW',
             '<div class="ecom-roof-bar">' +
                 '<span>' + withPv.length + ' of ' + buildings.length + '</span>' +
-                '<button type="button" class="ecom-mini" data-roofs="50">50%</button>' +
-                '<button type="button" class="ecom-mini" data-roofs="100">100%</button>' +
+                '<button type="button" class="ecom-mini" data-roofs="40">40%</button>' +
+                '<button type="button" class="ecom-mini" data-roofs="' +
+                    MAX_ROOF_COVERAGE + '">' + MAX_ROOF_COVERAGE + '%</button>' +
                 '<button type="button" class="ecom-mini" data-roofs="0">Clear</button>' +
             '</div>' +
             '<div class="ecom-roofs">' + rows + '</div>');
@@ -1259,29 +1388,75 @@
     }
 
     function mobilityGroup() {
-        const cp = chargePoint();
-        if (!cp || !cp.ev) {
+        const points = chargePoints();
+
+        if (!points.length) {
             return group('mobility', 'Mobility', 'none',
-                '<p class="ecom-ctl-empty">No charge point in this community.</p>');
+                '<span class="ecom-ctl-hint">No charge points in this ' +
+                'community.</span>' +
+                '<div class="ecom-ctl-actions">' +
+                    '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
+                        ' data-action="cp-add">Add a charge point</button>' +
+                '</div>');
         }
-        return group('mobility', 'Mobility', Math.round(cp.capacity) + ' kW',
-            slider({
-                name: 'charger_kw', label: 'Charger power',
-                value: cp.capacity, min: 4, max: 150, step: 1, unit: 'kW'
-            }) +
-            slider({
-                name: 'daily_km', label: 'Daily driving',
-                value: cp.ev.daily_distance != null ? cp.ev.daily_distance : 35,
-                min: 0, max: 200, step: 5, unit: 'km'
-            }) +
-            '<label class="ecom-ctl-check">' +
-                '<input type="checkbox" data-toggle="v2g"' +
-                    (cp.is_v2g ? ' checked' : '') + '>' +
-                '<span>Vehicle-to-grid</span>' +
-            '</label>' +
-            '<span class="ecom-ctl-hint">The charger and the car move together - ' +
-            'the backend rejects a car with V2G on behind a charger without it.</span>'
-        );
+
+        const total = points.reduce(function (sum, cp) {
+            return sum + (cp.capacity || 0);
+        }, 0);
+
+        const rows = points.map(function (cp, index) {
+            const placed = cp.lat != null;
+            const position = Math.round(streetPosition(cp) * 100);
+            return '' +
+                '<div class="ecom-cp">' +
+                    '<div class="ecom-cp-head">' +
+                        '<span class="ecom-cp-name">' + esc(cp.name) + '</span>' +
+                        '<span class="ecom-cp-kw">' + Math.round(cp.capacity) + ' kW</span>' +
+                        (points.length > 1
+                            ? '<button type="button" class="ecom-mini"' +
+                              ' data-cp-remove="' + esc(cp.name) + '"' +
+                              ' title="Remove this charge point">Remove</button>'
+                            : '') +
+                    '</div>' +
+                    slider({
+                        name: 'cp_kw:' + index, label: 'Charger power',
+                        value: cp.capacity, min: 4, max: 150, step: 1, unit: 'kW'
+                    }) +
+                    slider({
+                        name: 'cp_km:' + index, label: 'Daily driving',
+                        value: (cp.ev && cp.ev.daily_distance) || 35,
+                        min: 0, max: 200, step: 5, unit: 'km'
+                    }) +
+                    (streetPath
+                        ? slider({
+                              name: 'cp_pos:' + index,
+                              label: 'Along ' + CP_STREET,
+                              value: position, min: 0, max: 100, step: 2,
+                              unit: '% north',
+                              hint: placed ? '' : 'Not placed yet - move this to put it on the street.'
+                          })
+                        : '<span class="ecom-ctl-hint">The street network has ' +
+                          'not loaded, so this one stays at the middle of the ' +
+                          'campus with the other shared assets.</span>') +
+                    '<label class="ecom-ctl-check">' +
+                        '<input type="checkbox" data-cp-v2g="' + index + '"' +
+                            (cp.is_v2g ? ' checked' : '') + '>' +
+                        '<span>Vehicle-to-grid</span>' +
+                    '</label>' +
+                '</div>';
+        }).join('');
+
+        return group('mobility', 'Mobility',
+            points.length + (points.length === 1 ? ' charger · ' : ' chargers · ') +
+                Math.round(total) + ' kW',
+            '<div class="ecom-cps">' + rows + '</div>' +
+            '<div class="ecom-ctl-actions">' +
+                '<button type="button" class="ecom-ctl-btn" data-action="cp-add">' +
+                    'Add a charge point</button>' +
+            '</div>' +
+            '<span class="ecom-ctl-hint">The charger and its car move together ' +
+            'on vehicle-to-grid: the backend rejects a car with it on behind a ' +
+            'charger without it.</span>');
     }
 
     function membersGroup() {
@@ -1632,6 +1807,27 @@
         const set = function (text) { if (readout) readout.textContent = text; };
         const w = state.working;
 
+        // Per-charger sliders carry their index: `cp_kw:2`. One handler for
+        // however many chargers there are, rather than a fixed set of three.
+        if (name.indexOf('cp_') === 0) {
+            const parts = name.split(':');
+            const cp = chargePoints()[Number(parts[1])];
+            if (!cp) return;
+            if (parts[0] === 'cp_kw') {
+                cp.capacity = value;
+                set(value + ' kW');
+            } else if (parts[0] === 'cp_km') {
+                if (cp.ev) cp.ev.daily_distance = Math.max(1, value);
+                set(value + ' km');
+            } else if (parts[0] === 'cp_pos') {
+                const spot = alongStreet(value / 100);
+                if (spot) { cp.lon = spot[0]; cp.lat = spot[1]; }
+                set(value + ' % north');
+            }
+            markDirty();
+            return;
+        }
+
         switch (name) {
             case 'battery_kwh':
                 // The backend requires a positive capacity.
@@ -1659,15 +1855,7 @@
                 set(value + ' g/kWh');
                 markDirty();
                 break;
-            case 'charger_kw':
-                w.charge_points[0].capacity = value;
-                set(value + ' kW');
-                markDirty();
-                break;
-            case 'daily_km':
-                w.charge_points[0].ev.daily_distance = Math.max(1, value);
-                set(value + ' km');
-                markDirty();
+            default:
                 break;
         }
     }
@@ -1679,7 +1867,7 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs'
+        'data-members', 'data-roofs', 'data-cp-remove'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
         return '[' + name + ']';
@@ -1726,6 +1914,20 @@
             return;
         }
         if (action === 'params-retry') { loadParams(); return; }
+        if (action === 'cp-add') {
+            addChargePoint();
+            render();
+            markDirty();
+            return;
+        }
+
+        const remove = el.getAttribute('data-cp-remove');
+        if (remove) {
+            removeChargePoint(remove);
+            render();
+            markDirty();
+            return;
+        }
 
         const kind = el.getAttribute('data-kind');
         if (kind) {
@@ -1786,9 +1988,12 @@
         }
 
         const toggle = target.getAttribute && target.getAttribute('data-toggle');
-        if (toggle === 'v2g') {
-            const cp = chargePoint();
+        const v2gIndex = target.getAttribute && target.getAttribute('data-cp-v2g');
+        if (v2gIndex !== null && v2gIndex !== undefined) {
+            const cp = chargePoints()[Number(v2gIndex)];
             if (cp) {
+                // Both together: the backend rejects a car with V2G on behind
+                // a charger without it.
                 cp.is_v2g = target.checked;
                 if (cp.ev) cp.ev.v2g_enabled = target.checked;
                 markDirty();
@@ -1841,6 +2046,13 @@
             render();
             return;
         }
+
+        // The road the chargers stand on, for the position slider. Not awaited:
+        // the panel opens on Members and the group is closed until someone asks
+        // for it.
+        loadStreet().then(function () {
+            if (state.openGroup === 'mobility') render();
+        });
 
         // Started here, not awaited: the panel is useful without them, but
         // waiting until after the opening dispatch meant a quick tap on the

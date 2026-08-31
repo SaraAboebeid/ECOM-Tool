@@ -21,26 +21,31 @@
     gap: 0.5rem;
 }
 
+/* Base controls are deliberately low-contrast: neon is for what the data
+   means, and furniture shouting as loudly as a measurement makes the
+   measurement harder to find. */
 .ecom-ctl-btn {
     flex: 1;
     min-height: 38px;
     padding: 0 0.9rem;
     border-radius: 8px;
-    border: 1px solid #4a4a4a;
-    background: #333;
-    color: #e0e0e0;
+    border: 1px solid var(--ecom-line, #454545);
+    background: #313131;
+    color: var(--ecom-ink, #e8e8e8);
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
 }
 .ecom-ctl-btn:hover { background: #3c3c3c; }
 .ecom-ctl-btn:disabled { opacity: 0.5; cursor: default; }
+/* The one control that changes what is on the table, in the table's own
+   colour rather than a stock blue belonging to no part of this. */
 .ecom-ctl-btn--primary {
-    background: #1d4ed8;
-    border-color: #2563eb;
-    color: #fff;
+    background: var(--ecom-action, #e8eef6);
+    border-color: var(--ecom-action, #e8eef6);
+    color: var(--ecom-action-ink, #141a22);
 }
-.ecom-ctl-btn--primary:hover { background: #2563eb; }
+.ecom-ctl-btn--primary:hover { filter: brightness(1.08); }
 
 .ecom-ctl-status {
     font-size: 0.8rem;
@@ -55,7 +60,7 @@
 }
 .ecom-ctl-status--busy { border-left-color: #60a5fa; color: #cfe0ff; }
 .ecom-ctl-status--ok { border-left-color: #00ff5e; color: #cfeedb; }
-.ecom-ctl-status--error { border-left-color: #fa3600; color: #ffd4c8; }
+.ecom-ctl-status--error { border-left-color: #d94f2b; color: var(--ecom-error, #ff9d7a); }
 
 /* ------------------------------------------------------------- accordion */
 
@@ -65,7 +70,13 @@
     background: #303030;
     overflow: hidden;
 }
-.ecom-ctl-group.is-open { border-color: #4d5b7a; }
+/* The open group is the thing being worked on, so it steps forward rather
+   than shifting hue by a few percent. */
+.ecom-ctl-group.is-open {
+    border-color: var(--ecom-line-strong, #5c6b7d);
+    background: #343434;
+    box-shadow: 0 0 0 1px rgba(140, 165, 190, 0.18);
+}
 
 .ecom-ctl-head {
     width: 100%;
@@ -120,14 +131,16 @@
     margin-bottom: 0.2rem;
 }
 .ecom-ctl-slider-head b {
-    color: #60a5fa;
+    /* The value is data, so it keeps the contrast the control gave up. */
+    color: #dfe8f0;
     font-variant-numeric: tabular-nums;
 }
 
 .ecom-ctl-slider input[type=range] {
     width: 100%;
     height: 30px;
-    accent-color: #60a5fa;
+    /* Cool and quiet: a slider is furniture, not a reading. */
+    accent-color: #7f9bb5;
 }
 
 .ecom-ctl-hint {
@@ -194,6 +207,9 @@
 
 .ecom-ctl-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
+/* Off, hover and on sat within a few percent of each other. Wider apart now:
+   off recedes, on comes forward, hover sits between so a finger gets feedback
+   before it commits. */
 .ecom-ctl-chip {
     display: flex;
     align-items: center;
@@ -201,13 +217,19 @@
     min-height: 38px;
     padding: 0 0.7rem;
     border-radius: 999px;
-    border: 1px solid #4a4a4a;
-    background: #2b2b2b;
-    color: #8b8b8b;
-    font-size: 0.8rem;
+    border: 1px solid #3d3d3d;
+    background: #242424;
+    color: #6f6f6f;
+    font-size: 0.82rem;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.ecom-ctl-chip.is-on { background: #3a3a3a; color: #eee; border-color: #6a6a6a; }
+.ecom-ctl-chip:hover { background: #333; color: #b4b4b4; border-color: #575757; }
+.ecom-ctl-chip.is-on {
+    background: #454545;
+    color: #f4f4f4;
+    border-color: #8a8a8a;
+}
 .ecom-ctl-dot { width: 10px; height: 10px; border-radius: 3px; }
 .ecom-ctl-chip:not(.is-on) .ecom-ctl-dot { opacity: 0.35; }
 
@@ -472,6 +494,8 @@
 /* Whether a display is actually listening. BroadcastChannel fails silently
    across origins, so without this the panel looks identical when every control
    is going nowhere. */
+/* The link pill reports a state rather than inviting a press, so it stays
+   quieter than the buttons beside it. */
 .ecom-ctl-link {
     flex: none;
     padding: 0.3rem 0.55rem;
@@ -523,7 +547,11 @@
 .ecom-kpis { transition: opacity 0.2s ease; }
 
 /* Pending edits mean these describe the previous run. */
-.ecom-kpis.is-stale { opacity: 0.45; }
+.ecom-kpis.is-stale {
+    /* Was 0.45, which at table distance read as switched off rather than
+       superseded. The badge below now carries what dimming had to say alone. */
+    opacity: 0.68;
+}
 
 .ecom-kpi-empty { font-size: 0.9rem; color: #888; }
 
@@ -562,7 +590,7 @@
 }
 
 .ecom-kpi-label {
-    font-size: 0.62rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #8b8b8b;
@@ -579,7 +607,7 @@
 .ecom-kpi-tile--yellow { border-left-color: #eaff00; }
 .ecom-kpi-tile--yellow .ecom-kpi-value,
 .ecom-kpi-tile--yellow .ecom-kpi-icon { color: #f2ff7a; }
-.ecom-kpi-tile--cyan { border-left-color: #00ffe5; }
+.ecom-kpi-tile--cyan { border-left-color: var(--ecom-battery, #fa3600); }
 .ecom-kpi-tile--cyan .ecom-kpi-value,
 .ecom-kpi-tile--cyan .ecom-kpi-icon { color: #7dfff2; }
 .ecom-kpi-tile--blue { border-left-color: #60a5fa; }
@@ -593,7 +621,7 @@
 }
 
 .ecom-kpi-heading {
-    font-size: 0.66rem;
+    font-size: 0.74rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -608,7 +636,7 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.16rem 0;
-    font-size: 0.78rem;
+    font-size: 0.84rem;
     color: #b8b8b8;
     /* One line per figure: a wrapped label pushed its whole column down and
        misaligned it against the columns beside it. */
@@ -626,10 +654,26 @@
     color: #6d6d6d;
 }
 
+/* A badge, not a whisper. */
 .ecom-kpi-stale {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     margin-top: 0.7rem;
-    font-size: 0.78rem;
-    color: #fbbf24;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 194, 71, 0.45);
+    background: rgba(255, 194, 71, 0.12);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ecom-warn, #ffc247);
+}
+.ecom-kpi-stale::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ecom-warn, #ffc247);
 }
 
 /* --------------------------------------------------- the parameter band
@@ -674,8 +718,8 @@
 
 .ecom-ctl-group--pink   { border-left-color: #ff00a6; }
 .ecom-ctl-group--yellow { border-left-color: #eaff00; }
-.ecom-ctl-group--orange { border-left-color: #fa3600; }
-.ecom-ctl-group--cyan   { border-left-color: #00ffe5; }
+.ecom-ctl-group--orange { border-left-color: var(--ecom-battery, #fa3600); }
+.ecom-ctl-group--cyan   { border-left-color: var(--ecom-grid, #00ffe5); }
 .ecom-ctl-group--green  { border-left-color: #00ff5e; }
 .ecom-ctl-group--violet { border-left-color: #a78bfa; }
 .ecom-ctl-group--slate  { border-left-color: #7d8da3; }
@@ -684,8 +728,8 @@
    closed groups is not seven competing colours. */
 .ecom-ctl-group--pink.is-open   .ecom-ctl-head-icon { color: #ff86d5; }
 .ecom-ctl-group--yellow.is-open .ecom-ctl-head-icon { color: #f2ff7a; }
-.ecom-ctl-group--orange.is-open .ecom-ctl-head-icon { color: #ff9b7a; }
-.ecom-ctl-group--cyan.is-open   .ecom-ctl-head-icon { color: #7dfff2; }
+.ecom-ctl-group--orange.is-open .ecom-ctl-head-icon { color: #7dfff2; }
+.ecom-ctl-group--cyan.is-open   .ecom-ctl-head-icon { color: #eef4ff; }
 .ecom-ctl-group--green.is-open  .ecom-ctl-head-icon { color: #7dffb0; }
 .ecom-ctl-group--violet.is-open .ecom-ctl-head-icon { color: #c4b5fd; }
 .ecom-ctl-group--slate.is-open  .ecom-ctl-head-icon { color: #b8c4d4; }
@@ -693,8 +737,8 @@
 .ecom-ctl-group.is-open { border-color: #4d5b7a; }
 .ecom-ctl-group--pink.is-open   { border-left-color: #ff00a6; }
 .ecom-ctl-group--yellow.is-open { border-left-color: #eaff00; }
-.ecom-ctl-group--orange.is-open { border-left-color: #fa3600; }
-.ecom-ctl-group--cyan.is-open   { border-left-color: #00ffe5; }
+.ecom-ctl-group--orange.is-open { border-left-color: var(--ecom-battery, #fa3600); }
+.ecom-ctl-group--cyan.is-open   { border-left-color: var(--ecom-grid, #00ffe5); }
 .ecom-ctl-group--green.is-open  { border-left-color: #00ff5e; }
 .ecom-ctl-group--violet.is-open { border-left-color: #a78bfa; }
 .ecom-ctl-group--slate.is-open  { border-left-color: #7d8da3; }
@@ -704,7 +748,7 @@
     display: flex;
     gap: 0.8rem;
     padding-top: 0.15rem;
-    font-size: 0.66rem;
+    font-size: 0.74rem;
     color: #7d7d7d;
 }
 .ecom-when-legend span { display: flex; align-items: center; gap: 0.3rem; }
@@ -776,7 +820,7 @@
 }
 
 .ecom-roof-area {
-    font-size: 0.7rem;
+    font-size: 0.76rem;
     color: #7d7d7d;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -790,7 +834,7 @@
 
 .ecom-roof-kw {
     text-align: right;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: #7d7d7d;
     font-variant-numeric: tabular-nums;
 }
@@ -922,4 +966,44 @@
 @media (prefers-reduced-motion: reduce) {
     .ecom-busy-spinner { animation: none; }
     .ecom-busy { transition: none; }
+}
+
+/* ------------------------------------------------------- charge points
+
+   A list rather than one fixed charger: a community can have several, and each
+   stands somewhere real. Position is a single slider along the street, which is
+   a far easier thing to set with a finger than a pair of decimals. */
+
+.ecom-cps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.ecom-cp {
+    padding: 0.55rem 0.65rem;
+    border-radius: 9px;
+    border: 1px solid #3f3f3f;
+    border-left: 3px solid var(--ecom-charge-point, #00ff5e);
+    background: #2a2a2a;
+}
+
+.ecom-cp-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+.ecom-cp-name {
+    flex: 1;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #e8e8e8;
+}
+.ecom-cp-kw {
+    font-size: 0.78rem;
+    color: #7dffb0;
+    font-variant-numeric: tabular-nums;
 }
