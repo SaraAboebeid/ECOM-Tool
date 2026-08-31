@@ -17,6 +17,7 @@ class MarketDispatchStrategy:
 
             building_demand, building_pv = dispatcher._collect_building_data(hour)
             community_pv = dispatcher._collect_community_pv(hour)
+            charge_point_demand = dispatcher._collect_charge_point_demand(hour)
 
             # --- MARKET LOGIC ---
             grid_price = getattr(dispatcher.community.grid, "buying_price", None)
@@ -43,6 +44,7 @@ class MarketDispatchStrategy:
                         state["deficit"][building_name] = building_demand[building_name] - used_pv
                         state["surplus"][building_name] = pv_available - used_pv
 
+            dispatcher._add_charge_point_demand(t, state, charge_point_demand)
             dispatcher._dispatch_peer_to_peer(t, state)
 
             for pv_name, pv_energy in community_pv.items():

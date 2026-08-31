@@ -17,8 +17,12 @@ class CommunityDispatchStrategy:
 
             building_demand, building_pv = dispatcher._collect_building_data(hour)
             community_pv = dispatcher._collect_community_pv(hour)
+            charge_point_demand = dispatcher._collect_charge_point_demand(hour)
 
             dispatcher._dispatch_self_consumption(t, hour, state, building_demand, building_pv)
+            # Before the community's own energy is shared out, so a charger
+            # can be served from a roof rather than always from the grid.
+            dispatcher._add_charge_point_demand(t, state, charge_point_demand)
             dispatcher._dispatch_peer_to_peer(t, state)
             dispatcher._dispatch_community_pv(t, state, community_pv)
             dispatcher._dispatch_battery_discharge(t, state)

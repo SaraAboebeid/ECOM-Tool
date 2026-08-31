@@ -278,19 +278,31 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
             lon = anchor[0] + ANCHOR_SPREAD_DEG * math.cos(angle) * 1.85
             lat = anchor[1] + ANCHOR_SPREAD_DEG * math.sin(angle)
         placed[node["id"]] = (lon, lat)
+        properties = {
+            "id": node["id"],
+            "kind": node["type"],
+            "name": node.get("name") or node["id"],
+            "owner": node.get("owner") or "",
+            "capacity": float(node.get("total_pv_capacity")
+                              or node.get("capacity")
+                              or node.get("installed_capacity") or 0.0),
+            "placeholder": True,
+        }
+        if node["type"] == "charge_point":
+            # The table draws the vehicle itself, so it needs to know there is
+            # one and when it is there. Without the schedule it could only infer
+            # presence from the charging flow, which stops when the battery is
+            # full while the car stays parked.
+            properties.update({
+                "charger_type": node.get("charger_type") or "",
+                "connected_evs": int(node.get("total_connected_evs") or 0),
+                "ev_name": node.get("ev_name") or "",
+                "plugged_hourly": [int(v) for v in (node.get("ev_plugged") or [])],
+            })
         node_features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": {
-                "id": node["id"],
-                "kind": node["type"],
-                "name": node.get("name") or node["id"],
-                "owner": node.get("owner") or "",
-                "capacity": float(node.get("total_pv_capacity")
-                                  or node.get("capacity")
-                                  or node.get("installed_capacity") or 0.0),
-                "placeholder": True,
-            },
+            "properties": properties,
         })
 
     # Roof arrays land on their host; the layer offsets them for legibility.

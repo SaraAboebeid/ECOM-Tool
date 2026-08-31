@@ -121,7 +121,10 @@ class ECOMDispatcher:
                 "p2p_energy": sum(self.G.edges[edge]["flow"][t] for edge in self.G.edges if edge[0] in [b.name for b in self.community.building] and edge[1] in [b.name for b in self.community.building] and edge[0] != edge[1]),
                 "battery_charge": sum(self.G.edges[edge]["flow"][t] for edge in self.G.edges if "BAT" in edge[1]),
                 "battery_discharge": sum(self.G.edges[edge]["flow"][t] for edge in self.G.edges if "BAT" in edge[0]),
-                "grid_import": sum(self.G.edges["GRID", b.name]["flow"][t] for b in self.community.building if self.G.has_edge("GRID", b.name)),
+                "grid_import": sum(self.G.edges["GRID", n]["flow"][t]
+                                   for n in ([b.name for b in self.community.building] +
+                                             [f"CP_{cp.name}" for cp in getattr(self.community, "charge_point", [])])
+                                   if self.G.has_edge("GRID", n)),
                 "grid_export": sum(self.G.edges[b.name, "GRID"]["flow"][t] for b in self.community.building if self.G.has_edge(b.name, "GRID")),
                 "soc": {bat.name: self.last_battery_soc[f"BAT_{bat.name}"][t] for bat in getattr(self.community, "battery", [])}
             }
@@ -574,6 +577,22 @@ class ECOMDispatcher:
             self.G.add_edge(f"PV_{photovoltaic.name}", "GRID", flow=np.zeros(self.n_hours))
             print(f"[GRAPH] Adding edge: PV_{photovoltaic.name} -> GRID")
 
+        # A charge point is a load, and gets the same choice of suppliers any
+        # other load has: a neighbour's surplus, a community array, the battery,
+        # or the grid. _update_flow silently does nothing when an edge is
+        # missing, so until these existed a charger could be dispatched and
+        # still show no energy moving - which is exactly how it behaved.
+        for charge_point in getattr(self.community, "charge_point", []):
+            cp_node = f"CP_{charge_point.name}"
+            self.G.add_edge("GRID", cp_node, flow=np.zeros(self.n_hours))
+            print(f"[GRAPH] Adding edge: GRID -> {cp_node}")
+            for building in self.community.building:
+                self.G.add_edge(building.name, cp_node, flow=np.zeros(self.n_hours))
+            for photovoltaic in getattr(self.community, "PV_plant", []):
+                self.G.add_edge(f"PV_{photovoltaic.name}", cp_node, flow=np.zeros(self.n_hours))
+            for battery in getattr(self.community, "battery", []):
+                self.G.add_edge(f"BAT_{battery.name}", cp_node, flow=np.zeros(self.n_hours))
+
     # ================================================================
     # === Core Simulation (Run) ===
     # ================================================================
@@ -749,6 +768,40 @@ class ECOMDispatcher:
             community_pv[photovoltaic.name] = val
         return community_pv
 
+    def _collect_charge_point_demand(self, hour: int) -> dict:
+        """Charging demand per charge point for a given hour, keyed by node id.
+
+        ChargePoint has computed this all along - one EV's daily driving
+        requirement spread over the hours it is plugged in, capped by the lower
+        of the charger's and the vehicle's power. Nothing read it.
+        """
+        charge_point_demand = {}
+        for charge_point in getattr(self.community, "charge_point", []):
+            demand = getattr(charge_point, "hourlydemand", None)
+            if isinstance(demand, HourlyData):
+                series = demand.df.loc[demand.df["hoy"] == hour + 1, "value"]
+                value = series.iloc[0] if not series.empty else 0.0
+            else:
+                value = 0.0
+            charge_point_demand[f"CP_{charge_point.name}"] = float(value)
+        return charge_point_demand
+
+    def _add_charge_point_demand(self, t, state, charge_point_demand):
+        """Put the chargers into the hour's deficits, beside the buildings.
+
+        Every later step - peer-to-peer, community PV, battery discharge, grid
+        import - already works from state["deficit"] rather than from the
+        building list, so entering it here is enough for a charge point to be
+        served in the same merit order as everything else.
+
+        Charging only. V2G discharge back to the community is still not
+        modelled: the vehicle's flag raises its daily energy budget by 20% in
+        ChargePoint, and that is the whole of its effect.
+        """
+        for cp_node, demand in charge_point_demand.items():
+            state["deficit"][cp_node] = demand
+            state["surplus"][cp_node] = 0.0
+
     def _dispatch_self_consumption(self, t, hour, state, building_demand, building_pv):
         """Buildings use their own PVs first (self-consumption), supporting multiple PVs per building."""
         event_occurred = False
@@ -842,15 +895,16 @@ class ECOMDispatcher:
             print()
 
     def _dispatch_grid_import(self, t, state):
-        """Grid imports cover remaining deficits after all other sources."""
-        for building in self.community.building:
-            building_name = building.name
-            deficit = state["deficit"][building_name]
-            if deficit > 0:
-                self._update_flow("GRID", building_name, t, deficit)
-                state["deficit"][building_name] = 0.0
+        """Grid imports cover remaining deficits after all other sources.
 
-    #TODO: Add support for EV charging points dispatch for charge and discharge
+        Over every entity holding a deficit, not only the buildings: a charge
+        point that nothing local could supply is the grid's to cover, and
+        looping the building list left its demand unmet and unrecorded.
+        """
+        for entity_name, deficit in state["deficit"].items():
+            if deficit > 0:
+                self._update_flow("GRID", entity_name, t, deficit)
+                state["deficit"][entity_name] = 0.0
 
     def _dispatch_battery_charge(self, t, state):
         """Charge community-level batteries with remaining surplus from all entities."""
@@ -945,6 +999,22 @@ class ECOMDispatcher:
             total_pv_used += pv_used
             total_pv_generation += pv_gen
 
+        charge_point_nodes = [f"CP_{cp.name}"
+                              for cp in getattr(self.community, "charge_point", [])]
+
+        # Charging is demand. It has to be in the denominator, or a community
+        # would raise its own self-sufficiency by adding chargers to it.
+        for charge_point in getattr(self.community, "charge_point", []):
+            cp_node = f"CP_{charge_point.name}"
+            if self.G.has_edge("GRID", cp_node):
+                flow = self.G.edges["GRID", cp_node]["flow"]
+                total_grid_import += np.sum(flow)
+                n_grid_import_hours += np.count_nonzero(flow)
+            demand = getattr(charge_point, "hourlydemand", None)
+            if isinstance(demand, HourlyData):
+                df = demand.df
+                total_demand += df.loc[df["hoy"].isin(hours_set), "value"].sum()
+
         for photovoltaic in getattr(self.community, "PV_plant", []):
             pv_node = f"PV_{photovoltaic.name}"
             pv_used = 0.0
@@ -953,9 +1023,11 @@ class ECOMDispatcher:
                 mask = df["hoy"].isin(hours_set)
                 pv_gen = df.loc[mask, "value"].sum()
                 total_pv_generation += pv_gen
-            for building in self.community.building:
-                if self.G.has_edge(pv_node, building.name):
-                    flow = self.G.edges[pv_node, building.name]["flow"]
+            # A community array charging a car is just as self-consumed as one
+            # supplying a building.
+            for consumer in [b.name for b in self.community.building] + charge_point_nodes:
+                if self.G.has_edge(pv_node, consumer):
+                    flow = self.G.edges[pv_node, consumer]["flow"]
                     pv_used += np.sum(flow)
             total_pv_used += pv_used
 
@@ -989,9 +1061,10 @@ class ECOMDispatcher:
             # GRID -> building edges that total_grid_import is summed from.
             if carbon_vals is not None:
                 import_by_hour = np.zeros(self.n_hours, dtype=float)
-                for building in self.community.building:
-                    if self.G.has_edge("GRID", building.name):
-                        flow = np.asarray(self.G.edges["GRID", building.name]["flow"], dtype=float)
+                importers = [b.name for b in self.community.building] + charge_point_nodes
+                for importer in importers:
+                    if self.G.has_edge("GRID", importer):
+                        flow = np.asarray(self.G.edges["GRID", importer]["flow"], dtype=float)
                         import_by_hour[:len(flow)] += flow[:self.n_hours]
                 n = min(len(import_by_hour), len(carbon_vals))
                 total_grid_carbon_import = float(np.sum(import_by_hour[:n] * carbon_vals[:n]))

@@ -1007,3 +1007,36 @@
     color: #7dffb0;
     font-variant-numeric: tabular-nums;
 }
+
+/* The sonification toggle. Quiet when off, lit when the table is playing -
+   it reports a state the controller does not own, so it follows the table
+   rather than assuming the press worked. */
+.ecom-ctl-sound {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--ecom-line, #454545);
+    background: #313131;
+    color: #8b8b8b;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ecom-ctl-sound:hover { background: #3c3c3c; color: #c4c4c4; }
+.ecom-ctl-sound .material-icons { font-size: 19px !important; }
+.ecom-ctl-sound.is-on {
+    background: rgba(0, 255, 229, 0.14);
+    border-color: rgba(0, 255, 229, 0.5);
+    color: #7dfff2;
+}
+
+/* Asked for, but the browser will not start it. Distinct from both on and off:
+   the setting is on and the sound is not. */
+.ecom-ctl-sound.is-stalled {
+    background: rgba(255, 194, 71, 0.14);
+    border-color: rgba(255, 194, 71, 0.5);
+    color: var(--ecom-warn, #ffc247);
+}

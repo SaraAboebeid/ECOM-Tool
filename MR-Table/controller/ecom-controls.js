@@ -121,6 +121,7 @@
         hour: 0,
         hours: 24,
         playing: true,        // whether the table is running its own clock
+        sound: false,         // the table's sonification, off until asked for
         layer: null,          // the last layer dispatched, for the hourly PV readout
         openGroup: 'members',
         status: 'Looking for the backend…',
@@ -1664,6 +1665,16 @@
                     '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
                         ' data-action="apply">Apply</button>' +
                     '<button type="button" class="ecom-ctl-btn" data-action="reset">Reset</button>' +
+                    '<button type="button" class="ecom-ctl-sound' +
+                        (state.sound ? ' is-on' : '') + '" data-action="sound"' +
+                        ' title="Play the community. Grid import sets how dense ' +
+                        'the pulses are; self-sufficiency sets how calm the ' +
+                        'texture is. The drone is 100 Hz - twice mains, the note ' +
+                        'a transformer actually hums at.">' +
+                        '<span class="material-icons">' +
+                            (state.sound ? 'volume_up' : 'volume_off') +
+                        '</span>' +
+                    '</button>' +
                     '<span id="ecom-ctl-link" class="ecom-ctl-link is-down"' +
                         ' title="Checking for a display...">Checking</span>' +
                 '</div>' +
@@ -1914,6 +1925,13 @@
             return;
         }
         if (action === 'params-retry') { loadParams(); return; }
+        if (action === 'sound') {
+            // The table owns the audio - it is the machine with the speakers,
+            // and this is a projection driven from a second screen. This asks;
+            // the table answers with ecom_sound_state.
+            channel.postMessage({ type: 'ecom_sound', on: !state.sound });
+            return;
+        }
         if (action === 'cp-add') {
             addChargePoint();
             render();
@@ -2174,6 +2192,46 @@
             }
         }
 
+        // The table reports what its audio is actually doing, rather than the
+        // button assuming the press worked - a browser can refuse to start it.
+        if (data.type === 'ecom_sound_state') {
+            state.sound = !!data.on;
+            // Asked for but not actually running: the browser has suspended the
+            // context, usually because the press happened on this screen and
+            // the table's own window has had no gesture. Saying so beats a
+            // button that claims sound nobody can hear.
+            //
+            // clockMoving === false is the same fault caught a different way -
+            // a context that says "running" while its clock is frozen is not
+            // producing anything either.
+            const stalled = state.sound &&
+                (data.running === false || data.clockMoving === false);
+            state.soundReport = data;
+            const btn = document.querySelector('.ecom-ctl-sound');
+            if (btn) {
+                btn.classList.toggle('is-on', state.sound && !stalled);
+                btn.classList.toggle('is-stalled', stalled);
+                const icon = btn.querySelector('.material-icons');
+                if (icon) {
+                    icon.textContent = stalled ? 'volume_off'
+                        : (state.sound ? 'volume_up' : 'volume_off');
+                }
+                btn.title = stalled
+                    ? 'The table is not playing: audio ' + (data.contextState || '?') +
+                      ', clock ' + (data.clock || 0) + 's' +
+                      (data.clockMoving === false ? ' (stopped)' : '') +
+                      '. Click once on the display window itself - a browser ' +
+                      'will not run audio for a page nobody has touched.'
+                    : 'Play the community. Grid import sets how dense the pulses ' +
+                      'are; self-sufficiency sets how calm the texture is.';
+            }
+            if (stalled) {
+                setStatus('Sound is on, but the display window needs a click ' +
+                          'before its browser will play audio.', 'error');
+            }
+            return;
+        }
+
         if (data.type === 'ecom_pong') {
             state.link.up = true;
             state.link.active = !!data.active;
@@ -2193,6 +2251,7 @@
             setBusy(null);
             paintLink();
             setStatus('Table redrew: ' + data.flows + ' flows · ' + data.period, 'ok');
+            channel.postMessage({ type: 'ecom_sound_request' });
         }
 
         // The layer being switched on or off changes what the chip should say.

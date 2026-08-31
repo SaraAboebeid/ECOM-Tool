@@ -109,10 +109,18 @@
         if (isLoaded) return true;
 
         try {
+            // no-store, because these three are regenerated whenever the
+            // community changes and the table has no way to know it. serve.py
+            // stamps asset URLs it finds in the HTML, but these are fetched
+            // from here - a copy cached under a plain http.server, which sends
+            // Last-Modified and no Cache-Control, is heuristically reusable and
+            // the browser serves it without asking. That is a table quietly
+            // showing last week's campus.
+            const noStore = { cache: 'no-store' };
             const responses = await Promise.all([
-                fetch(DATA_URL),
-                fetch(NODES_URL),
-                fetch(FLOWS_URL)
+                fetch(DATA_URL, noStore),
+                fetch(NODES_URL, noStore),
+                fetch(FLOWS_URL, noStore)
             ]);
             responses.forEach(function (response) {
                 if (!response.ok) {
@@ -123,6 +131,13 @@
             layerData = parsed[0];
             nodeData = parsed[1];
             flowData = parsed[2];
+
+            // Which export this is. A table showing an old one looks exactly
+            // like a table showing a new one, so it has to say.
+            console.info('[ecom] layer data generated ' +
+                (nodeData.generated || 'unknown') + ' - ' +
+                (nodeData.features || []).length + ' nodes, ' +
+                (flowData.features || []).length + ' flows');
         } catch (error) {
             console.error('ECOM: could not load the export', error);
             if (typeof showToast === 'function') {
@@ -851,6 +866,89 @@
 
         source.setData(nodeData);
         setFlowHour(hour);
+        reportForSound(hour, stored);
+        reportVehicles(hour);
+    }
+
+    // Where the cars are this hour, sent to animations/ecom-vehicles.js.
+    //
+    // Presence comes from the vehicle's own schedule, not from the charging
+    // flow: a car that has finished charging is still parked, and drawing it
+    // away at that moment would say something the model does not.
+    function reportVehicles(hour) {
+        if (!nodeData) return;
+        const points = [];
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            if (props.kind !== 'charge_point') return;
+            const schedule = props.plugged_hourly || [];
+            let charging = false;
+            if (flowData) {
+                charging = flowData.features.some(function (flow) {
+                    return flow.properties.target === props.id &&
+                        ((flow.properties.flow_hourly || [])[hour] || 0) > 0;
+                });
+            }
+            points.push({
+                id: props.id,
+                name: props.name,
+                lon: feature.geometry.coordinates[0],
+                lat: feature.geometry.coordinates[1],
+                // No schedule means no vehicle to draw, rather than one that
+                // is always there: an empty charger should look empty.
+                plugged: schedule.length ? !!schedule[hour] : false,
+                charging: charging
+            });
+        });
+        ecomChannel.postMessage({ type: 'ecom_vehicles', hour: hour,
+                                  chargePoints: points });
+    }
+
+    // What the hour sounds like, sent to animations/ecom-sound.js.
+    //
+    // Broadcast from here rather than recomputed there: the sound has to be of
+    // the hour that was just drawn, and a second calculation from the same data
+    // is a second thing that can fall out of step.
+    function reportForSound(hour, stored) {
+        // Self-sufficiency for this hour, not the period total: what the
+        // texture is describing is now.
+        let localKwh = 0;
+        let gridKwh = 0;
+        if (flowData) {
+            flowData.features.forEach(function (feature) {
+                const props = feature.properties;
+                if (props.target_kind !== 'building') return;
+                const value = (props.flow_hourly || [])[hour] || 0;
+                if (props.kind === 'grid') gridKwh += value;
+                else localKwh += value;
+            });
+        }
+        const served = localKwh + gridKwh;
+
+        // Roof output against the campus's best hour, so the bell tracks the
+        // arc of the day rather than each roof's own noon.
+        let solar = 0;
+        let solarPeak = 0;
+        nodeData.features.forEach(function (feature) {
+            const series = feature.properties.solar_hourly || [];
+            solar += series[hour] || 0;
+            series.forEach(function (v) { if (v > solarPeak) solarPeak = v; });
+        });
+
+        const gridNode = nodeData.features.find(function (feature) {
+            return feature.properties.kind === 'grid';
+        });
+
+        ecomChannel.postMessage({
+            type: 'ecom_audio',
+            reading: {
+                hour: hour,
+                gridNow: gridNode ? (gridNode.properties.gridNow || 0) : 0,
+                selfSufficiency: served > 0 ? localKwh / served : 0,
+                solarNow: solarPeak > 0 ? Math.min(1, solar / (solarPeak * 8)) : 0,
+                storedNow: stored || 0
+            }
+        });
     }
 
     // Line width is scaled against the largest flow anywhere in the horizon,
@@ -858,6 +956,17 @@
     // 0.3 kW trickle as wide as a 1,269 kW grid feed, which is exactly the
     // comparison the picture is meant to make.
     let flowCeiling = 0;
+
+    // A floor under the width and opacity scale.
+    //
+    // The scale is a ratio, and below a point the ratio stops being the useful
+    // thing to say. One charge point drawing 0.6 kW beside a campus importing
+    // 2,400 works out at 1% opacity - a line that exists in the data and not on
+    // the table, which reads as a missing connection rather than a small one.
+    // Floored, it is drawn faintly: unmistakably slighter than a real flow, but
+    // there. Zero is still zero - nothing is invented for a line carrying
+    // nothing this hour.
+    const MIN_VISIBLE_SHARE = 0.22;
 
     function setFlowHour(hour) {
         if (!flowData) return;
@@ -870,8 +979,8 @@
             feature.properties.flowNow = now;
             // Square root, so the small community flows stay visible next to
             // grid imports three orders of magnitude larger.
-            feature.properties.share = flowCeiling > 0
-                ? Math.sqrt(now / flowCeiling)
+            feature.properties.share = (now > 0 && flowCeiling > 0)
+                ? Math.max(Math.sqrt(now / flowCeiling), MIN_VISIBLE_SHARE)
                 : 0;
         });
 
@@ -1057,7 +1166,12 @@
         const ceiling = flowCeiling || 1;
         const flowTests = [];
         if (kinds && kinds.length) {
+            // Both ends, not just the source. A line needs somewhere to come
+            // from and somewhere to go: with only the source tested, unticking
+            // Charging left the grid's line to the charger drawn, running to a
+            // marker that was no longer on the table.
             flowTests.push(['in', ['get', 'kind'], ['literal', kinds]]);
+            flowTests.push(['in', ['get', 'target_kind'], ['literal', kinds]]);
         }
         if (owners && owners.length) {
             flowTests.push(['any',
@@ -1263,6 +1377,14 @@
 
         // View filters. These hide what is already on the table, so they need
         // no dispatch and are applied as the control moves.
+        // The cars ask for the current hour when they come up, because the
+        // day clock can be stopped - the dashboard may be driving the hour -
+        // and then no tick would ever arrive to tell them where to be.
+        if (data.type === 'ecom_vehicles_request') {
+            if (isActive) reportVehicles(currentHour);
+            return;
+        }
+
         if (data.type === 'ecom_filters') {
             applyFilters(data.filters || null);
         }

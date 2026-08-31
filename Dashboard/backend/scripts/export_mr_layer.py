@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 import urllib.request
 from pathlib import Path
 
@@ -63,9 +64,25 @@ def main() -> int:
         print("Start it with: cd backend && python -m uvicorn app.main:app --port 8000")
         return 1
 
-    layer = build_layer(dispatch)
+    # Assets that know where they stand, the same way POST /api/mr/layer does.
+    # Without this the committed export puts a charge point back on the ring of
+    # shared assets while a live dispatch puts it on its street - two pictures
+    # of one community, differing by which route drew them.
+    placements = {
+        f"CP_{cp['name']}": (cp["lon"], cp["lat"])
+        for cp in (spec.get("charge_points") or [])
+        if cp.get("lat") is not None and cp.get("lon") is not None
+    }
+    layer = build_layer(dispatch, placements=placements)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Stamped so the table can say which export it is showing. A GeoJSON
+    # object may carry foreign members, and readers ignore what they do not
+    # know, so this costs nothing to anything else that reads these files.
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    for part in ("buildings", "nodes", "flows"):
+        layer[part]["generated"] = stamp
+
     OUT_FILE.write_text(json.dumps(layer["buildings"]), encoding="utf-8")
     NODES_FILE.write_text(json.dumps(layer["nodes"]), encoding="utf-8")
     FLOWS_FILE.write_text(json.dumps(layer["flows"]), encoding="utf-8")

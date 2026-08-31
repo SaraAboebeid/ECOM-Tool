@@ -69,6 +69,25 @@ def run_dispatch(
     return payload
 
 
+def _plugged_hours(ev, spec) -> list[int]:
+    """When the vehicle is at the charger, over the analysis window.
+
+    The availability schedule is the truth about presence; the charging flow is
+    not - a car that has finished charging is still parked, and one that is away
+    is not merely idle. Anything drawing the vehicle needs the difference.
+
+    ElectricVehicleSpec accepts a 24-value daily pattern, a full 8760, or None
+    for always plugged in; this returns one 0/1 per hour actually simulated.
+    """
+    availability = ev.availability
+    hoys = spec.analysis_period.hoys
+    if availability is None:
+        return [1] * len(hoys)
+    if len(availability) == 24:
+        return [int(availability[hoy % 24]) for hoy in hoys]
+    return [int(availability[hoy]) for hoy in hoys]
+
+
 def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity,
                     include_idle_links: bool = False) -> dict:
     spec = built.spec
@@ -137,6 +156,9 @@ def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity,
                     is_v2g=cp.is_v2g,
                     total_connected_evs=1 if cp.ev is not None else 0,
                 )
+                if cp.ev is not None:
+                    node["ev_name"] = cp.ev.name
+                    node["ev_plugged"] = _plugged_hours(cp.ev, spec)
 
         nodes.append(node)
 
