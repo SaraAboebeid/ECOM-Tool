@@ -1526,7 +1526,12 @@ function isAnyVisualizationActive() {
     'grid-animation-btn',
     'isovist-btn',
     'bird-sounds-btn',
-    'fcc-demo-btn'
+    'fcc-demo-btn',
+    // The energy community. It was added after this list and never registered
+    // here, so cars and live transit kept running underneath it - moving dots
+    // on the same streets as the moving flow lines, which is the one animation
+    // that layer cannot afford to be confused with.
+    'ecom-energy-btn'
   ];
   
   for (const id of activeButtons) {

@@ -35,6 +35,15 @@
     const FLOW_LAYER_ID = 'ecom-flows';
     const FLOW_GLOW_ID = 'ecom-flows-glow';
 
+    // The grid tie, kept from the light design. Everything else went back to
+    // icons; this one did not, because the grid connection is the only node
+    // whose behaviour is worth watching rather than identifying - it is where
+    // the campus is drawing from the outside world, and how hard.
+    const GRID_RING_IDS = ['ecom-grid-ring-a', 'ecom-grid-ring-b'];
+    const GRID_HALO_ID = 'ecom-grid-halo';
+    const GRID_CORE_ID = 'ecom-grid-core';
+    const GRID_FILTER = ['==', ['get', 'kind'], 'grid'];
+
     // Node and flow colours follow the 2D dashboard, so a building is the same
     // colour in both tools. A link takes the colour of the node it flows out
     // of, which is the rule the dashboard's map uses.
@@ -122,6 +131,7 @@
 
         nodeData.features.forEach(function (feature) {
             feature.properties.solarNow = 0;
+            feature.properties.gridNow = 0;
         });
 
         // The scale every line width and the "hide small flows" filter are
@@ -162,6 +172,12 @@
         }
 
         addFlowLayers();
+        // The node source has to exist before the pulse layers name it.
+        // MapLibre does not throw on a layer whose source is missing - it fires
+        // an error event and drops the layer - so the halo, core and rings were
+        // silently never added while every other layer came up fine.
+        ensureNodesSource();
+        addGridPulse();
         addNodeLayers();
         bindInteraction();
     }
@@ -321,10 +337,117 @@
         }
     }
 
-    function addNodeLayers() {
+    // Rings leaving the grid tie, and a halo under it.
+    //
+    // Added before the node icons so the marker sits on top of its own light
+    // rather than behind it. Radius and opacity are stepped on the same timer
+    // as the travelling dashes - MapLibre cannot keyframe a paint property, and
+    // one timer keeps the two motions in step instead of beating against each
+    // other.
+    const GRID_RING_MIN = 11;
+    const GRID_RING_MAX = 52;
+
+    function addGridPulse() {
+        if (!map.getLayer(GRID_HALO_ID)) {
+            map.addLayer({
+                id: GRID_HALO_ID,
+                type: 'circle',
+                source: NODES_SOURCE_ID,
+                filter: GRID_FILTER,
+                paint: {
+                    'circle-color': KIND_COLORS.grid,
+                    'circle-radius': ['+', 18, ['*', 30, ['get', 'gridNow']]],
+                    'circle-opacity': ['+', 0.18, ['*', 0.42, ['get', 'gridNow']]],
+                    'circle-blur': 1
+                }
+            });
+        }
+
+        // A lit disc for the marker to sit on. The halo alone reads as a smudge
+        // behind an icon; this is what makes the grid tie look like a source
+        // rather than another square.
+        if (!map.getLayer(GRID_CORE_ID)) {
+            map.addLayer({
+                id: GRID_CORE_ID,
+                type: 'circle',
+                source: NODES_SOURCE_ID,
+                filter: GRID_FILTER,
+                paint: {
+                    'circle-color': KIND_COLORS.grid,
+                    'circle-radius': ['+', 9, ['*', 4, ['get', 'gridNow']]],
+                    'circle-opacity': ['+', 0.45, ['*', 0.35, ['get', 'gridNow']]],
+                    'circle-blur': 0.55
+                }
+            });
+        }
+
+        GRID_RING_IDS.forEach(function (id) {
+            if (map.getLayer(id)) return;
+            map.addLayer({
+                id: id,
+                type: 'circle',
+                source: NODES_SOURCE_ID,
+                filter: GRID_FILTER,
+                paint: {
+                    'circle-color': 'rgba(0,0,0,0)',
+                    'circle-stroke-color': KIND_COLORS.grid,
+                    'circle-stroke-width': 2.6,
+                    'circle-stroke-opacity': 0,
+                    'circle-radius': GRID_RING_MIN,
+                    'circle-blur': 0.15
+                }
+            });
+        });
+    }
+
+    // Half a cycle apart, so one ring is always going out as the other fades.
+    // A single ring reads as a blink.
+    // Slower than the travelling dashes: a ring has to be followable across its
+    // whole run, and at 34 steps it crossed before the eye could track it.
+    const GRID_RING_STEPS = 52;
+    let gridRingStep = 0;
+
+    // +1 while the grid supplies the campus, -1 while the campus feeds it back.
+    let gridDirection = 1;
+
+    function paintGridRings() {
+        GRID_RING_IDS.forEach(function (id, index) {
+            if (!map.getLayer(id)) return;
+            let phase = ((gridRingStep / GRID_RING_STEPS) + index * 0.5) % 1;
+
+            // Direction carries the meaning. Rings leave the grid tie while it
+            // is supplying the campus, and travel back into it when the campus
+            // is feeding the grid instead. Without this the animation looked
+            // the same either way, which is worse than no animation.
+            if (gridDirection < 0) phase = 1 - phase;
+
+            map.setPaintProperty(id, 'circle-radius',
+                GRID_RING_MIN + phase * (GRID_RING_MAX - GRID_RING_MIN));
+
+            // Faint at both ends, brightest in the middle of the run.
+            //
+            // Ramping straight down from full made the ring brightest when it
+            // was smallest, so the eye caught each new one at the centre and
+            // read the whole thing as collapsing inward. Peaking mid-flight
+            // gives it something to follow across.
+            const travel = gridDirection < 0 ? 1 - phase : phase;
+            const visibility = Math.sin(Math.PI * travel);
+            map.setPaintProperty(id, 'circle-stroke-opacity',
+                ['*', visibility * 0.95,
+                     ['+', 0.4, ['*', 0.6, ['get', 'gridNow']]]]);
+            // Thinning as it goes reads as spreading out rather than looming.
+            map.setPaintProperty(id, 'circle-stroke-width', 3.2 - travel * 1.8);
+        });
+    }
+
+    function ensureNodesSource() {
         if (!map.getSource(NODES_SOURCE_ID)) {
             map.addSource(NODES_SOURCE_ID, { type: 'geojson', data: nodeData });
         }
+    }
+
+    function addNodeLayers() {
+        ensureNodesSource();
 
         registerIcons();
 
@@ -397,9 +520,9 @@
     function setLayerVisibility(visible) {
         const value = visible ? 'visible' : 'none';
         [
-            FILL_LAYER_ID, SOLAR_LAYER_ID,
+            FILL_LAYER_ID, SOLAR_LAYER_ID, GRID_HALO_ID, GRID_CORE_ID,
             FLOW_GLOW_ID, FLOW_LAYER_ID, NODE_LAYER_ID
-        ].forEach(function (id) {
+        ].concat(GRID_RING_IDS).forEach(function (id) {
             if (map.getLayer(id)) {
                 map.setLayoutProperty(id, 'visibility', value);
             }
@@ -438,6 +561,8 @@
             if (!map.getLayer(FLOW_LAYER_ID)) return;
             pulseStep = (pulseStep + 1) % DASH_SEQUENCE.length;
             map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray', DASH_SEQUENCE[pulseStep]);
+            gridRingStep = (gridRingStep + 1) % GRID_RING_STEPS;
+            paintGridRings();
         }, 55);
     }
 
@@ -458,11 +583,49 @@
         const source = map.getSource(NODES_SOURCE_ID);
         if (!source) return;
 
+        // What the grid tie is pushing into the campus this hour, against its
+        // own busiest hour. Scaled to itself rather than to the largest flow on
+        // the table: the question the pulse answers is "is the campus leaning
+        // on the grid right now", which is about this node over the day.
+        // Net across the grid tie: what it sends the campus, less what the
+        // campus sends back. Counting only outgoing flows made an exporting
+        // campus look identical to an idle one.
+        let gridNow = 0;
+        if (flowData) {
+            const netAt = function (h) {
+                let net = 0;
+                flowData.features.forEach(function (feature) {
+                    const props = feature.properties;
+                    const value = (props.flow_hourly || [])[h] || 0;
+                    if (props.source === 'GRID') net += value;
+                    else if (props.target === 'GRID') net -= value;
+                });
+                return net;
+            };
+
+            const hours = (flowData.features[0] &&
+                (flowData.features[0].properties.flow_hourly || []).length) || 0;
+
+            // Against the busiest hour either way, so import and export share
+            // one scale and a big export is not dwarfed by a bigger import.
+            let peak = 0;
+            for (let h = 0; h < hours; h += 1) {
+                const magnitude = Math.abs(netAt(h));
+                if (magnitude > peak) peak = magnitude;
+            }
+
+            const net = netAt(hour);
+            gridDirection = net < 0 ? -1 : 1;
+            gridNow = peak > 0 ? Math.abs(net) / peak : 0;
+        }
+
         nodeData.features.forEach(function (feature) {
             const series = feature.properties.solar_hourly || [];
             const peak = series.length ? Math.max.apply(null, series) : 0;
             const now = series[hour] || 0;
             feature.properties.solarNow = peak > 0 ? now / peak : 0;
+            feature.properties.gridNow =
+                feature.properties.kind === 'grid' ? gridNow : 0;
         });
 
         source.setData(nodeData);
@@ -696,6 +859,34 @@
 
     // -------------------------------------------------------------- control
 
+    // Traffic and live transit are ambient, and street-life.js turns them off
+    // by itself for every simulation layer - it reads the button classes. Asked
+    // for explicitly as well, because this layer can be switched on in code
+    // (ecomEnergyLayer.activate) without a button ever changing class, and
+    // because activation is async: the class flips when the toggle resolves,
+    // which is after the flows are already on the table.
+    function quietTheStreets(layerIsOn) {
+        const streets = window.streetLifeAnimation;
+        if (!streets) return;
+
+        // Stopped directly, not by asking street-life.js to re-read the button.
+        // It decides from `ecom-energy-btn` carrying the class `active`, and
+        // syncButton sets that in a .then() after toggle() resolves - which is
+        // after this runs. Calling updateVisibility here therefore asked a
+        // button that was not yet marked active, got told nothing was running,
+        // and STARTED the cars. Worse than not calling it at all.
+        if (layerIsOn) {
+            if (typeof streets.stop === 'function') streets.stop();
+            return;
+        }
+
+        // On the way out the button class is equally stale, but here the right
+        // answer is "whatever else is on", which is exactly what it computes.
+        if (typeof streets.updateVisibility === 'function') {
+            setTimeout(streets.updateVisibility, 60);
+        }
+    }
+
     async function activate() {
         const ok = await loadData();
         if (!ok) return;
@@ -707,6 +898,14 @@
         setLayerVisibility(true);
         isActive = true;
         setHour(currentHour);
+
+        // Marked active here, not in the .then() after toggle() resolves.
+        // street-life.js re-reads this class from three places - a mutation
+        // observer, its own click handler and a 2.5 s startup timer - and any
+        // of them firing while it still said "inactive" restarted the cars
+        // straight after this layer had stopped them.
+        syncButton();
+        quietTheStreets(true);
 
         ecomChannel.postMessage({
             type: 'animation_state',
@@ -724,6 +923,8 @@
     function deactivate() {
         setLayerVisibility(false);
         isActive = false;
+        syncButton();
+        quietTheStreets(false);
 
         ecomChannel.postMessage({
             type: 'animation_state',
