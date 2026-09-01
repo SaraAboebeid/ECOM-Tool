@@ -1385,6 +1385,17 @@
             return;
         }
 
+        // The sound asks the same question when it comes up, for the same
+        // reason: the day clock may be stopped, and an hour it has not been
+        // told about is an hour it cannot describe.
+        if (data.type === 'ecom_audio_request') {
+            if (isActive) {
+                reportForSound(currentHour,
+                               storageCurve ? (storageCurve[currentHour] || 0) : 0);
+            }
+            return;
+        }
+
         if (data.type === 'ecom_filters') {
             applyFilters(data.filters || null);
         }

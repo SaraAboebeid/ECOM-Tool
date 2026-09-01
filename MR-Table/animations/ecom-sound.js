@@ -6,27 +6,42 @@
 // table is showing, so it carries the same three readings the picture does and
 // cannot drift from them:
 //
-//   grid import      a pulse train. The harder the campus leans on the grid,
-//                    the denser the pulses - one every few seconds when it is
-//                    nearly self-sufficient, a steady patter when it is not.
+//   grid import      the rush: filtered noise, the sound of current in a cable
+//                    rather than a note. It swells as the campus leans on the
+//                    grid and thins out as it covers itself, breathing slowly
+//                    so it moves the way a load does.
 //
-//   self-sufficiency the texture. High, and the mains hum is filtered back to a
-//                    soft low tone and the local generation rings a clean fifth
-//                    above it. Low, and the filter opens, a detuned second
-//                    oscillator beats against the first, and it gets restless.
+//   self-sufficiency the colour of that rush. Running on its own roofs it is
+//                    dark and distant; leaning on the grid it opens up and
+//                    comes forward.
 //
-//   solar now        a bell on the hour when the roofs are producing, brighter
-//                    at midday than at dawn.
+//   the buzz         underneath it, a transformer under load: 100 Hz and its
+//                    first two harmonics, the spectrum a core actually makes
+//                    when magnetostriction pulls it twice per mains cycle. It
+//                    is the electricity itself, and it loads up with the grid,
+//                    rising in pitch as it does.
 //
-// The pitch is not arbitrary. The drone sits at 100 Hz - the second harmonic of
-// the 50 Hz Swedish grid, which is the sound a transformer actually makes. When
-// the campus is importing hard you are listening to mains hum; when it is
-// running on its own roofs, that hum recedes and a clean tone takes over. The
-// mapping is the point, not the prettiness.
+// Two things have been taken out along the way and stay out: a pulse train
+// carrying grid import, and a bell on the hour. A repeating click is the one
+// texture a room cannot stop hearing, and a table is stood around for an
+// afternoon; a chime every 1.1 seconds is the same problem wearing a nicer
+// coat. Nothing is an event any more - the sound is continuous and slow, and
+// everything it says it says by changing.
 //
-// Sound is off until asked for. A projection table runs unattended for hours,
-// and audio that starts by itself is audio someone has to go and find the
-// switch for.
+// The buzz is a drone, which was tried and rejected twice before - but the
+// versions that failed were a sawtooth stack sitting on top of the room and,
+// after that, a bare sine with nothing electrical about it. This one is built
+// from the harmonics a transformer core actually produces, and it is mixed at
+// a fraction of the level those were: it is the floor of the sound, under the
+// rush, not a note anyone is asked to listen to.
+//
+// The sound comes up with the energy layer and goes away with it. It is a
+// reading of what is on the table, so it belongs to the layer rather than to a
+// switch someone has to know about - and the layer is itself switched on by
+// hand, so nothing here ever starts on an unattended table.
+//
+// Turning it off in the controller mutes it for the session: it stays off
+// through any number of layer switches until it is asked for again.
 //
 // Exposes globals: ecomSound
 
@@ -35,22 +50,35 @@
 
     const channel = new BroadcastChannel('map_controller_channel');
 
-    // A harmonic of the 50 Hz Swedish grid: magnetostriction pulls the core
-    // twice per cycle, so a transformer hums at 100 Hz and at every multiple of
-    // it. 200 Hz - the fourth harmonic - rather than the second, because the
-    // table's speakers are small: 100 Hz is below what they reproduce, and a
-    // drone nobody can hear is a reading nobody gets.
-    const MAINS_HZ = 200;
+    // The band the rush sits in. Low and narrow when the community is running
+    // on itself, opening upward as it leans on the grid - the same move a
+    // transformer room makes as it loads up.
+    const FLOW_HZ_CALM = 240;
+    const FLOW_HZ_STRAINED = 900;
 
-    // Pulses per second at full grid import, and at none. Chosen by ear against
-    // the campus data: at 0.9 import - which is most of this scenario's day -
-    // it should feel busy but countable, not a buzz.
-    const PULSE_MIN_HZ = 0.35;
-    const PULSE_MAX_HZ = 6.5;
+    // Magnetostriction pulls a transformer core twice per mains cycle, so it
+    // hums at twice the 50 Hz supply and at every multiple of that. Three
+    // partials is enough to be recognisably electrical; more and it starts to
+    // buzz in the way that grates.
+    const BUZZ_HZ = 100;
+    const BUZZ_PARTIALS = [1, 2, 3];
+    const BUZZ_WEIGHTS = [1, 0.55, 0.28];
+
+    // It does not sit on one frequency. A fixed pitch reads as a test tone, and
+    // there is something worth saying with the movement: the whole buzz rises
+    // as the campus loads up, so the pitch is the reading and not just decor.
+    // On top of that a very slow wander keeps it from ever being quite still.
+    const BUZZ_LOAD_RISE = 0.22;    // up to a fifth higher under full import
+    const BUZZ_WANDER_HZ = 2.5;     // how far it drifts
+    const BUZZ_WANDER_RATE = 0.06;  // a cycle every sixteen seconds or so
 
     let ctx = null;
     let master = null;
     let enabled = false;
+
+    // Set when someone turns the sound off from the controller, so bringing the
+    // layer back does not bring the sound back with it.
+    let muted = false;
 
     // What the table is showing. Updated from the layer, never computed here:
     // a second opinion about the same hour is a second thing to keep in step.
@@ -61,14 +89,14 @@
         hour: 0
     };
 
-    let drone = null;
-    let droneBeat = null;
-    let droneGain = null;
-    let beatGain = null;
+    let flow = null;                // the noise source
+    let flowGain = null;
     let filter = null;
-    let localTone = null;
-    let localGain = null;
-    let pulseTimer = null;
+    let breath = null;              // slow swell on the rush
+    let breathGain = null;
+    let buzzGain = null;            // the transformer, all partials together
+    let buzzShape = null;           // rolls the harmonics off
+    let buzzTones = [];             // the partials themselves, to retune
 
     // ------------------------------------------------------------- graph
 
@@ -82,95 +110,93 @@
         master.gain.value = 0;              // faded in by enable()
         master.connect(ctx.destination);
 
-        // The grid hum, and its detuned twin. The twin only comes up when
-        // self-sufficiency is low: two oscillators a fraction apart beat
-        // against each other, and that beating is the restlessness.
+        // Two seconds of noise on a loop, band-passed: the rush of energy
+        // moving. Two seconds because a shorter loop has a period the ear
+        // starts to hear as a rhythm.
+        const seconds = 2;
+        const buffer = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
+        const samples = buffer.getChannelData(0);
+        let low = 0;
+        for (let i = 0; i < samples.length; i += 1) {
+            // Rolled off as it is generated, so the raw hiss never gets through
+            // even if the filter is wide open.
+            low = low * 0.86 + (Math.random() * 2 - 1) * 0.14;
+            samples[i] = low;
+        }
+
         filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 300;
-        filter.Q.value = 0.7;
+        filter.type = 'bandpass';
+        filter.frequency.value = FLOW_HZ_CALM;
+        // Broad. A narrow band rings, and a ringing band is a note again.
+        filter.Q.value = 0.6;
         filter.connect(master);
 
-        droneGain = ctx.createGain();
-        droneGain.gain.value = 0;
-        droneGain.connect(filter);
+        flowGain = ctx.createGain();
+        flowGain.gain.value = 0;
+        flowGain.connect(filter);
 
-        drone = ctx.createOscillator();
-        drone.type = 'sawtooth';
-        drone.frequency.value = MAINS_HZ;
-        drone.connect(droneGain);
-        drone.start();
+        flow = ctx.createBufferSource();
+        flow.buffer = buffer;
+        flow.loop = true;
+        flow.connect(flowGain);
+        flow.start();
 
-        beatGain = ctx.createGain();
-        beatGain.gain.value = 0;
-        beatGain.connect(filter);
+        // The transformer. Additive rather than a sawtooth, because a sawtooth
+        // brings every harmonic up to about 5 kHz with it and those are what
+        // make a drone unbearable to stand next to. Three partials, rolled off
+        // above them, and nothing above that at all.
+        buzzShape = ctx.createBiquadFilter();
+        buzzShape.type = 'lowpass';
+        buzzShape.frequency.value = 420;
+        buzzShape.Q.value = 0.4;
+        buzzShape.connect(master);
 
-        droneBeat = ctx.createOscillator();
-        droneBeat.type = 'sawtooth';
-        // A little over half a hertz apart: slow enough to hear as a pulse in
-        // the tone rather than as a second note.
-        droneBeat.frequency.value = MAINS_HZ + 0.6;
-        droneBeat.connect(beatGain);
-        droneBeat.start();
+        buzzGain = ctx.createGain();
+        buzzGain.gain.value = 0;
+        buzzGain.connect(buzzShape);
 
-        // Local generation: a clean fifth above the mains hum. Consonant on
-        // purpose - the community running on its own roofs should sound
-        // resolved, and the grid hum should not.
-        localGain = ctx.createGain();
-        localGain.gain.value = 0;
-        localGain.connect(master);
+        // The wander, shared by every partial so they move together and the
+        // spectrum stays a transformer rather than drifting apart into chords.
+        const wander = ctx.createOscillator();
+        wander.type = 'sine';
+        wander.frequency.value = BUZZ_WANDER_RATE;
+        wander.start();
 
-        localTone = ctx.createOscillator();
-        localTone.type = 'sine';
-        localTone.frequency.value = MAINS_HZ * 1.5;
-        localTone.connect(localGain);
-        localTone.start();
+        buzzTones = BUZZ_PARTIALS.map(function (partial, index) {
+            const level = ctx.createGain();
+            level.gain.value = BUZZ_WEIGHTS[index];
+            level.connect(buzzGain);
+
+            const tone = ctx.createOscillator();
+            tone.type = 'sine';
+            tone.frequency.value = BUZZ_HZ * partial;
+            tone.connect(level);
+            tone.start();
+
+            // Each partial wanders by its own multiple, so the harmonic
+            // relationship holds while the whole thing moves.
+            const depth = ctx.createGain();
+            depth.gain.value = BUZZ_WANDER_HZ * partial;
+            depth.connect(tone.frequency);
+            wander.connect(depth);
+
+            return { tone: tone, partial: partial };
+        });
+
+        // And a slow swell over the top of it, so the rush moves the way a
+        // load does rather than sitting perfectly still.
+        breathGain = ctx.createGain();
+        breathGain.gain.value = 0;
+        breathGain.connect(flowGain.gain);
+
+        breath = ctx.createOscillator();
+        breath.type = 'sine';
+        breath.frequency.value = 0.08;        // a cycle every twelve seconds
+        breath.connect(breathGain);
+        breath.start();
     }
 
     // ------------------------------------------------------------ voices
-
-    /** A short click: one parcel of energy arriving from outside. */
-    function pulse() {
-        if (!ctx || !enabled) return;
-        const now = ctx.currentTime;
-
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        // Rises with import, so a hard-drawing campus is higher as well as
-        // busier. Two cues for one reading is easier to hear than either alone.
-        osc.frequency.value = 180 + state.gridNow * 140;
-
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.05 + state.gridNow * 0.06, now + 0.005);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
-
-        osc.connect(gain);
-        gain.connect(master);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    }
-
-    /** A bell on the hour, when the roofs are making something. */
-    function chime() {
-        if (!ctx || !enabled || state.solarNow <= 0.02) return;
-        const now = ctx.currentTime;
-
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        // Higher at midday than at dawn, so the arc of the day is audible.
-        osc.frequency.value = MAINS_HZ * (4 + state.solarNow * 2);
-
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.03 + state.solarNow * 0.05, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
-
-        osc.connect(gain);
-        gain.connect(master);
-        osc.start(now);
-        osc.stop(now + 1.3);
-    }
 
     // ------------------------------------------------------------ mapping
 
@@ -182,45 +208,35 @@
         const calm = state.selfSufficiency;
         const strain = 1 - calm;
 
-        // The hum recedes as the community covers more of its own demand.
-        droneGain.gain.setTargetAtTime(0.012 + state.gridNow * 0.05, now, ease);
+        // The rush is the backing now, not the main voice: the buzz is what
+        // was asked for and it has to be the thing you hear. A third of what
+        // it was.
+        const level = 0.004 + state.gridNow * 0.010;
+        flowGain.gain.setTargetAtTime(level, now, ease);
+        // The swell is a fraction of that, so it breathes rather than pumps.
+        breathGain.gain.setTargetAtTime(level * 0.35, now, ease);
 
-        // Beating only under strain. At high self-sufficiency it is silent and
-        // the tone is steady.
-        beatGain.gain.setTargetAtTime(strain * strain * 0.035, now, ease);
+        // Self-sufficiency sets its colour: dark and far off when the roofs
+        // are covering the campus, open and forward when the grid is.
+        filter.frequency.setTargetAtTime(
+            FLOW_HZ_CALM + strain * (FLOW_HZ_STRAINED - FLOW_HZ_CALM), now, ease);
 
-        // Calm closes the filter: darker, softer, further away.
-        filter.frequency.setTargetAtTime(180 + strain * 900, now, ease);
+        // The transformer, and it is meant to be heard: it was mixed at a
+        // fiftieth of this and simply was not there. It loads up with the grid
+        // like everything else.
+        buzzGain.gain.setTargetAtTime(0.030 + state.gridNow * 0.055, now, ease);
+        // And its harmonics open under load, the way a core does - far enough
+        // now to let the second and third through, which is where the buzz in
+        // a transformer buzz actually lives.
+        buzzShape.frequency.setTargetAtTime(360 + state.gridNow * 420, now, ease);
 
-        // And the local tone comes up with self-sufficiency.
-        localGain.gain.setTargetAtTime(calm * 0.05, now, ease);
-
-        schedulePulses();
-    }
-
-    function pulseGapMs() {
-        // Density is the headline mapping: pulses per second rise with import.
-        const rate = PULSE_MIN_HZ + state.gridNow * (PULSE_MAX_HZ - PULSE_MIN_HZ);
-        return Math.max(60, 1000 / Math.max(rate, 0.01));
-    }
-
-    // Each pulse books the next one.
-    //
-    // This was a setInterval rebuilt on every reading, which arrive once an
-    // hour-tick. Any gap longer than that tick was cleared before it could ever
-    // fire, so a self-sufficient community - the quiet end, where a pulse
-    // carries the most information - fell completely silent.
-    function schedulePulses() {
-        if (pulseTimer !== null) {
-            clearTimeout(pulseTimer);
-            pulseTimer = null;
-        }
-        if (!enabled) return;
-        pulseTimer = setTimeout(function () {
-            pulseTimer = null;
-            pulse();
-            schedulePulses();
-        }, pulseGapMs());
+        // The pitch rises with the load. Slowly - a whole hour of the day is
+        // 1.1 seconds here, and a buzz that lurched from hour to hour would be
+        // a siren rather than a room.
+        const pitch = BUZZ_HZ * (1 + state.gridNow * BUZZ_LOAD_RISE);
+        buzzTones.forEach(function (voice) {
+            voice.tone.frequency.setTargetAtTime(pitch * voice.partial, now, 1.2);
+        });
     }
 
     // ------------------------------------------------- keeping it running
@@ -244,10 +260,27 @@
         if (!ctx || ctx.state !== 'suspended') return;
         try {
             const p = ctx.resume();
-            if (p && typeof p.then === 'function') p.then(announce, announce);
-            else announce();
+            if (p && typeof p.then === 'function') {
+                p.then(announce, function () { announce(); blocked(); });
+            } else {
+                announce();
+            }
         } catch (err) {
             announce();
+            blocked();
+        }
+    }
+
+    // Said on the table itself, because the table is where the click has to
+    // happen: a press on the controller is a gesture in that document and not
+    // in this one, and a browser will not start audio for a page nobody has
+    // touched.
+    let toldThem = false;
+    function blocked() {
+        if (toldThem || !enabled) return;
+        toldThem = true;
+        if (typeof showToast === 'function') {
+            showToast('Click the table once to let the sound play', 6000);
         }
     }
 
@@ -281,8 +314,6 @@
                 announce();
             }
             tryResume();
-            // The scheduler can be lost if a pulse ever threw; this restarts it.
-            if (pulseTimer === null) schedulePulses();
         }, 2000);
     }
 
@@ -305,15 +336,15 @@
         master.gain.setTargetAtTime(0.9, ctx.currentTime, 0.6);
         apply();
         announce();
+        // The hour it should be describing. Without asking, the sound opens on
+        // whatever it last heard - silence, at startup - until the next tick,
+        // and the day clock can be stopped altogether.
+        channel.postMessage({ type: 'ecom_audio_request' });
         return true;
     }
 
     function disable() {
         enabled = false;
-        if (pulseTimer !== null) {
-            clearTimeout(pulseTimer);
-            pulseTimer = null;
-        }
         if (watchdog !== null) {
             clearInterval(watchdog);
             watchdog = null;
@@ -348,9 +379,9 @@
         const data = event.data || {};
 
         if (data.type === 'ecom_sound') {
-            if (data.on === true) enable();
-            else if (data.on === false) disable();
-            else toggle();
+            if (data.on === true) { muted = false; enable(); }
+            else if (data.on === false) { muted = true; disable(); }
+            else { muted = enabled; toggle(); }
             return;
         }
 
@@ -361,21 +392,21 @@
 
         if (data.type === 'ecom_audio' && data.reading) {
             const reading = data.reading;
-            const changedHour = reading.hour !== state.hour;
             state.gridNow = reading.gridNow || 0;
             state.selfSufficiency = reading.selfSufficiency || 0;
             state.solarNow = reading.solarNow || 0;
             state.hour = reading.hour || 0;
             apply();
-            if (changedHour) chime();
         }
 
-        // The layer went away; so does the sound. Leaving a hum running over a
+        // The sound follows the layer both ways. Leaving a hum running over a
         // different simulation would be describing something nobody is looking
-        // at.
+        // at; and a layer with no sound was the commonest way to end up
+        // wondering where the sound had gone.
         if (data.type === 'animation_state' &&
-            data.animationId === 'ecom-energy-btn' && !data.isActive) {
-            disable();
+            data.animationId === 'ecom-energy-btn') {
+            if (!data.isActive) disable();
+            else if (!muted) enable();
         }
     });
 
@@ -390,12 +421,13 @@
             if (!ctx) return null;
             return {
                 master: master.gain.value,
-                hum: droneGain.gain.value,
-                beat: beatGain.gain.value,
-                local: localGain.gain.value,
-                cutoff: filter.frequency.value,
-                pulsesPerSecond: PULSE_MIN_HZ +
-                    state.gridNow * (PULSE_MAX_HZ - PULSE_MIN_HZ)
+                flow: flowGain.gain.value,
+                breath: breathGain.gain.value,
+                buzz: buzzGain.gain.value,
+                buzzCutoff: buzzShape.frequency.value,
+                // Neither a held tone nor a beat. Kept so a test can say so.
+                pulsesPerSecond: 0,
+                cutoff: filter.frequency.value
             };
         }
     };
