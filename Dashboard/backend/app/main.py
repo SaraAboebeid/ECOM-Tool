@@ -58,13 +58,17 @@ app = FastAPI(
 # same-origin and needs nothing here, but it is just as often opened straight
 # off :8090 - without that origin listed, the browser blocks the call and the
 # panel can only report that it found no backend.
+# Vite claims 5173 and walks up from there when it is taken - another project
+# left running, or a dev server that did not shut down - so the dashboard can
+# land anywhere in that range. Two named ports meant the dashboard came up on
+# 5180 one morning and every call it made was blocked, with nothing in the UI
+# to say why. The regex covers the range Vite actually searches.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://localhost:5174",   # Vite
-        "http://127.0.0.1:5173", "http://127.0.0.1:5174",
         "http://localhost:8090", "http://127.0.0.1:8090",   # MR-Table
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):51[7-9][0-9]",
     allow_methods=["*"],
     allow_headers=["*"],
 )

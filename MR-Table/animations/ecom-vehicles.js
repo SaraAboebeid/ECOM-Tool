@@ -27,10 +27,60 @@
     const LAYER_ID = 'ecom-vehicles';
     const ICON_ID = 'ecom-car';
 
-    // How far back down the street a car appears before it arrives. Long enough
-    // to read as an approach, short enough to finish inside one hour tick.
-    const APPROACH_M = 140;
-    const DRIVE_MS = 2000;
+    // A car comes in from off the table and leaves the same way. Appearing a
+    // hundred metres up the road is the thing this replaced: on a projection
+    // table, something materialising mid-street reads as a glitch rather than
+    // as a car.
+
+    // A departing car does not stop existing at the end of the block. It keeps
+    // going until it is off the table, so the way out is followed across
+    // junctions for further than the frame can be at the calibrated zoom, and
+    // the car is dropped only once it is outside the view or out of road.
+    // Two kilometres of road: the table window is calibrated at about a metre
+    // to the pixel, so the far edge of a large display can be most of a
+    // kilometre from a charger, and the exit has to outlast the frame rather
+    // than the other way round.
+    const EXIT_M = 2000;
+    const JOIN_M = 25;          // how close two street ends must be to be one road
+    const TURN_LIMIT_DEG = 100; // sharper than this at a junction is a U-turn
+
+    // Metres per second of wall clock. Departure is measured in distance rather
+    // than in a fixed duration, so a long exit is a longer drive rather than a
+    // faster car - and the edge of the frame can be a kilometre away, which at
+    // the approach speed would leave a car still driving twenty simulated hours
+    // after it left. It pulls away faster than it arrived, which is also what a
+    // car does.
+    // Speed is a profile, not a number.
+    //
+    // The frame edge is most of a kilometre from a charger and the table shows
+    // a whole day in half a minute, so the open road has to be covered quickly
+    // or the car would still be arriving hours after it plugged in - and it
+    // would spend its entire stay driving instead of parked. But the part
+    // anyone actually watches is the last stretch by the charger, and that has
+    // to look like a car pulling in and stopping.
+    //
+    // So: quick out on the open road, slowing over the last stretch, creeping
+    // into the bay. Same in reverse on the way out.
+    const CRUISE_MPS = 180;      // out on the road, far from the bay
+    const PARK_MPS = 18;         // the last metres into the bay
+    const SLOW_M = 190;          // where it starts braking
+    const PULL_AWAY_M = 150;     // how long it takes to get back up to speed
+
+    // How far beyond the frame edge a car waits before driving in, and the
+    // furthest out it is worth looking for that point.
+    const CLEARANCE_M = 40;
+    const MAX_ENTRY_M = 3000;
+
+    // The street data ends at the edge of the surveyed campus, about a
+    // kilometre of driving from the chargers - and a kilometre of road can
+    // still loop around inside the frame. Past the last vertex the car carries
+    // straight on along its final heading until it is genuinely off the table;
+    // it has left the mapped area, which is exactly what leaving looks like.
+    const OVERRUN_M = 1500;
+
+    // And if the view cannot be read at all - a map with no getBounds - it
+    // fades at the end of the overrun rather than blinking out.
+    const FADE_MS = 500;
 
     // Parked cars stand beside the charger, not on top of its marker.
     const BAY_OFFSET_M = 7;
@@ -40,6 +90,7 @@
 
     let active = false;
     let streets = null;              // the street network, once fetched
+    let graph = null;                // and the junction graph built from it
     let streetsPromise = null;
     let frame = null;
 
@@ -91,6 +142,22 @@
         return { point: path[path.length - 1], heading: 0 };
     }
 
+    /**
+     * How fast the car is going, given how far it has come and how far is left.
+     *
+     * `remaining` is null on the way out, where there is no bay to stop at.
+     */
+    function speedAt(covered, remaining) {
+        const pullingAway = covered < PULL_AWAY_M
+            ? PARK_MPS + (CRUISE_MPS - PARK_MPS) * (covered / PULL_AWAY_M)
+            : CRUISE_MPS;
+        if (remaining === null) return pullingAway;
+        const braking = remaining < SLOW_M
+            ? PARK_MPS + (CRUISE_MPS - PARK_MPS) * (remaining / SLOW_M)
+            : CRUISE_MPS;
+        return Math.min(pullingAway, braking);
+    }
+
     function pathLength(path) {
         let total = 0;
         for (let i = 1; i < path.length; i += 1) total += distance(path[i - 1], path[i]);
@@ -111,13 +178,153 @@
         return lines;
     }
 
+    // ------------------------------------------------------------- network
+
     /**
-     * The drive in and the drive out for one charge point.
+     * The street network as a graph: a node per junction, an edge per street.
+     *
+     * Built once, when the network loads, because a greedy walk cannot do this
+     * job. Taking the straightest continuation at each junction dead-ends, and
+     * a walk has no way to back out of one: the approach used to manage 286 m
+     * of road and then cut 647 m straight across the campus to reach the edge
+     * of the table, which is not a thing a car does. A search over the whole
+     * network finds the way out whenever one exists.
+     */
+    function buildGraph(lines) {
+        const buckets = new Map();
+        const nodes = [];
+        const edges = [];
+        const edgeOfLine = new Map();
+
+        // Junctions are drawn as separate street ends up to about 20 m apart in
+        // this data, so endpoints within JOIN_M are one junction. A grid keyed
+        // in metres keeps that lookup local rather than scanning every node.
+        const cellKey = function (point, dx, dy) {
+            const scale = metresPerDegree(point[1]);
+            return (Math.floor(point[0] * scale.lon / JOIN_M) + dx) + ':' +
+                   (Math.floor(point[1] * scale.lat / JOIN_M) + dy);
+        };
+
+        const lookup = function (point) {
+            for (let dx = -1; dx <= 1; dx += 1) {
+                for (let dy = -1; dy <= 1; dy += 1) {
+                    const bucket = buckets.get(cellKey(point, dx, dy));
+                    if (!bucket) continue;
+                    for (let i = 0; i < bucket.length; i += 1) {
+                        if (distance(nodes[bucket[i]], point) <= JOIN_M) {
+                            return bucket[i];
+                        }
+                    }
+                }
+            }
+            return -1;
+        };
+
+        const nodeAt = function (point) {
+            const found = lookup(point);
+            if (found !== -1) return found;
+            const index = nodes.push(point) - 1;
+            const key = cellKey(point, 0, 0);
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key).push(index);
+            return index;
+        };
+
+        lines.forEach(function (line) {
+            if (line.length < 2) return;
+            const a = nodeAt(line[0]);
+            const b = nodeAt(line[line.length - 1]);
+            if (a === b) return;              // a street that returns to its own junction
+            const index = edges.push({ a: a, b: b, coords: line,
+                                       length: pathLength(line) }) - 1;
+            edgeOfLine.set(line, index);
+        });
+
+        const from = nodes.map(function () { return []; });
+        edges.forEach(function (edge, index) {
+            from[edge.a].push(index);
+            from[edge.b].push(index);
+        });
+
+        return { nodes: nodes, edges: edges, from: from,
+                 locate: lookup, edgeOf: function (line) {
+                     const index = edgeOfLine.get(line);
+                     return index === undefined ? -1 : index;
+                 } };
+    }
+
+    /**
+     * The way out of the network from one junction, in road.
+     *
+     * Dijkstra, stopping at the first junction that is off the table - the
+     * shortest way out rather than a wander. Where the network never leaves the
+     * frame, it stops at the junction furthest from the charger and the caller
+     * carries on from there.
+     */
+    function roadOut(startNode, bannedEdge, origin) {
+        if (!graph || startNode < 0) return [];
+
+        const best = new Map([[startNode, { cost: 0, edge: -1, prev: -1 }]]);
+        const queue = [startNode];
+        let farthest = { node: startNode,
+                         gap: distance(origin, graph.nodes[startNode]) };
+        let exit = -1;
+
+        while (queue.length) {
+            // A few hundred junctions, so scanning for the cheapest is cheaper
+            // than keeping a heap in order.
+            let at = 0;
+            for (let i = 1; i < queue.length; i += 1) {
+                if (best.get(queue[i]).cost < best.get(queue[at]).cost) at = i;
+            }
+            const node = queue.splice(at, 1)[0];
+            const here = best.get(node);
+            if (here.cost > EXIT_M) break;
+
+            if (node !== startNode && offFrame(graph.nodes[node])) {
+                exit = node;
+                break;
+            }
+            const gap = distance(origin, graph.nodes[node]);
+            if (gap > farthest.gap) farthest = { node: node, gap: gap };
+
+            graph.from[node].forEach(function (index) {
+                if (index === bannedEdge) return;
+                const edge = graph.edges[index];
+                const next = edge.a === node ? edge.b : edge.a;
+                const cost = here.cost + edge.length;
+                const known = best.get(next);
+                if (known && known.cost <= cost) return;
+                best.set(next, { cost: cost, edge: index, prev: node });
+                if (queue.indexOf(next) === -1) queue.push(next);
+            });
+        }
+
+        const parts = [];
+        let node = exit !== -1 ? exit : farthest.node;
+        while (node !== startNode) {
+            const step = best.get(node);
+            if (!step || step.edge === -1) break;
+            const edge = graph.edges[step.edge];
+            parts.unshift(edge.a === step.prev
+                ? edge.coords : edge.coords.slice().reverse());
+            node = step.prev;
+        }
+
+        const out = [];
+        parts.forEach(function (coords) {
+            Array.prototype.push.apply(out, out.length ? coords.slice(1) : coords);
+        });
+        return out;
+    }
+
+    /**
+     * Where a charge point sits on the network, and the road each way from it.
      *
      * The charger is placed on a street, so the nearest vertex of the nearest
-     * line is the bay. The approach is the stretch of road leading up to it and
-     * the departure continues past it; where the road ends first, the car
-     * leaves the way it came, which is what a dead end forces anyway.
+     * line is its bay. The rest of that street each way gives the two
+     * directions a car can come and go by; the search continues from whichever
+     * junction each half ends at.
      */
     function routeFor(position, lines) {
         let best = null;
@@ -131,36 +338,111 @@
 
         const walk = function (step) {
             const path = [];
-            let travelled = 0;
             let i = best.index;
-            while (i >= 0 && i < best.line.length && travelled < APPROACH_M) {
+            while (i >= 0 && i < best.line.length) {
                 path.push(best.line[i]);
-                const next = i + step;
-                if (next < 0 || next >= best.line.length) break;
-                travelled += distance(best.line[i], best.line[next]);
-                i = next;
+                i += step;
             }
             return path;                       // ordered from the bay outwards
         };
 
-        const back = walk(-1);
-        const forward = walk(1);
-        // Inbound runs towards the charger, so the outward walk is reversed.
-        const inbound = back.length > 1 ? back.slice().reverse() : forward.slice().reverse();
-        const outbound = forward.length > 1 ? forward : back;
+        const half = function (part) {
+            if (part.length < 2) return null;
+            return { part: part,
+                     node: graph ? graph.locate(part[part.length - 1]) : -1 };
+        };
+
+        const back = half(walk(-1));
+        const forward = half(walk(1));
+        // One way in and the other way out, so a car does not arrive and leave
+        // along the same kerb. A charger on a dead end uses the one it has.
+        const entry = back || forward;
+        const exit = forward || back;
 
         return {
-            inbound: inbound.concat([position]),
-            outbound: [position].concat(outbound.slice(1)),
+            entry: entry,
+            exit: exit,
+            ownEdge: graph ? graph.edgeOf(best.line) : -1,
+            position: position,
             // The bay sits beside the road, offset across the direction of
             // travel so a parked car does not cover the charger's own marker.
-            bay: offsetBay(position, inbound)
+            bay: offsetBay(position, entry ? entry.part : [position])
         };
     }
 
-    function offsetBay(position, inbound) {
-        if (inbound.length < 2) return { point: position, heading: 0 };
-        const approach = bearing(inbound[inbound.length - 2], position);
+    /**
+     * The full road one way out of a bay, found now rather than when the route
+     * was built: it depends on where the frame edge currently is, and the table
+     * can be recalibrated under a running layer.
+     */
+    function roadFrom(route, side) {
+        const half = route[side] || route.entry || route.exit;
+        if (!half) return [route.position];
+        const onward = half.node >= 0
+            ? roadOut(half.node, route.ownEdge, route.position) : [];
+        const path = [route.position].concat(half.part.slice(1));
+        if (onward.length > 1) {
+            Array.prototype.push.apply(path, onward.slice(1));
+        }
+        return path;
+    }
+
+    /** A point `metres` along `heading` from `origin`. */
+    function project(origin, heading, metres) {
+        const radians = heading * Math.PI / 180;
+        const scale = metresPerDegree(origin[1]);
+        return [
+            origin[0] + (Math.sin(radians) * metres) / scale.lon,
+            origin[1] + (Math.cos(radians) * metres) / scale.lat
+        ];
+    }
+
+    /**
+     * The way in, starting outside the frame.
+     *
+     * The street chain runs outward from the bay and usually stops at the edge
+     * of the surveyed campus, which can still be inside the view. Where it
+     * does, the path is carried on radially until it is off the table, so the
+     * car drives in from beyond the edge rather than appearing on a road in
+     * the middle of the scene. Reversed at the end: outward becomes inward.
+     */
+    function entryPath(route) {
+        const chain = roadFrom(route, 'entry').slice();
+        const far = chain[chain.length - 1];
+        const heading = chain.length > 1
+            ? bearing(route.bay.point, far) : 0;
+
+        let extra = 0;
+        while (extra < MAX_ENTRY_M && !offFrame(project(far, heading, extra))) {
+            extra += 60;
+        }
+        if (extra > 0) chain.push(project(far, heading, extra + CLEARANCE_M));
+
+        // Ending at the bay rather than at the charger itself, so the car rolls
+        // into its space instead of reaching the marker and then jumping the
+        // few metres sideways to park.
+        return chain.reverse().concat([route.bay.point]);
+    }
+
+    /** Whether a point has left the table view, with a margin so it clears it. */
+    function offFrame(point) {
+        if (typeof map === 'undefined' || !map ||
+            typeof map.getBounds !== 'function') return false;
+        const bounds = map.getBounds();
+        if (!bounds) return false;
+        const west = bounds.getWest(), east = bounds.getEast();
+        const south = bounds.getSouth(), north = bounds.getNorth();
+        const padLon = (east - west) * 0.08;
+        const padLat = (north - south) * 0.08;
+        return point[0] < west - padLon || point[0] > east + padLon ||
+               point[1] < south - padLat || point[1] > north + padLat;
+    }
+
+    function offsetBay(position, entry) {
+        // `entry` runs outward from the bay, so the direction a car faces on
+        // arrival is the reverse of its first step.
+        if (entry.length < 2) return { point: position, heading: 0 };
+        const approach = bearing(entry[1], position);
         const across = (approach + 90) * Math.PI / 180;
         const scale = metresPerDegree(position[1]);
         return {
@@ -279,25 +561,61 @@
         let moving = false;
 
         vehicles.forEach(function (vehicle) {
-            if (vehicle.state === 'arriving' || vehicle.state === 'leaving') {
-                const path = vehicle.state === 'arriving'
-                    ? vehicle.route.inbound : vehicle.route.outbound;
-                const progress = Math.min(1, (now - vehicle.startedAt) / DRIVE_MS);
-                // Ease out on arrival and in on departure: a car that stops
-                // dead at the bay reads as a jump rather than a park.
-                const eased = vehicle.state === 'arriving'
-                    ? 1 - Math.pow(1 - progress, 2)
-                    : progress * progress;
-                vehicle.at = alongPath(path, eased * pathLength(path));
+            const seconds = step(vehicle, now);
+
+            if (vehicle.state === 'arriving') {
+                const remaining = vehicle.pathLength - vehicle.covered;
+                vehicle.covered += speedAt(vehicle.covered, remaining) * seconds;
+                vehicle.at = alongPath(vehicle.path,
+                                       Math.min(vehicle.covered, vehicle.pathLength));
                 vehicle.opacity = 1;
-                if (progress >= 1) {
-                    if (vehicle.state === 'arriving') {
-                        vehicle.state = 'parked';
-                        vehicle.at = vehicle.route.bay;
-                    } else {
-                        vehicle.state = 'away';
-                        vehicle.at = null;
-                    }
+                if (vehicle.covered >= vehicle.pathLength) {
+                    vehicle.state = 'parked';
+                    vehicle.at = vehicle.route.bay;
+                } else {
+                    moving = true;
+                }
+            } else if (vehicle.state === 'leaving') {
+                // Distance, not a duration: it drives at a steady speed until it
+                // is off the table or out of road, however far away that is.
+                const path = vehicle.path;
+                const total = vehicle.pathLength;
+                // No bay ahead, so nothing to brake for: it pulls away and goes.
+                vehicle.covered += speedAt(vehicle.covered, null) * seconds;
+                const covered = vehicle.covered;
+
+                if (covered <= total) {
+                    vehicle.at = alongPath(path, covered);
+                } else {
+                    // Off the end of the mapped streets: straight on, away from
+                    // the charger. Radially rather than along the last kerb, so
+                    // a road that happens to end on a bend still takes the car
+                    // out of the frame instead of back across it.
+                    const last = path[path.length - 1];
+                    const heading = bearing(vehicle.route.bay.point, last);
+                    vehicle.at = { point: project(last, heading, covered - total),
+                                   heading: heading };
+                }
+                vehicle.opacity = 1;
+
+                if (offFrame(vehicle.at.point)) {
+                    vehicle.state = 'away';
+                    vehicle.at = null;
+                } else if (covered >= total + OVERRUN_M) {
+                    // Nothing has told us it is off screen and it has driven a
+                    // kilometre and a half past the last road. Bow out.
+                    vehicle.state = 'fading';
+                    vehicle.startedAt = now;
+                    moving = true;
+                } else {
+                    moving = true;
+                }
+            } else if (vehicle.state === 'fading') {
+                const done = Math.min(1, (now - vehicle.startedAt) / FADE_MS);
+                vehicle.opacity = 1 - done;
+                if (done >= 1) {
+                    vehicle.state = 'away';
+                    vehicle.at = null;
                 } else {
                     moving = true;
                 }
@@ -324,14 +642,38 @@
         }
     }
 
+    /**
+     * Seconds since this vehicle last moved.
+     *
+     * Capped, because a table whose window has been behind another runs no
+     * animation frames at all: the first frame back would otherwise carry a
+     * gap of minutes and teleport the car to the end of its route.
+     */
+    function step(vehicle, now) {
+        const last = vehicle.steppedAt || now;
+        vehicle.steppedAt = now;
+        return Math.max(0, Math.min(0.1, (now - last) / 1000));
+    }
+
     // Placed at the head of its path as the state changes, rather than left
     // without a position until the first animation frame: a frame can be a
     // while coming - a table whose window is not in front runs no frames at all
     // - and until then the car would be travelling and drawn nowhere.
-    function start(vehicle, state, path) {
+    function start(vehicle, state) {
+        // The way in is built now rather than with the route, because it
+        // depends on where the frame edge currently is - the table can be
+        // recalibrated, and a car should still come in from off it.
+        vehicle.path = state === 'arriving'
+            ? entryPath(vehicle.route)
+            // Out of the bay, not out of the charger: it leaves from where it
+            // was actually standing.
+            : [vehicle.route.bay.point].concat(roadFrom(vehicle.route, 'exit'));
+        vehicle.pathLength = pathLength(vehicle.path);
+        vehicle.covered = 0;
+        vehicle.steppedAt = performance.now();
         vehicle.state = state;
-        vehicle.startedAt = performance.now();
-        vehicle.at = alongPath(path, 0);
+        vehicle.startedAt = vehicle.steppedAt;
+        vehicle.at = alongPath(vehicle.path, 0);
         vehicle.opacity = 1;
     }
 
@@ -356,10 +698,11 @@
             vehicle.charging = !!point.charging;
 
             const here = vehicle.state === 'parked' || vehicle.state === 'arriving';
+            // A car still fading out of a dead end is on its way, not here.
             if (point.plugged && !here) {
-                start(vehicle, 'arriving', vehicle.route.inbound);
+                start(vehicle, 'arriving');
             } else if (!point.plugged && here) {
-                start(vehicle, 'leaving', vehicle.route.outbound);
+                start(vehicle, 'leaving');
             }
         });
 
@@ -384,6 +727,7 @@
             })
             .then(function (geojson) {
                 streets = streetLines(geojson);
+                graph = buildGraph(streets);
                 return streets;
             })
             .catch(function (error) {
@@ -458,6 +802,9 @@
             const out = [];
             vehicles.forEach(function (vehicle) {
                 out.push({ id: vehicle.id, state: vehicle.state,
+                           exitMetres: Math.round(pathLength(roadFrom(vehicle.route, 'exit'))),
+                           entryMetres: Math.round(pathLength(roadFrom(vehicle.route, 'entry'))),
+                           driveMetres: Math.round(vehicle.pathLength || 0),
                            at: vehicle.at ? vehicle.at.point : null,
                            heading: vehicle.at ? vehicle.at.heading : null,
                            opacity: vehicle.opacity, charging: vehicle.charging });
