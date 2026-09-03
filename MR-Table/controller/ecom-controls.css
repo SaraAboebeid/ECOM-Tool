@@ -1040,3 +1040,57 @@
     border-color: rgba(255, 194, 71, 0.5);
     color: var(--ecom-warn, #ffc247);
 }
+
+/* The introduction: one button the presenter can find without looking down. */
+.ecom-ctl-story {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.ecom-ctl-story.is-running {
+    border-color: rgba(232, 238, 246, 0.28);
+    background: rgba(232, 238, 246, 0.05);
+}
+.ecom-ctl-story-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.ecom-ctl-story-label {
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    opacity: 0.78;
+}
+.ecom-ctl-dots {
+    display: flex;
+    gap: 5px;
+}
+/* Each dot is a jump, for the question asked out of order. */
+.ecom-ctl-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.22);
+    transition: width 160ms ease, background 160ms ease;
+}
+.ecom-ctl-dot.is-done { background: rgba(232, 238, 246, 0.55); }
+.ecom-ctl-dot.is-on {
+    width: 20px;
+    background: var(--ecom-action, #e8eef6);
+}
+.ecom-ctl-story-bar {
+    display: flex;
+    gap: 8px;
+}
+.ecom-ctl-story-bar .ecom-ctl-btn { flex: 1; }
+.ecom-ctl-story-bar .ecom-ctl-btn[disabled] {
+    opacity: 0.35;
+    cursor: default;
+}

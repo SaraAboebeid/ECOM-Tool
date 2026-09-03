@@ -88,6 +88,97 @@
         { key: 'charge_point', label: 'Charging', color: PALETTE.charge_point || '#00ff5e' }
     ];
 
+    // ----------------------------------------------------------- the story
+    //
+    // An introduction, for showing the community to a room. The entities are
+    // introduced one at a time and only then do they start trading, because
+    // sharing cannot be explained until there is something to share between.
+    //
+    // The order is demand, then supply, then the outside world, then the two
+    // new things, then the community. Buildings first because they are what
+    // the room already recognises; the grid third rather than last because it
+    // is the reference point - total dependency is what makes self-sufficiency
+    // mean anything two steps later.
+    //
+    // One new entity per step and nothing is ever taken away, so the picture
+    // accumulates instead of being replaced. The encodings arrive in order of
+    // how hard they grab attention - colour, then lines, then a moving level,
+    // then motion, then sound - because a car driving about and a transformer
+    // buzzing from the first step means nobody hears the first three sentences.
+    //
+    // The clock is held still until the last step. Time moving and a new
+    // entity appearing at once is where an audience loses the thread.
+    const STORY = [
+        {
+            key: 'buildings',
+            title: 'The buildings',
+            line: 'Thirty-two buildings on campus, each with a year of measured ' +
+                  'electricity behind it. This is the demand the community has ' +
+                  'to cover.',
+            figure: 'Members of the energy community',
+            kinds: ['building'],
+            pairs: [],
+            hour: 12
+        },
+        {
+            key: 'solar',
+            title: 'The roofs',
+            line: 'Eight of them carry solar. Brightest at midday, nothing at ' +
+                  'night - and never enough on its own.',
+            figure: 'Generation, where it is made',
+            kinds: ['building', 'pv'],
+            pairs: [],
+            hour: 12
+        },
+        {
+            key: 'grid',
+            title: 'The grid',
+            line: 'Today every building buys separately from the grid. These ' +
+                  'are the lines that cost money and carry carbon.',
+            figure: 'The baseline: one connection each',
+            kinds: ['building', 'pv', 'grid'],
+            pairs: ['grid>building'],
+            hour: 12
+        },
+        {
+            key: 'battery',
+            title: 'The battery',
+            line: 'A community store. It fills when there is more sun than ' +
+                  'demand and empties into the campus after dark.',
+            figure: 'Shifting energy through the day',
+            kinds: ['building', 'pv', 'grid', 'battery'],
+            pairs: ['grid>building', 'battery>building', 'building>battery',
+                    'pv>battery', 'grid>battery'],
+            hour: 19
+        },
+        {
+            key: 'charging',
+            title: 'The charge point',
+            line: 'A charger on Gibraltarvallsvagen, and the car that uses it. ' +
+                  'It arrives in the evening and leaves in the morning.',
+            figure: 'A new load, on a schedule',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['grid>building', 'battery>building', 'building>battery',
+                    'pv>battery', 'grid>battery',
+                    'grid>charge_point', 'battery>charge_point',
+                    'building>charge_point', 'pv>charge_point'],
+            hour: 20
+        },
+        {
+            key: 'community',
+            title: 'The energy community',
+            line: 'The same buildings, now trading with each other before ' +
+                  'anyone buys from outside. A surplus roof supplies a ' +
+                  'neighbour, the battery covers the evening, and the grid ' +
+                  'makes up the rest.',
+            figure: 'Sharing, and the day running',
+            kinds: null,          // everything
+            pairs: null,          // every flow, peer to peer included
+            hour: null,           // and the table takes its clock back
+            sound: true
+        }
+    ];
+
     const state = {
         api: undefined,        // '' same origin, a URL, or null when unreachable
         stale: false,          // reachable, but too old to have /api/mr/layer
@@ -122,6 +213,7 @@
         hours: 24,
         playing: true,        // whether the table is running its own clock
         sound: false,         // the table's sonification, off until asked for
+        story: -1,            // which step of the introduction, -1 for none
         layer: null,          // the last layer dispatched, for the hourly PV readout
         openGroup: 'members',
         status: 'Looking for the backend…',
@@ -580,11 +672,19 @@
         return isoDate(date.month, date.day);
     }
 
-    /** Community PV output for the hour on the table, from the layer it drew. */
+    /**
+     * Community PV output for the hour on the table, from the layer it drew.
+     *
+     * The layer can also be assembled from a display's summary broadcast, which
+     * carries totals but no nodes - so an absent layer is not the only case to
+     * guard. Reading through to `.features` there threw and took the whole
+     * panel render down with it, before any Apply had been made.
+     */
     function pvNow() {
-        if (!state.layer) return null;
+        const nodes = state.layer && state.layer.nodes;
+        if (!nodes || !nodes.features) return null;
         let total = 0;
-        state.layer.nodes.features.forEach(function (feature) {
+        nodes.features.forEach(function (feature) {
             const series = feature.properties.solar_hourly;
             if (series) total += series[state.hour] || 0;
         });
@@ -707,6 +807,153 @@
             type: 'ecom_filters',
             filters: all ? null : { kinds: state.filters.kinds }
         });
+    }
+
+    // -------------------------------------------------------------- story
+
+    // Once per session. Coming back out of the introduction is a decision, and
+    // the next display ping should not undo it.
+    let storyOffered = false;
+
+    /**
+     * Start at the first step when the layer comes up.
+     *
+     * The introduction is the first thing the room sees, so the table opens on
+     * the buildings rather than on the finished community - the whole point is
+     * to arrive at that, not to begin with it. Exit or Finish leaves it, and it
+     * does not come back until the page does.
+     */
+    function offerStory() {
+        if (storyOffered || state.story >= 0) return;
+        storyOffered = true;
+        storyGo(0);
+    }
+
+    // What the sound was doing before the introduction muted it.
+    let soundBeforeStory = null;
+
+    function storyGo(index) {
+        const leaving = state.story >= 0 && index < 0;
+        const starting = state.story < 0 && index >= 0;
+        if (starting) soundBeforeStory = state.sound;
+        state.story = index;
+
+        if (index < 0) {
+            // Back to whatever the panel's own view filters say, the table's
+            // own clock, and no caption.
+            channel.postMessage({ type: 'ecom_caption', caption: null });
+            pushFilters();
+            if (leaving) {
+                channel.postMessage({ type: 'ecom_release' });
+                // Every step but the last mutes the sound, so quitting at step
+                // three used to leave the table silent with no way to tell why.
+                // Put it back the way it was found.
+                if (soundBeforeStory !== null) {
+                    channel.postMessage({ type: 'ecom_sound',
+                                          on: !!soundBeforeStory });
+                }
+                soundBeforeStory = null;
+            }
+            render();
+            return;
+        }
+
+        const step = STORY[index];
+        channel.postMessage({
+            type: 'ecom_filters',
+            filters: (step.kinds === null && step.pairs === null)
+                ? null
+                : { kinds: step.kinds || NODE_KINDS.map(function (k) { return k.key; }),
+                    pairs: step.pairs }
+        });
+
+        // A held hour for every step but the last, so only one thing is moving
+        // at a time. The last hands the clock back and lets the day run.
+        if (typeof step.hour === 'number') {
+            channel.postMessage({ type: 'ecom_hour', hour: step.hour });
+        } else {
+            channel.postMessage({ type: 'ecom_release' });
+        }
+
+        // Sound arrives with the community, not before it.
+        channel.postMessage({ type: 'ecom_sound', on: !!step.sound });
+
+        channel.postMessage({
+            type: 'ecom_caption',
+            caption: { title: step.title, line: step.line, figure: step.figure,
+                       step: index + 1, of: STORY.length }
+        });
+
+        render();
+    }
+
+    /**
+     * Space or right arrow for the next step, left for back, Escape to leave.
+     *
+     * Bound on the panel document, because that is the window the presenter has
+     * a hand on. Ignored while typing into a field, so renaming a charge point
+     * does not advance the story under you.
+     */
+    function onStoryKey(event) {
+        const tag = (event.target && event.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+        if (event.key === ' ' || event.key === 'ArrowRight') {
+            // Space scrolls a page by default, which on a panel this tall is
+            // the last thing wanted mid-sentence.
+            event.preventDefault();
+            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
+            return;
+        }
+        if (state.story < 0) return;          // the rest only while running
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            storyGo(Math.max(0, state.story - 1));
+        } else if (event.key === 'Escape') {
+            storyGo(-1);
+        }
+    }
+
+    function storyMarkup() {
+        const running = state.story >= 0;
+        const step = running ? STORY[state.story] : null;
+        const last = state.story === STORY.length - 1;
+
+        const dots = STORY.map(function (item, index) {
+            return '<button type="button" class="ecom-ctl-dot' +
+                (index === state.story ? ' is-on' : '') +
+                (index < state.story ? ' is-done' : '') +
+                '" data-story-step="' + index + '" title="' + esc(item.title) +
+                '"></button>';
+        }).join('');
+
+        return '<div class="ecom-ctl-story' + (running ? ' is-running' : '') + '">' +
+            '<div class="ecom-ctl-story-head">' +
+                '<span class="ecom-ctl-story-label" title="Space or right arrow ' +
+                    'for the next step, left arrow to go back, Escape to leave.">' +
+                    (running
+                        ? esc(step.title) + ' &middot; ' + (state.story + 1) +
+                          ' of ' + STORY.length
+                        : 'Introduction') +
+                '</span>' +
+                '<div class="ecom-ctl-dots">' + dots + '</div>' +
+            '</div>' +
+            '<div class="ecom-ctl-story-bar">' +
+                (running
+                    ? '<button type="button" class="ecom-ctl-btn" ' +
+                          'data-action="story-back"' +
+                          (state.story === 0 ? ' disabled' : '') + '>Back</button>' +
+                      '<button type="button" class="ecom-ctl-btn ' +
+                          'ecom-ctl-btn--primary" data-action="story-next">' +
+                          (last ? 'Finish' : 'Next') + '</button>' +
+                      '<button type="button" class="ecom-ctl-btn" ' +
+                          'data-action="story-exit">Exit</button>'
+                    : '<button type="button" class="ecom-ctl-btn ' +
+                          'ecom-ctl-btn--primary" data-action="story-next">' +
+                          'Start the introduction</button>') +
+            '</div>' +
+        '</div>';
     }
 
     // ------------------------------------------------------------ optimizer
@@ -1680,6 +1927,7 @@
                 '</div>' +
                 '<div id="ecom-ctl-status" class="ecom-ctl-status ecom-ctl-status--' +
                     state.statusKind + '">' + esc(state.status) + '</div>' +
+                storyMarkup() +
             '</div>';
 
         if (groupHost) {
@@ -1878,7 +2126,7 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs', 'data-cp-remove'
+        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
         return '[' + name + ']';
@@ -1896,7 +2144,16 @@
             return;
         }
 
+        const jump = el.getAttribute('data-story-step');
+        if (jump !== null) { storyGo(Number(jump)); return; }
+
         const action = el.getAttribute('data-action');
+        if (action === 'story-next') {
+            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
+            return;
+        }
+        if (action === 'story-back') { storyGo(Math.max(0, state.story - 1)); return; }
+        if (action === 'story-exit') { storyGo(-1); return; }
         if (action === 'apply') { applyNow(); return; }
         if (action === 'reset') { resetAll(); return; }
         if (action === 'play') {
@@ -2136,6 +2393,10 @@
             host.addEventListener('change', onChange);
             host.addEventListener('click', onClick);
         });
+
+        // On the document, not on the panel: the keys have to work wherever the
+        // focus happens to be in this window.
+        document.addEventListener('keydown', onStoryKey);
     }
 
     if (document.readyState === 'loading') {
@@ -2157,6 +2418,13 @@
 
         // The layer was already up when the panel opened: it reports its own
         // totals, which is enough for the headline tiles before any Apply.
+        // The layer has just come on at the table.
+        if (data.type === 'animation_state' &&
+            data.animationId === 'ecom-energy-btn' && data.isActive &&
+            state.base) {
+            offerStory();
+        }
+
         if (data.type === 'ecom_summary' && data.summary && !state.layer) {
             const summary = data.summary;
             state.layer = {
@@ -2167,6 +2435,9 @@
                     total_grid_import: summary.demandKwh - summary.localKwh
                 },
                 matched: summary.members,
+                // Empty rather than missing, so anything reading the layer sees
+                // the shape it expects and finds nothing in it.
+                nodes: { features: [] },
                 flows: { features: [] },
                 meta: { period: summary.period, hours: summary.hours }
             };
@@ -2238,6 +2509,10 @@
             state.link.at = Date.now();
             if (typeof data.hours === 'number') state.hours = data.hours;
             paintLink();
+            // The usual order of events: the table is already running and the
+            // panel is opened onto it. The introduction should start here too,
+            // not only when the layer is switched on with the panel watching.
+            if (state.link.active && state.base) offerStory();
         }
 
         // The display confirming it redrew. Reported instead of the dispatch

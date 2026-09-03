@@ -109,6 +109,10 @@
     const CAR_COLOR = palette.charge_point || '#00ff5e';
 
     let active = false;
+    // Hidden when the view has the charge points switched off - during the
+    // introduction the charger has not been shown yet, and a car parked at a
+    // marker nobody can see is a car parked in mid-air.
+    let allowed = true;
     let streets = null;              // the street network, once fetched
     let graph = null;                // and the junction graph built from it
     let streetsPromise = null;
@@ -1015,6 +1019,7 @@
 
     function enable() {
         active = true;
+        allowed = true;
         loadStreets().then(function () {
             if (!active) return;
             ensureLayer();
@@ -1053,8 +1058,24 @@
     channel.addEventListener('message', function (event) {
         const data = event.data || {};
 
+        if (data.type === 'ecom_filters') {
+            const kinds = (data.filters && data.filters.kinds) || null;
+            const shown = !kinds || kinds.indexOf('charge_point') !== -1;
+            if (shown !== allowed) {
+                allowed = shown;
+                if (!allowed) {
+                    vehicles.clear();
+                    draw();
+                } else if (active) {
+                    // Ask where they should be: the day clock may be stopped.
+                    channel.postMessage({ type: 'ecom_vehicles_request' });
+                }
+            }
+            return;
+        }
+
         if (data.type === 'ecom_vehicles') {
-            if (!active) return;
+            if (!active || !allowed) return;
             if (!streets) { pending = data.chargePoints; return; }
             report(data.chargePoints);
             return;

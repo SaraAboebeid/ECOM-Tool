@@ -195,6 +195,72 @@
         });
     }
 
+    // -------------------------------------------------------------- caption
+
+    // A line of text on the table itself.
+    //
+    // The presenter stands at the controller and the audience stands round the
+    // table; without this the table is the only thing being looked at and the
+    // only thing that cannot say what it is showing. One line, bottom left,
+    // out of the way of the campus.
+    let captionBox = null;
+
+    function showCaption(caption) {
+        if (typeof document === 'undefined' || !document.body) return;
+
+        if (!captionBox) {
+            captionBox = document.createElement('div');
+            captionBox.id = 'ecom-caption';
+            captionBox.style.cssText = [
+                'position:fixed', 'left:28px', 'bottom:28px', 'z-index:900',
+                'max-width:520px', 'padding:14px 18px',
+                'background:rgba(8,12,16,0.82)',
+                'border:1px solid rgba(255,255,255,0.10)',
+                'border-left:3px solid ' + (KIND_COLORS.action || '#e8eef6'),
+                'border-radius:10px', 'color:#e8eef6',
+                'font-family:system-ui,-apple-system,Segoe UI,sans-serif',
+                'pointer-events:none',
+                'transition:opacity 320ms ease', 'opacity:0'
+            ].join(';');
+            document.body.appendChild(captionBox);
+        }
+
+        if (!caption) {
+            captionBox.style.opacity = '0';
+            return;
+        }
+
+        const dots = [];
+        for (let i = 1; i <= (caption.of || 0); i += 1) {
+            dots.push('<span style="display:inline-block;width:' +
+                (i === caption.step ? '18px' : '6px') +
+                ';height:6px;border-radius:3px;margin-right:5px;background:' +
+                (i <= caption.step ? (KIND_COLORS.action || '#e8eef6')
+                                   : 'rgba(255,255,255,0.22)') + '"></span>');
+        }
+
+        captionBox.innerHTML =
+            '<div style="margin-bottom:9px">' + dots.join('') + '</div>' +
+            '<div style="font-size:20px;font-weight:600;letter-spacing:0.01em">' +
+                escapeHtml(caption.title || '') + '</div>' +
+            (caption.line
+                ? '<div style="font-size:14px;opacity:0.72;margin-top:5px;' +
+                  'line-height:1.45">' + escapeHtml(caption.line) + '</div>'
+                : '') +
+            (caption.figure
+                ? '<div style="font-size:15px;margin-top:9px;color:' +
+                  (KIND_COLORS.action || '#e8eef6') + '">' +
+                  escapeHtml(caption.figure) + '</div>'
+                : '');
+        captionBox.style.opacity = '1';
+    }
+
+    function escapeHtml(text) {
+        return String(text).replace(/[&<>"]/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+        });
+    }
+
     // -------------------------------------------------------------- storage
 
     // How full the battery is, hour by hour.
@@ -1119,6 +1185,34 @@
     // unfiltered.
     let viewFilters = null;
 
+    /**
+     * The halos, which a kind filter never used to reach.
+     *
+     * The grid ring, the battery glow and the solar bloom are layers of their
+     * own, each drawn from the nodes source with its own per-kind filter, so
+     * filtering the marker layer left them all pulsing away. At step one of the
+     * introduction - buildings only - the grid still rang and the battery still
+     * glowed, which rather gave the game away.
+     */
+    function applyHaloVisibility(kinds) {
+        const shown = function (kind) {
+            return !kinds || !kinds.length || kinds.indexOf(kind) !== -1;
+        };
+        PULSES.forEach(function (pulse) {
+            const on = shown(pulse.kind) ? 'visible' : 'none';
+            [pulse.haloId, pulse.coreId].concat(pulse.ringIds)
+                .forEach(function (id) {
+                    if (map.getLayer(id)) {
+                        map.setLayoutProperty(id, 'visibility', on);
+                    }
+                });
+        });
+        if (map.getLayer(SOLAR_LAYER_ID)) {
+            map.setLayoutProperty(SOLAR_LAYER_ID, 'visibility',
+                                  shown('pv') ? 'visible' : 'none');
+        }
+    }
+
     function applyFilters(filters) {
         viewFilters = filters || null;
         if (!map.getLayer(NODE_LAYER_ID)) return;
@@ -1128,6 +1222,7 @@
             map.setFilter(SOLAR_LAYER_ID, SOLAR_BASE_FILTER);
             map.setFilter(FLOW_LAYER_ID, null);
             map.setFilter(FLOW_GLOW_ID, null);
+            applyHaloVisibility(null);
             return;
         }
 
@@ -1185,8 +1280,29 @@
             flowTests.push(['>=', ['get', 'peak'], minShare * ceiling]);
         }
 
+        // An allow-list of source>target pairs, used to introduce the community
+        // one relationship at a time. Both endpoints being visible is not
+        // enough for that: building-to-building sharing would be on screen from
+        // the first step, which is the punchline of the whole sequence.
+        const pairs = filters.pairs || null;
+        if (pairs) {
+            if (!pairs.length) {
+                // An empty list means no flows at all - the entities alone.
+                flowTests.push(['==', ['get', 'kind'], '\u0000never']);
+            } else {
+                flowTests.push(['any'].concat(pairs.map(function (pair) {
+                    const ends = String(pair).split('>');
+                    return ['all',
+                        ['==', ['get', 'kind'], ends[0]],
+                        ['==', ['get', 'target_kind'], ends[1]]
+                    ];
+                })));
+            }
+        }
+
         map.setFilter(NODE_LAYER_ID, ['all'].concat(nodeTests));
         map.setFilter(SOLAR_LAYER_ID, ['all'].concat(solarTests));
+        applyHaloVisibility(kinds);
         const flowFilter = flowTests.length ? ['all'].concat(flowTests) : null;
         map.setFilter(FLOW_LAYER_ID, flowFilter);
         map.setFilter(FLOW_GLOW_ID, flowFilter);
@@ -1227,10 +1343,14 @@
         if (!ok) return;
 
         addLayers();
+        // Visibility first, then filters. setLayerVisibility shows every layer
+        // it knows about, halos included, so running it second would undo the
+        // hiding a kind filter had just done - the introduction's first step
+        // would come up with the grid ringing and the battery glowing.
+        setLayerVisibility(true);
         // Filters can be set before the layer is switched on; the layers are
         // built unfiltered, so they are re-applied here rather than lost.
         applyFilters(viewFilters);
-        setLayerVisibility(true);
         isActive = true;
         setHour(currentHour);
 
@@ -1256,6 +1376,7 @@
     }
 
     function deactivate() {
+        showCaption(null);
         setLayerVisibility(false);
         isActive = false;
         syncButton();
@@ -1393,6 +1514,11 @@
                 reportForSound(currentHour,
                                storageCurve ? (storageCurve[currentHour] || 0) : 0);
             }
+            return;
+        }
+
+        if (data.type === 'ecom_caption') {
+            showCaption(data.caption || null);
             return;
         }
 
