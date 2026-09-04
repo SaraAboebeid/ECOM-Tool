@@ -100,6 +100,12 @@
     // is the reference point - total dependency is what makes self-sufficiency
     // mean anything two steps later.
     //
+    // Nothing is connected to anything until the last step. The entities are
+    // introduced as objects on a campus - a building, a roof, a substation, a
+    // store, a charger - and only then does energy start moving between them.
+    // That is what makes the last step land: the community is not another
+    // object to add, it is the lines appearing between the ones already there.
+    //
     // One new entity per step and nothing is ever taken away, so the picture
     // accumulates instead of being replaced. The encodings arrive in order of
     // how hard they grab attention - colour, then lines, then a moving level,
@@ -133,22 +139,22 @@
         {
             key: 'grid',
             title: 'The grid',
-            line: 'Today every building buys separately from the grid. These ' +
-                  'are the lines that cost money and carry carbon.',
-            figure: 'The baseline: one connection each',
+            line: 'The connection to everything outside the campus: a ' +
+                  'substation on Aschebergsgatan. Today every building buys ' +
+                  'from it on its own account.',
+            figure: 'Where the electricity comes from today',
             kinds: ['building', 'pv', 'grid'],
-            pairs: ['grid>building'],
+            pairs: [],
             hour: 12
         },
         {
             key: 'battery',
             title: 'The battery',
-            line: 'A community store. It fills when there is more sun than ' +
-                  'demand and empties into the campus after dark.',
+            line: 'A community store, in the AWL building. It fills when there ' +
+                  'is more sun than demand and empties again after dark.',
             figure: 'Shifting energy through the day',
             kinds: ['building', 'pv', 'grid', 'battery'],
-            pairs: ['grid>building', 'battery>building', 'building>battery',
-                    'pv>battery', 'grid>battery'],
+            pairs: [],
             hour: 19
         },
         {
@@ -158,20 +164,17 @@
                   'It arrives in the evening and leaves in the morning.',
             figure: 'A new load, on a schedule',
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: ['grid>building', 'battery>building', 'building>battery',
-                    'pv>battery', 'grid>battery',
-                    'grid>charge_point', 'battery>charge_point',
-                    'building>charge_point', 'pv>charge_point'],
+            pairs: [],
             hour: 20
         },
         {
             key: 'community',
             title: 'The energy community',
-            line: 'The same buildings, now trading with each other before ' +
-                  'anyone buys from outside. A surplus roof supplies a ' +
-                  'neighbour, the battery covers the evening, and the grid ' +
-                  'makes up the rest.',
-            figure: 'Sharing, and the day running',
+            line: 'Now they are connected. A surplus roof supplies a ' +
+                  'neighbour before anyone buys from outside, the battery ' +
+                  'covers the evening, the car charges overnight, and the ' +
+                  'grid makes up whatever is left.',
+            figure: 'Every line on the table at once',
             kinds: null,          // everything
             pairs: null,          // every flow, peer to peer included
             hour: null,           // and the table takes its clock back
@@ -859,6 +862,11 @@
         }
 
         const step = STORY[index];
+
+        // First, because everything below describes a layer that has to be on.
+        // Harmless when it already is.
+        channel.postMessage({ type: 'ecom_activate' });
+
         channel.postMessage({
             type: 'ecom_filters',
             filters: (step.kinds === null && step.pairs === null)

@@ -182,6 +182,7 @@
         });
 
         buildStorageCurve();
+        buildChargeCurves();
 
         // The scale every line width and the "hide small flows" filter are
         // measured against. Derived here rather than on the first setFlowHour,
@@ -204,8 +205,23 @@
     // only thing that cannot say what it is showing. One line, bottom left,
     // out of the way of the campus.
     let captionBox = null;
+    // Held when one arrives before the layer is up. Switching the layer on has
+    // to load and parse the export first, and the introduction sends its first
+    // caption in the same breath as the request to switch on - so the caption
+    // for step one would arrive a moment too early and simply be dropped.
+    let heldCaption = null;
 
     function showCaption(caption) {
+        if (!isActive) {
+            heldCaption = caption;
+            if (captionBox) captionBox.style.opacity = '0';
+            return;
+        }
+        heldCaption = null;
+        paintCaption(caption);
+    }
+
+    function paintCaption(caption) {
         if (typeof document === 'undefined' || !document.body) return;
 
         if (!captionBox) {
@@ -272,6 +288,74 @@
     // it never had. That is a floor rather than a reading, so a battery that
     // starts fuller than it ever needs looks emptier here than it is.
     let storageCurve = null;
+
+    // How much of tonight's charge the car has taken, hour by hour.
+    //
+    // Not the charging rate: a rate is a flow and the flows are already drawn.
+    // This is the level in the car, which is what a filling icon means - it
+    // climbs while energy is arriving, holds when the charger stops, and drops
+    // to nothing when the car drives away.
+    //
+    // Measured against the stretch the car is plugged in for rather than
+    // against its battery capacity, because the export carries what was
+    // delivered and not the state of charge the car arrived with. So a full
+    // icon means "tonight's charging is done", not "the battery is full".
+    let chargeCurves = {};
+
+    function buildChargeCurves() {
+        chargeCurves = {};
+        if (!nodeData || !flowData) return;
+
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            if (props.kind !== 'charge_point') return;
+            const schedule = props.plugged_hourly || [];
+            const n = schedule.length;
+            if (!n) return;
+
+            // Everything arriving at this charger, whoever sent it.
+            const inflow = [];
+            for (let h = 0; h < n; h += 1) inflow.push(0);
+            flowData.features.forEach(function (flow) {
+                if (flow.properties.target !== props.id) return;
+                const series = flow.properties.flow_hourly || [];
+                for (let h = 0; h < n; h += 1) inflow[h] += series[h] || 0;
+            });
+
+            const curve = [];
+            for (let h = 0; h < n; h += 1) curve.push(0);
+
+            // The plugged-in stretches, wrapping past midnight: the table loops
+            // a single day and the car's night runs through the join.
+            const done = [];
+            for (let h = 0; h < n; h += 1) done.push(false);
+            const always = schedule.every(function (v) { return !!v; });
+
+            for (let i = 0; i < n; i += 1) {
+                if (!schedule[i] || done[i]) continue;
+                // Only start at the beginning of a stretch, unless the car
+                // never leaves, in which case any hour will do.
+                if (!always && schedule[(i - 1 + n) % n]) continue;
+
+                const run = [];
+                let j = i;
+                while (schedule[j] && !done[j] && run.length < n) {
+                    done[j] = true;
+                    run.push(j);
+                    j = (j + 1) % n;
+                }
+                let total = 0;
+                run.forEach(function (h) { total += inflow[h]; });
+                let taken = 0;
+                run.forEach(function (h) {
+                    taken += inflow[h];
+                    curve[h] = total > 0 ? taken / total : 0;
+                });
+            }
+
+            chargeCurves[props.id] = curve;
+        });
+    }
 
     function buildStorageCurve() {
         storageCurve = null;
@@ -524,13 +608,27 @@
     // nearest tenth. Registered once, at activation.
     const FILL_STEPS = 10;
 
-    function makeBatteryIcon(level) {
+    // The three that read as a level rather than a state.
+    //
+    // Each fills for a different reason, and the reason is the honest part:
+    //
+    //   battery       its state of charge, integrated from what goes in and out
+    //   grid          how hard the campus is drawing on it, against its own
+    //                 busiest hour - a gauge, not a store
+    //   charge point  how much of tonight's charge has been delivered to the
+    //                 car, emptying when the car drives away
+    //
+    // Same vessel for all three so the eye reads them together, and each keeps
+    // its own colour and glyph so they are still telling different stories.
+    const FILLED_KINDS = ['battery', 'grid', 'charge_point'];
+
+    function makeFillIcon(kind, level) {
         const size = ICON_SIZE * ICON_SCALE;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
-        const colour = KIND_COLORS.battery;
+        const colour = KIND_COLORS[kind];
 
         const r = 7 * ICON_SCALE;
         const pad = 1.5 * ICON_SCALE;
@@ -546,8 +644,8 @@
             ctx.closePath();
         };
 
-        // An empty vessel: outline only, so an empty battery still reads as a
-        // battery rather than disappearing.
+        // An empty vessel: outline only, so an empty one still reads as the
+        // thing it is rather than disappearing.
         shell();
         ctx.fillStyle = 'rgba(10, 20, 24, 0.72)';
         ctx.fill();
@@ -577,20 +675,22 @@
         const inset = 4 * ICON_SCALE;
         ctx.translate(inset, inset);
         ctx.scale((size - inset * 2) / 24, (size - inset * 2) / 24);
-        ctx.stroke(new Path2D(GLYPHS.battery));
+        ctx.stroke(new Path2D(GLYPHS[kind]));
         ctx.restore();
 
         return ctx.getImageData(0, 0, size, size);
     }
 
     function registerIcons() {
-        for (let step = 0; step <= FILL_STEPS; step += 1) {
-            const name = 'ecom-battery-fill-' + step;
-            if (!map.hasImage(name)) {
-                map.addImage(name, makeBatteryIcon(step / FILL_STEPS),
-                             { pixelRatio: ICON_SCALE });
+        FILLED_KINDS.forEach(function (kind) {
+            for (let step = 0; step <= FILL_STEPS; step += 1) {
+                const name = 'ecom-' + kind + '-fill-' + step;
+                if (!map.hasImage(name)) {
+                    map.addImage(name, makeFillIcon(kind, step / FILL_STEPS),
+                                 { pixelRatio: ICON_SCALE });
+                }
             }
-        }
+        });
 
         Object.keys(GLYPHS).forEach(function (kind) {
             const name = 'ecom-' + kind;
@@ -751,9 +851,9 @@
                     'icon-image': [
                         'case',
                         ['==', ['get', 'has_pv'], 1], 'ecom-building-pv',
-                        // The battery picks the image for its current charge.
-                        ['==', ['get', 'kind'], 'battery'],
-                        ['concat', 'ecom-battery-fill-',
+                        // These pick the image for their current level.
+                        ['in', ['get', 'kind'], ['literal', FILLED_KINDS]],
+                        ['concat', 'ecom-', ['get', 'kind'], '-fill-',
                             ['to-string', ['get', 'fillStep']]],
                         ['concat', 'ecom-', ['get', 'kind']]
                     ],
@@ -916,11 +1016,21 @@
             const peak = series.length ? Math.max.apply(null, series) : 0;
             const now = series[hour] || 0;
             feature.properties.solarNow = peak > 0 ? now / peak : 0;
+            // Which of the eleven images to show. Rounded rather than
+            // floored so a nearly full one does not read as 90%.
             if (feature.properties.kind === 'battery') {
                 feature.properties.storedNow = stored;
-                // Which of the eleven images to show. Rounded rather than
-                // floored so a nearly full battery does not read as 90%.
                 feature.properties.fillStep = Math.round(stored * FILL_STEPS);
+            } else if (feature.properties.kind === 'grid') {
+                // A gauge: how hard the campus is leaning on it this hour,
+                // against its own busiest hour. The same number the halo
+                // pulses by, so the two cannot disagree.
+                feature.properties.fillStep =
+                    Math.round((level.gridNow || 0) * FILL_STEPS);
+            } else if (feature.properties.kind === 'charge_point') {
+                const curve = chargeCurves[feature.properties.id];
+                feature.properties.fillStep =
+                    Math.round(((curve && curve[hour]) || 0) * FILL_STEPS);
             }
 
             PULSES.forEach(function (pulse) {
@@ -1354,6 +1464,9 @@
         isActive = true;
         setHour(currentHour);
 
+        // Whatever arrived while this was loading.
+        if (heldCaption) showCaption(heldCaption);
+
         // Marked active here, not in the .then() after toggle() resolves.
         // street-life.js re-reads this class from three places - a mutation
         // observer, its own click handler and a 2.5 s startup timer - and any
@@ -1517,7 +1630,21 @@
             return;
         }
 
+        // Switched on from the panel. The introduction needs the layer up
+        // before its first step means anything, and the layer is otherwise only
+        // switched on by hand at the table - so a presenter with the panel in
+        // front of them had no way to do it, and the first step captioned a
+        // table that was still showing bare streets.
+        if (data.type === 'ecom_activate') {
+            if (!isActive) activate();
+            return;
+        }
+
         if (data.type === 'ecom_caption') {
+            // Handed over whole. showCaption is what decides whether the layer
+            // is ready for it: replacing it with null here threw away the very
+            // caption it was meant to hold, because switching the layer on
+            // takes a moment and the caption arrives in the same breath.
             showCaption(data.caption || null);
             return;
         }

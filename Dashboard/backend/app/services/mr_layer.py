@@ -269,8 +269,20 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
               or is_community_pv(n)]
     for index, node in enumerate(assets):
         fixed = placements.get(node["id"])
+        host = centroids.get(canonical(node.get("host") or ""))
+        carried = ((node["lon"], node["lat"])
+                   if node.get("lat") is not None and node.get("lon") is not None
+                   else None)
         if fixed is not None:
             lon, lat = fixed
+        elif carried is not None:
+            # A position the node brought with it. Nothing for a caller to
+            # assemble, so nothing for a caller to leave out.
+            lon, lat = carried
+        elif host is not None:
+            # Standing in a building: drawn on that footprint rather than out on
+            # the ring with the assets that have nowhere of their own.
+            lon, lat = host
         else:
             # No position of its own: out on the ring with the rest, so the
             # markers and the lines between them do not collapse onto a point.

@@ -144,6 +144,14 @@ def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity,
                     total_cost=_f(battery.total_cost),
                     total_embodied_co2=_f(battery.total_embodied_co2),
                 )
+                if battery.host:
+                    node["host"] = battery.host
+
+        elif kind == "grid":
+            grid_spec = getattr(spec, "grid", None)
+            if grid_spec is not None and grid_spec.lat is not None:
+                node["lat"] = _f(grid_spec.lat)
+                node["lon"] = _f(grid_spec.lon)
 
         elif kind == "charge_point":
             cp = by_name["charge_point"].get(node_id[len("CP_"):])

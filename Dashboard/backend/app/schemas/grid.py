@@ -151,6 +151,26 @@ class GridSpec(BaseModel):
         description="Operational carbon, kgCO2e/kWh.",
     )
 
+    # Where the substation stands, in WGS84.
+    #
+    # The connection to the outside world is a real building on a real street,
+    # not an abstraction, and a table that draws it out on a ring with the
+    # community's own assets says the opposite. Optional: without it the tie is
+    # placed with the shared assets as before.
+    lat: Optional[Annotated[float, Field(ge=-90, le=90)]] = None
+    lon: Optional[Annotated[float, Field(ge=-180, le=180)]] = None
+
+    @model_validator(mode="after")
+    def _position_is_complete(self) -> "GridSpec":
+        # Half a coordinate places nothing, and quietly falling back to the ring
+        # would hide the typo that caused it.
+        if (self.lat is None) != (self.lon is None):
+            raise ValueError(
+                "the grid needs both lat and lon, or neither; "
+                f"got lat={self.lat!r} lon={self.lon!r}"
+            )
+        return self
+
     analysis_start_hour: Annotated[int, Field(ge=0, le=8759)] = 0
     analysis_end_hour: Annotated[int, Field(ge=0, le=8759)] = 8759
 

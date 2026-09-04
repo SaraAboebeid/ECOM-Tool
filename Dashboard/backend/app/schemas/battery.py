@@ -48,6 +48,22 @@ class BatterySpec(BaseModel):
 
     location: Optional[Coordinates] = None
 
+    # Which building it stands in, by footprint id - "awl", "sb2" and so on.
+    #
+    # A community battery is a cabinet in a plant room, not a thing in a field,
+    # and the table should draw it where it actually is. Named rather than given
+    # as a coordinate pair so it follows the building if the footprint is ever
+    # resurveyed, and so the scenario file says something a reader recognises.
+    #
+    # Any footprint in the export can host one, including buildings that are not
+    # members of the community: a landlord can put a battery in a building whose
+    # meter is not in the scheme.
+    host: Optional[Annotated[str, Field(min_length=1)]] = Field(
+        default=None,
+        description='Footprint id of the building it stands in, e.g. "awl". '
+                    "Placed with the other shared assets when absent.",
+    )
+
     # -------------------------------------------------- derived previews
 
     @property

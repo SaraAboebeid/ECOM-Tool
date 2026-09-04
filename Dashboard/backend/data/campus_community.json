@@ -646,7 +646,8 @@
       "efficiency": 90.0,
       "lifespan": 10.0,
       "degradation": 2.0,
-      "initial_soc_fraction": 0.0926
+      "initial_soc_fraction": 0.0926,
+      "host": "awl"
     }
   ],
   "charge_points": [
@@ -707,7 +708,9 @@
     "location": {
       "x": -402.44,
       "y": 104.92
-    }
+    },
+    "lat": 57.6911,
+    "lon": 11.97315
   },
   "analysis_period": {
     "start_month": 6,

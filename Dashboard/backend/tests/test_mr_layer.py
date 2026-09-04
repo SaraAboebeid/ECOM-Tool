@@ -169,6 +169,117 @@ def test_community_assets_are_placed_at_the_centre(layer):
     assert grid["geometry"]["coordinates"][0] == pytest.approx(anchor_lon, abs=0.001)
 
 
+def _centre_of(ring):
+    """The same average the layer takes, so the two cannot drift apart."""
+    points = ring[0]
+    return (sum(p[0] for p in points) / len(points),
+            sum(p[1] for p in points) / len(points))
+
+
+def _asset(layer, kind):
+    return next(f for f in layer["nodes"]["features"]
+                if f["properties"]["kind"] == kind)
+
+
+def test_a_battery_stands_in_the_building_that_hosts_it(client):
+    """A community battery is a cabinet in a plant room, not a thing in a field.
+
+    'not-a-member' is deliberate: a landlord can put a battery in a building
+    whose meter is not in the scheme, which is the case on the campus - the
+    battery lives in AWL, and AWL has no dispatch data of its own.
+    """
+    spec = definition(batteries=[{"name": "BAT01", "capacity": 500.0,
+                                  "host": "not-a-member"}])
+    layer = client.post("/api/mr/layer", json=spec).json()
+
+    lon, lat = _asset(layer, "battery")["geometry"]["coordinates"]
+    want_lon, want_lat = _centre_of(square(11.980, 57.690))
+    assert (lon, lat) == pytest.approx((want_lon, want_lat))
+
+
+def test_the_lines_move_with_it(client):
+    """Placing the node is not enough if the flows still meet where it was."""
+    spec = definition(batteries=[{"name": "BAT01", "capacity": 500.0,
+                                  "host": "not-a-member"}])
+    layer = client.post("/api/mr/layer", json=spec).json()
+
+    battery = _asset(layer, "battery")
+    at = battery["geometry"]["coordinates"]
+    touching = [f for f in layer["flows"]["features"]
+                if battery["properties"]["id"] in (f["properties"]["source"],
+                                                   f["properties"]["target"])]
+    assert touching, "the battery should be carrying something"
+    for flow in touching:
+        ends = flow["geometry"]["coordinates"]
+        end = (ends[0] if flow["properties"]["source"] == battery["properties"]["id"]
+               else ends[-1])
+        assert end == pytest.approx(at)
+
+
+def test_a_battery_with_no_host_goes_out_with_the_shared_assets(layer):
+    """The default is unchanged: nowhere of its own, so out on the ring."""
+    lon, lat = _asset(layer, "battery")["geometry"]["coordinates"]
+    for ring in (square(11.973, 57.688), square(11.976, 57.689),
+                 square(11.980, 57.690)):
+        assert (lon, lat) != pytest.approx(_centre_of(ring))
+
+
+def test_a_host_that_matches_no_footprint_falls_back(client):
+    """A typo in a scenario file should cost a position, not the whole layer."""
+    spec = definition(batteries=[{"name": "BAT01", "capacity": 500.0,
+                                  "host": "no-such-building"}])
+    response = client.post("/api/mr/layer", json=spec)
+
+    assert response.status_code == 200, response.text
+    battery = _asset(response.json(), "battery")
+    assert battery["geometry"]["coordinates"]
+
+
+SUBSTATION = {"buying_price": {"fixed": 1.2}, "selling_price": {"fixed": 0.6},
+              "carbon_intensity": {"fixed": 45.0},
+              "lat": 57.6915, "lon": 11.9736}
+
+
+def test_the_grid_tie_stands_where_the_substation_does(client):
+    """The connection to the outside world is a building on a street.
+
+    Drawn out on the ring with the community's own assets it says the opposite,
+    and the ring is a layout device rather than a place.
+    """
+    layer = client.post("/api/mr/layer", json=definition(grid=SUBSTATION)).json()
+
+    lon, lat = _asset(layer, "grid")["geometry"]["coordinates"]
+    assert (lat, lon) == pytest.approx((57.6915, 11.9736))
+
+
+def test_the_grid_lines_move_with_it(client):
+    layer = client.post("/api/mr/layer", json=definition(grid=SUBSTATION)).json()
+
+    grid = _asset(layer, "grid")
+    at = grid["geometry"]["coordinates"]
+    feeds = [f for f in layer["flows"]["features"]
+             if f["properties"]["source"] == grid["properties"]["id"]]
+    assert feeds, "the grid should be supplying something"
+    for flow in feeds:
+        assert flow["geometry"]["coordinates"][0] == pytest.approx(at)
+
+
+def test_a_grid_with_no_position_is_placed_as_before(layer):
+    """Unchanged by default: out with the shared assets."""
+    lon, lat = _asset(layer, "grid")["geometry"]["coordinates"]
+    assert (lat, lon) != pytest.approx((57.6915, 11.9736))
+
+
+def test_half_a_coordinate_is_refused(client):
+    """A dropped longitude should be a complaint, not a tie in the wrong place."""
+    half = dict(SUBSTATION)
+    half.pop("lon")
+    response = client.post("/api/mr/layer", json=definition(grid=half))
+
+    assert response.status_code == 422
+    assert "lat and lon" in response.text
+
+
 def test_a_roof_array_lands_on_its_host(layer):
     pv = next(f for f in layer["nodes"]["features"]
               if f["properties"]["kind"] == "pv")
