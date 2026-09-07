@@ -371,6 +371,42 @@
         });
     }
 
+    // ------------------------------------------------------------- change
+
+    /**
+     * A swell as something joins or leaves the community.
+     *
+     * Made from the voices already running rather than a new sound: the rush
+     * comes up and opens, the transformer leans with it, and both fall back.
+     * A chime here would be a fourth thing to listen to and the same mistake
+     * the hourly bell was - this is the room being told to look up, which the
+     * texture it is already hearing can do on its own.
+     *
+     * It is safe to set targets directly: the clock is stopped for the length
+     * of a change, so no hourly reading arrives to overwrite them, and the next
+     * one that does puts everything back where the data says it should be.
+     */
+    function swell() {
+        if (!ctx || !enabled) return;
+        const now = ctx.currentTime;
+
+        // Up over the announce beat, held through the landing, down as the
+        // table comes back: the same 0.4 / 0.8 / 0.6 the picture runs on.
+        flowGain.gain.cancelScheduledValues(now);
+        flowGain.gain.setTargetAtTime(0.045, now, 0.16);
+        flowGain.gain.setTargetAtTime(0.004 + state.gridNow * 0.010, now + 1.2, 0.4);
+
+        filter.frequency.cancelScheduledValues(now);
+        filter.frequency.setTargetAtTime(1500, now, 0.16);
+        filter.frequency.setTargetAtTime(
+            FLOW_HZ_CALM + (1 - state.selfSufficiency) *
+            (FLOW_HZ_STRAINED - FLOW_HZ_CALM), now + 1.2, 0.4);
+
+        buzzGain.gain.cancelScheduledValues(now);
+        buzzGain.gain.setTargetAtTime(0.11, now, 0.16);
+        buzzGain.gain.setTargetAtTime(0.030 + state.gridNow * 0.055, now + 1.2, 0.4);
+    }
+
     // ------------------------------------------------------------ inputs
 
     // The layer reports the hour it just drew, so the sound is of the same
@@ -387,6 +423,11 @@
 
         if (data.type === 'ecom_sound_request') {
             announce();
+            return;
+        }
+
+        if (data.type === 'ecom_change') {
+            swell();
             return;
         }
 
@@ -417,6 +458,8 @@
         isOn: function () { return enabled; },
         // For the harness: what the graph is currently set to.
         reading: function () { return Object.assign({}, state); },
+        // For the harness: mark a change without a channel.
+        swell: swell,
         levels: function () {
             if (!ctx) return null;
             return {

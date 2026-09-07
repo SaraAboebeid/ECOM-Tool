@@ -26,6 +26,7 @@
 
     const SOURCE_ID = 'ecom-buildings-source';
     const FILL_LAYER_ID = 'ecom-buildings-fill';
+    const OUTLINE_LAYER_ID = 'ecom-buildings-outline';
     const SOLAR_LAYER_ID = 'ecom-buildings-solar';
 
     const NODES_SOURCE_ID = 'ecom-nodes-source';
@@ -91,12 +92,24 @@
     // overwriting the other: without this, filtering to "buildings only" would
     // also drop the hasData test and start drawing footprints with no dispatch.
     const FILL_BASE_FILTER = ['==', ['get', 'hasData'], 1];
+
+    // The colour a building sits at when it is drawing nothing. Not black: an
+    // unlit member is still a member, and the table has to show it as one.
+    const DEMAND_COLD = '#2a0b23';
     const SOLAR_BASE_FILTER = ['==', ['get', 'has_pv'], 1];
     const NODE_BASE_FILTER = ['!=', ['get', 'kind'], 'pv'];
 
     const ecomChannel = new BroadcastChannel('map_controller_channel');
 
     let layerData = null;
+    // The busiest single building-hour on the campus. Every footprint is shaded
+    // against this rather than against itself, because the question the table
+    // is answering is which buildings are heavy, not whether each one is having
+    // a busy morning by its own standards.
+    let demandCeiling = 0;
+    // The brightest roof-hour on the campus, so one building at noon is the
+    // full halo and everything else is read against it.
+    let solarCeiling = 0;
     let nodeData = null;
     let flowData = null;
     let isLoaded = false;
@@ -161,15 +174,35 @@
         flowData.features.forEach(function (feature) {
             feature.properties.flowNow = 0;
             feature.properties.share = 0;
+            // Fully drawn unless the introduction is bringing them in one at
+            // a time. Multiplied into the opacity, so a line that has not
+            // arrived yet is simply not painted.
+            feature.properties.revealed = 1;
         });
 
         // Flatten the values the paint expressions need onto each feature.
         // MapLibre exposes nested GeoJSON properties as JSON strings, so an
-        // expression cannot read a field inside `ecom`.
-        // Only hasData is still needed: the footprints are drawn by nobody,
-        // and this source exists purely so a click can find a building.
+        // expression cannot read a field inside `ecom` - demandNow has to be
+        // written flat, hour by hour, for the fill to interpolate on it.
+        demandCeiling = 0;
+        solarCeiling = 0;
         layerData.features.forEach(function (feature) {
-            feature.properties.hasData = feature.properties.ecom ? 1 : 0;
+            const ecom = feature.properties.ecom;
+            feature.properties.hasData = ecom ? 1 : 0;
+            feature.properties.demandNow = 0;
+            feature.properties.solarNow = 0;
+            // The solar halo and the owner filter both read these off the
+            // polygon, and neither can reach inside the nested `ecom` block.
+            feature.properties.has_pv = (ecom && ecom.pv_kw > 0) ? 1 : 0;
+            feature.properties.owner = (ecom && ecom.owner) || '';
+            (ecom && ecom.demand_hourly ? ecom.demand_hourly : []).forEach(
+                function (value) {
+                    if (value > demandCeiling) demandCeiling = value;
+                });
+            (ecom && ecom.solar_hourly ? ecom.solar_hourly : []).forEach(
+                function (value) {
+                    if (value > solarCeiling) solarCeiling = value;
+                });
         });
 
         nodeData.features.forEach(function (feature) {
@@ -194,6 +227,370 @@
             const peak = feature.properties.peak || 0;
             if (peak > flowCeiling) flowCeiling = peak;
         });
+    }
+
+    // --------------------------------------------------------------- change
+    //
+    // Something joining or leaving the community, staged in three beats.
+    //
+    // A change used to simply happen: a second after Apply the table was
+    // different, every line had shifted, and nobody in the room knew where to
+    // look or what had caused it. A redraw with no warning reads as a fault.
+    //
+    //   announce   the rest of the table dims and the caption says what is
+    //              coming. Nothing has changed yet; the room is told where to
+    //              look. This beat also covers the dispatch round trip, so the
+    //              new layer arrives inside the animation rather than after it.
+    //
+    //   land       the marker appears oversized and translucent on its own spot
+    //              and contracts onto it, while a ring travels out across the
+    //              map. The new dispatch lands as the ring passes, so the whole
+    //              reshuffle reads as caused by the thing that just arrived.
+    //
+    //   settle     the table comes back up and the caption says what it did to
+    //              the community, which is what turns "something happened" into
+    //              something worth having watched.
+    //
+    // Removal is the same language backwards: the ring contracts, the marker
+    // grows and fades, and the object is gone.
+    const SCRIM_LAYER_ID = 'ecom-change-scrim';
+    const SCRIM_SOURCE_ID = 'ecom-change-scrim-source';
+
+    // The spotlight left open in the scrim, in metres. It closes from the
+    // wider figure to the tighter one as the marker lands, so the darkness
+    // itself moves inward onto the change rather than the change having to
+    // compete with a flat wash for attention.
+    const HOLE_OPEN_M = 240;
+    const HOLE_CLOSED_M = 95;
+    const CHANGE_SOURCE_ID = 'ecom-change-source';
+    // Three, a beat apart. One ring reads as a circle drawn on the map; three
+    // travelling out behind each other read as something spreading from a
+    // place, which is what the moment is - and on a projection the wave is
+    // legible from across the room where a single stroke is not.
+    const CHANGE_RING_IDS = ['ecom-change-ring', 'ecom-change-ring-b',
+                             'ecom-change-ring-c'];
+    const RING_STAGGER = 0.17;
+    const CHANGE_MARK_ID = 'ecom-change-mark';
+    const CHANGE_GLOW_ID = 'ecom-change-glow';
+
+    const ANNOUNCE_MS = 400;
+    const LAND_MS = 800;
+    const SETTLE_MS = 600;
+
+    // How dark the rest of the table goes, and how much bigger the arriving
+    // marker starts than it ends.
+    const SCRIM_DEPTH = 0.62;
+    const MARK_SCALE = 4;
+
+    let change = null;              // the run in progress
+    let changeFrame = null;
+
+    function ensureChangeLayers() {
+        if (!map.getSource(CHANGE_SOURCE_ID)) {
+            map.addSource(CHANGE_SOURCE_ID, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+        }
+        if (!map.getSource(SCRIM_SOURCE_ID)) {
+            map.addSource(SCRIM_SOURCE_ID, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+        }
+        // Added after every other layer, so the scrim covers the table and the
+        // three change layers sit above the scrim rather than under it.
+        //
+        // A fill rather than a background, because a background cannot have a
+        // hole in it: this is a polygon over the whole world with a circle cut
+        // out of it where the change is, which is the difference between "the
+        // table went dark" and "look here".
+        if (!map.getLayer(SCRIM_LAYER_ID)) {
+            map.addLayer({
+                id: SCRIM_LAYER_ID,
+                type: 'fill',
+                source: SCRIM_SOURCE_ID,
+                paint: { 'fill-color': '#000', 'fill-opacity': 0 }
+            });
+        }
+        CHANGE_RING_IDS.forEach(function (id, index) {
+            if (map.getLayer(id)) return;
+            map.addLayer({
+                id: id,
+                type: 'circle',
+                source: CHANGE_SOURCE_ID,
+                paint: {
+                    'circle-color': 'rgba(0,0,0,0)',
+                    'circle-radius': 0,
+                    'circle-stroke-color': ['get', 'colour'],
+                    // The leading ring is the heaviest; the two behind it are
+                    // its wake rather than three of the same thing.
+                    'circle-stroke-width': 5 - index * 1.4,
+                    'circle-stroke-opacity': 0
+                }
+            });
+        });
+        if (!map.getLayer(CHANGE_GLOW_ID)) {
+            map.addLayer({
+                id: CHANGE_GLOW_ID,
+                type: 'circle',
+                source: CHANGE_SOURCE_ID,
+                paint: {
+                    'circle-color': ['get', 'colour'],
+                    'circle-blur': 0.9,
+                    'circle-radius': 0,
+                    'circle-opacity': 0
+                }
+            });
+        }
+        if (!map.getLayer(CHANGE_MARK_ID)) {
+            map.addLayer({
+                id: CHANGE_MARK_ID,
+                type: 'symbol',
+                source: CHANGE_SOURCE_ID,
+                layout: {
+                    'icon-image': ['get', 'icon'],
+                    'icon-size': 1,
+                    'icon-allow-overlap': true,
+                    'icon-ignore-placement': true
+                },
+                paint: { 'icon-opacity': 0 }
+            });
+        }
+    }
+
+    /**
+     * Everywhere, minus a circle around one point.
+     *
+     * The outer ring runs anticlockwise and the hole clockwise, which is what
+     * GeoJSON asks for and what tells a renderer which part to leave alone.
+     */
+    function scrimWithHole(at, radiusMetres) {
+        const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+        const rings = [world];
+
+        if (at) {
+            const lat = at[1];
+            const dLat = radiusMetres / 110540;
+            const dLon = radiusMetres / (111320 * Math.cos(lat * Math.PI / 180));
+            const hole = [];
+            const steps = 48;
+            for (let i = 0; i <= steps; i += 1) {
+                // Clockwise, so it reads as a hole rather than a second island.
+                const angle = -2 * Math.PI * (i / steps);
+                hole.push([at[0] + Math.cos(angle) * dLon,
+                           lat + Math.sin(angle) * dLat]);
+            }
+            rings.push(hole);
+        }
+
+        return {
+            type: 'FeatureCollection',
+            features: [{ type: 'Feature', properties: {},
+                         geometry: { type: 'Polygon', coordinates: rings } }]
+        };
+    }
+
+    /** A colour mixed most of the way to black, for the scrim. */
+    function darkened(hex, keep) {
+        const value = String(hex).replace('#', '');
+        if (value.length !== 6) return '#000';
+        const channel = function (at) {
+            return Math.round(parseInt(value.substr(at, 2), 16) * keep);
+        };
+        const pair = function (n) {
+            const text = n.toString(16);
+            return text.length === 1 ? '0' + text : text;
+        };
+        return '#' + pair(channel(0)) + pair(channel(2)) + pair(channel(4));
+    }
+
+    function paintChange(scrim, ringRadius, ringOpacity, glow, markSize, markOpacity,
+                         holeMetres) {
+        map.setPaintProperty(SCRIM_LAYER_ID, 'fill-opacity', scrim);
+        if (change && holeMetres !== undefined && holeMetres !== change.hole) {
+            change.hole = holeMetres;
+            const source = map.getSource(SCRIM_SOURCE_ID);
+            if (source) source.setData(scrimWithHole(change.at, holeMetres));
+        }
+        CHANGE_RING_IDS.forEach(function (id, index) {
+            // Each ring is a beat behind the one in front, so the wave has a
+            // direction rather than pulsing as one.
+            const lag = index * RING_STAGGER;
+            const share = Math.max(0, Math.min(1, (ringRadius / 420) - lag));
+            map.setPaintProperty(id, 'circle-radius', share * 420);
+            map.setPaintProperty(id, 'circle-stroke-opacity',
+                                 share > 0 ? ringOpacity * (1 - index * 0.28) : 0);
+        });
+        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-radius', ringRadius * 0.55);
+        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-opacity', glow);
+        map.setLayoutProperty(CHANGE_MARK_ID, 'icon-size', markSize);
+        map.setPaintProperty(CHANGE_MARK_ID, 'icon-opacity', markOpacity);
+    }
+
+    function endChange() {
+        change = null;
+        if (changeFrame !== null) {
+            cancelAnimationFrame(changeFrame);
+            changeFrame = null;
+        }
+        if (map.getLayer(SCRIM_LAYER_ID)) {
+            map.setPaintProperty(SCRIM_LAYER_ID, 'fill-opacity', 0);
+            CHANGE_RING_IDS.forEach(function (id) {
+                if (map.getLayer(id)) {
+                    map.setPaintProperty(id, 'circle-stroke-opacity', 0);
+                }
+            });
+            map.setPaintProperty(CHANGE_GLOW_ID, 'circle-opacity', 0);
+            map.setPaintProperty(CHANGE_MARK_ID, 'icon-opacity', 0);
+        }
+        const scrimSource = map.getSource(SCRIM_SOURCE_ID);
+        if (scrimSource) {
+            scrimSource.setData({ type: 'FeatureCollection', features: [] });
+        }
+        const source = map.getSource(CHANGE_SOURCE_ID);
+        if (source) source.setData({ type: 'FeatureCollection', features: [] });
+        showCaption(null);
+    }
+
+    /** Case, accents and punctuation removed, matching the backend's canonical(). */
+    function foldName(value) {
+        return String(value || '')
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    }
+
+    /** The middle of a footprint, however its rings are nested. */
+    function footprintCentre(feature) {
+        const points = [];
+        const collect = function (part) {
+            if (typeof part[0] === 'number') {
+                points.push(part);
+                return;
+            }
+            part.forEach(collect);
+        };
+        collect(feature.geometry.coordinates);
+        if (!points.length) return null;
+        return [points.reduce(function (sum, p) { return sum + p[0]; }, 0) / points.length,
+                points.reduce(function (sum, p) { return sum + p[1]; }, 0) / points.length];
+    }
+
+    function announceChange(spec) {
+        // A change with no place on the map - a tariff, a different day - still
+        // dims the table and says what is coming. Only the landing is skipped,
+        // because there is nowhere for it to land.
+        if (!isActive || !spec) return;
+        ensureChangeLayers();
+
+        const removing = spec.action === 'remove';
+        const colour = KIND_COLORS[spec.kind] || KIND_COLORS.action || '#e8eef6';
+        const icon = 'ecom-' + spec.kind;
+
+        // A building joining is not in the layer the panel last drew, so it
+        // arrives with a name and no position. Every footprint is here though,
+        // members and non-members alike, so the place is a lookup away.
+        //
+        // Resolved into a local rather than written back onto the message. A
+        // BroadcastChannel hands each listener its own structured clone, so
+        // writing to it changes nothing anyone else can see - which makes it a
+        // quiet way to look like you are sharing state when you are not.
+        let at = spec.at || null;
+        if (!at && spec.name && layerData) {
+            // Folded before comparing, the way the backend matches a dispatch
+            // to a footprint: the panel says "HA" and "Karhus entre", the
+            // footprint is keyed "ha" and "karhus". Comparing them as typed
+            // finds nothing, which is how a building being added ended up with
+            // no landing even once it was being looked for.
+            const want = foldName(spec.name);
+            const found = layerData.features.find(function (feature) {
+                const ecom = feature.properties.ecom;
+                return (ecom && foldName(ecom.name) === want) ||
+                       foldName(feature.properties.id) === want;
+            });
+            if (found) at = footprintCentre(found);
+        }
+
+        // Tinted towards whatever is arriving, so the darkness itself says
+        // which of the community's parts this is about before anything lands.
+        // Kept well down towards black: a saturated wash over the whole table
+        // would be a colour cast, not a scrim.
+        map.setPaintProperty(SCRIM_LAYER_ID, 'fill-color', darkened(colour, 0.22));
+        map.getSource(SCRIM_SOURCE_ID).setData(scrimWithHole(at, HOLE_OPEN_M));
+
+        map.getSource(CHANGE_SOURCE_ID).setData({
+            type: 'FeatureCollection',
+            features: at ? [{
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: at },
+                properties: { colour: colour, icon: icon }
+            }] : []
+        });
+
+        change = {
+            spec: spec,
+            at: at,
+            removing: removing,
+            startedAt: performance.now(),
+            settleLine: null
+        };
+        showCaption({ title: spec.title || 'Changing the community',
+                      line: spec.line || '' });
+        // The clock stands still for the beat: one thing moving at a time.
+        stopClock();
+        stepChange(change.startedAt);
+    }
+
+    function stepChange(now) {
+        if (!change) return;
+        const elapsed = now - change.startedAt;
+        const total = ANNOUNCE_MS + LAND_MS + SETTLE_MS;
+
+        if (elapsed < ANNOUNCE_MS) {
+            // Dimming, nothing else. The room is being told where to look.
+            const t = elapsed / ANNOUNCE_MS;
+            paintChange(SCRIM_DEPTH * t, 0, 0, 0, MARK_SCALE, 0, HOLE_OPEN_M);
+        } else if (elapsed < ANNOUNCE_MS + LAND_MS) {
+            const t = (elapsed - ANNOUNCE_MS) / LAND_MS;
+            const eased = 1 - Math.pow(1 - t, 3);
+            // The ring travels out, or inward for a removal.
+            const ring = change.removing ? (1 - eased) * 420 : eased * 420;
+            const size = change.removing
+                ? 1 + (MARK_SCALE - 1) * eased      // grows away
+                : MARK_SCALE - (MARK_SCALE - 1) * eased;
+            const markOpacity = change.removing ? 1 - eased : 0.25 + 0.75 * eased;
+            // Closing onto the change as the marker lands.
+            const hole = Math.round(
+                HOLE_OPEN_M - (HOLE_OPEN_M - HOLE_CLOSED_M) * eased);
+            paintChange(SCRIM_DEPTH, ring, 0.85 * (1 - t * 0.4),
+                        0.5 * (1 - t), size, markOpacity, hole);
+        } else if (elapsed < total) {
+            const t = (elapsed - ANNOUNCE_MS - LAND_MS) / SETTLE_MS;
+            // Back up to full, the marker handed over to the real layer.
+            paintChange(SCRIM_DEPTH * (1 - t), 0, 0, 0, 1,
+                        change.removing ? 0 : 1 - t, HOLE_CLOSED_M);
+            if (change.settleLine && !change.settleShown) {
+                change.settleShown = true;
+                showCaption({ title: change.spec.title || '',
+                              line: change.spec.line || '',
+                              figure: change.settleLine });
+            }
+        } else {
+            // Leave the outcome up for a moment before handing the table back.
+            paintChange(0, 0, 0, 0, 1, 0);
+            if (change.holdUntil === undefined) {
+                change.holdUntil = now + 2600;
+            }
+            if (now >= change.holdUntil) {
+                endChange();
+                startClock();
+                return;
+            }
+        }
+
+        changeFrame = requestAnimationFrame(stepChange);
     }
 
     // -------------------------------------------------------------- caption
@@ -429,7 +826,42 @@
                 type: 'fill',
                 source: SOURCE_ID,
                 filter: FILL_BASE_FILTER,
-                paint: { 'fill-opacity': 0 }
+                paint: {
+                    // The building itself is the reading now, rather than a pin
+                    // standing on it. Hue and opacity both climb with what the
+                    // building is drawing this hour: a quiet one is a dark
+                    // shape you can still see, a busy one glows.
+                    'fill-color': [
+                        'interpolate', ['linear'], ['get', 'demandNow'],
+                        0, DEMAND_COLD,
+                        1, KIND_COLORS.building
+                    ],
+                    'fill-opacity': [
+                        'interpolate', ['linear'], ['get', 'demandNow'],
+                        0, 0.16,
+                        1, 0.78
+                    ]
+                }
+            });
+        }
+
+        // A thin edge, so a building nobody is using still reads as a building
+        // rather than as a smudge on the map.
+        if (!map.getLayer(OUTLINE_LAYER_ID)) {
+            map.addLayer({
+                id: OUTLINE_LAYER_ID,
+                type: 'line',
+                source: SOURCE_ID,
+                filter: FILL_BASE_FILTER,
+                paint: {
+                    'line-color': KIND_COLORS.building,
+                    'line-width': 0.9,
+                    'line-opacity': [
+                        'interpolate', ['linear'], ['get', 'demandNow'],
+                        0, 0.42,
+                        1, 0.95
+                    ]
+                }
             });
         }
 
@@ -482,7 +914,8 @@
                     // overlapped into one mass and the individual runs stopped
                     // being separable.
                     'line-width': ['+', 1.5, ['*', 11, ['get', 'share']]],
-                    'line-opacity': ['*', 0.16, ['get', 'share']],
+                    'line-opacity': ['*', 0.16, ['get', 'share'],
+                                     ['get', 'revealed']],
                     'line-blur': 4
                 }
             });
@@ -499,7 +932,8 @@
                     'line-width': ['+', 0.8, ['*', 6.5, ['get', 'share']]],
                     // Just short of full, so two crossing lines still read as
                     // two rather than as a join.
-                    'line-opacity': ['*', 0.82, ['get', 'share']]
+                    'line-opacity': ['*', 0.82, ['get', 'share'],
+                                     ['get', 'revealed']]
                 }
             });
         }
@@ -824,16 +1258,23 @@
         // draws one circle per vertex, which is what produced the ring of
         // yellow blobs around each roof.
         if (!map.getLayer(SOLAR_LAYER_ID)) {
+            // A halo of the building's own outline rather than a blob at its
+            // centre. The roof is what is generating, so the shape of the roof
+            // is what should light up - and a circle sitting on the demand fill
+            // was two marks competing for the same building.
             map.addLayer({
                 id: SOLAR_LAYER_ID,
-                type: 'circle',
-                source: NODES_SOURCE_ID,
+                type: 'line',
+                source: SOURCE_ID,
                 filter: SOLAR_BASE_FILTER,
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
-                    'circle-color': KIND_COLORS.pv,
-                    'circle-blur': 0.75,
-                    'circle-radius': ['+', 6, ['*', 22, ['get', 'solarNow']]],
-                    'circle-opacity': ['*', 0.55, ['get', 'solarNow']]
+                    'line-color': KIND_COLORS.pv,
+                    // Blurred and wide: a glow around the footprint, not a
+                    // second outline competing with the pink one.
+                    'line-blur': 3,
+                    'line-width': ['+', 1.5, ['*', 9, ['get', 'solarNow']]],
+                    'line-opacity': ['*', 0.85, ['get', 'solarNow']]
                 }
             });
         }
@@ -869,7 +1310,14 @@
                     'icon-ignore-placement': true,
                     // The label is part of the same symbol so it can never be
                     // placed away from the icon it belongs to.
-                    'text-field': ['get', 'name'],
+                    // Assets are named; buildings are not. Thirty-two labels
+                    // over thirty-two coloured footprints is a page of text
+                    // where the point is the shapes - and the footprints say
+                    // which building they are by being that building.
+                    'text-field': [
+                        'case', ['==', ['get', 'kind'], 'building'], '',
+                        ['get', 'name']
+                    ],
                     'text-font': ['Open Sans Regular'],
                     'text-size': 9.5,
                     'text-offset': [0, 1.5],
@@ -878,6 +1326,14 @@
                     'text-padding': 3
                 },
                 paint: {
+                    // Buildings are drawn as coloured footprints now, so a pin
+                    // would be a second marker for the same thing standing on
+                    // top of it. The symbol stays - it carries the label, and a
+                    // label detached from its building is worse than a pin -
+                    // but for a building its icon is not painted.
+                    'icon-opacity': [
+                        'case', ['==', ['get', 'kind'], 'building'], 0, 1
+                    ],
                     'text-color': LABEL_INK,
                     // A wide dark halo stands in for the dashboard's label
                     // chip; MapLibre has no background box for a text field.
@@ -892,7 +1348,7 @@
     function setLayerVisibility(visible) {
         const value = visible ? 'visible' : 'none';
         [
-            FILL_LAYER_ID, SOLAR_LAYER_ID,
+            FILL_LAYER_ID, OUTLINE_LAYER_ID, SOLAR_LAYER_ID,
             FLOW_GLOW_ID, FLOW_LAYER_ID, NODE_LAYER_ID
         ].concat(PULSE_LAYER_IDS).forEach(function (id) {
             if (map.getLayer(id)) {
@@ -932,9 +1388,15 @@
         if (pulseTimer !== null) return;
         pulseTimer = setInterval(function () {
             if (!map.getLayer(FLOW_LAYER_ID)) return;
-            pulseStep = (pulseStep + 1) % DASH_SEQUENCE.length;
-            map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray',
-                                 DASH_SEQUENCE[pulseStep]);
+            // Held still while the introduction is drawing them: a travelling
+            // dash on a line that has only just been drawn says the energy is
+            // already moving, and the whole point of the step is that it is not
+            // moving yet.
+            if (!flowStill) {
+                pulseStep = (pulseStep + 1) % DASH_SEQUENCE.length;
+                map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray',
+                                     DASH_SEQUENCE[pulseStep]);
+            }
             ringStep = (ringStep + 1) % RING_STEPS;
             paintRings();
         }, 55);
@@ -1041,6 +1503,7 @@
         });
 
         source.setData(nodeData);
+        setFootprintHour(hour);
         setFlowHour(hour);
         reportForSound(hour, stored);
         reportVehicles(hour);
@@ -1127,6 +1590,180 @@
         });
     }
 
+    /**
+     * How hard each building is working this hour, 0 to 1.
+     *
+     * Square rooted, like the flow widths: the campus runs from 14 kW to
+     * 1,286 kW in a single hour, and on a linear scale everything but the
+     * three biggest buildings would sit at the dark end all day.
+     */
+    function setFootprintHour(hour) {
+        if (!layerData) return;
+        const source = map.getSource(SOURCE_ID);
+        if (!source) return;
+
+        layerData.features.forEach(function (feature) {
+            const ecom = feature.properties.ecom;
+
+            if (uniform) {
+                // Every member alike, at whatever the reveal has reached.
+                feature.properties.demandNow = ecom ? uniformBuildings : 0;
+                feature.properties.solarNow =
+                    feature.properties.has_pv ? uniformSolar : 0;
+                return;
+            }
+
+            const series = (ecom && ecom.demand_hourly) || [];
+            const now = series[hour] || 0;
+            const demand = demandCeiling > 0
+                ? Math.sqrt(now / demandCeiling) : 0;
+
+            const sun = ((ecom && ecom.solar_hourly) || [])[hour] || 0;
+            const solar = solarCeiling > 0
+                ? Math.sqrt(sun / solarCeiling) : 0;
+
+            if (handover > 0) {
+                // Part way out of the introduction: the flat pink every member
+                // shared, dissolving into what each one is actually drawing.
+                const flat = ecom ? 1 : 0;
+                const flatSun = feature.properties.has_pv ? 1 : 0;
+                feature.properties.demandNow =
+                    demand + (flat - demand) * handover;
+                feature.properties.solarNow =
+                    solar + (flatSun - solar) * handover;
+                return;
+            }
+
+            feature.properties.demandNow = demand;
+            feature.properties.solarNow = solar;
+        });
+        source.setData(layerData);
+    }
+
+    // ------------------------------------------------------- uniform reveal
+    //
+    // During the introduction a building is a member of the community, not a
+    // meter reading. Shading them by demand at that point answers a question
+    // nobody has asked yet - and it answers it badly, because one hall dwarfs
+    // the rest and thirty-one others come up almost black, which reads as "most
+    // of these are not really in it".
+    //
+    // So for the entity steps every member is drawn alike, and comes up rather
+    // than appearing: the footprints fade in together to a flat pink, and the
+    // roofs light afterwards the same way. The demand shading returns at the
+    // last step, where the day starts running and the number means something.
+    let uniform = false;
+    let uniformBuildings = 0;
+    let uniformSolar = 0;
+    // How much of the uniform picture is still showing while the introduction
+    // hands the footprints back to their readings. One is the flat pink every
+    // member shares, zero is each building shaded by what it is drawing.
+    let handover = 0;
+    let revealFrame = null;
+    let reveals = [];
+
+    const REVEAL_MS = 1400;
+    const HANDOVER_MS = 1600;
+
+    // The roofs get longer and a gentler curve than the footprints.
+    //
+    // Both were on the same ease-out, which is front-loaded: a quarter of the
+    // way up in the first eighth of a second. The footprints get away with it
+    // because they start as visible dark shapes and the reveal is a shift in
+    // colour - the halo starts from nothing at all, so the same curve reads as
+    // the yellow simply appearing and then settling. Eased in as well as out,
+    // it grows from nothing the way the eye expects light to.
+    const SOLAR_REVEAL_MS = 2000;
+
+    function levelOf(target) {
+        if (target === 'solar') return uniformSolar;
+        if (target === 'handover') return handover;
+        return uniformBuildings;
+    }
+
+    function setLevel(target, value) {
+        if (target === 'solar') uniformSolar = value;
+        else if (target === 'handover') handover = value;
+        else uniformBuildings = value;
+    }
+
+    function startRamp(target, to, duration, ease) {
+        // A second request for the same thing - stepping back and forward -
+        // picks up from where it is rather than flashing to nothing first.
+        reveals = reveals.filter(function (r) { return r.target !== target; });
+        reveals.push({
+            target: target,
+            from: levelOf(target),
+            to: to,
+            duration: duration,
+            ease: ease || 'out',
+            startedAt: performance.now()
+        });
+        if (revealFrame === null) {
+            revealFrame = requestAnimationFrame(stepReveal);
+        }
+    }
+
+    function startReveal(target) {
+        startRamp(target, 1, target === 'solar' ? SOLAR_REVEAL_MS : REVEAL_MS,
+                  target === 'solar' ? 'inOut' : 'out');
+    }
+
+    function stepReveal(now) {
+        revealFrame = null;
+        let running = false;
+
+        reveals.forEach(function (reveal) {
+            const t = Math.min(1, (now - reveal.startedAt) / reveal.duration);
+            // Eased, so they arrive rather than ramp.
+            const eased = reveal.ease === 'inOut'
+                ? (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+                : 1 - Math.pow(1 - t, 3);
+            setLevel(reveal.target,
+                     reveal.from + (reveal.to - reveal.from) * eased);
+            if (t < 1) running = true;
+        });
+        reveals = reveals.filter(function (reveal) {
+            return now - reveal.startedAt < reveal.duration;
+        });
+
+        setFootprintHour(currentHour);
+        if (running) revealFrame = requestAnimationFrame(stepReveal);
+    }
+
+    function setUniform(on, reveal) {
+        const was = uniform;
+        uniform = !!on;
+        if (!uniform) {
+            if (was) {
+                // The last step of the introduction is where the day starts
+                // running and the footprints stop being members and start
+                // being readings. Cutting between the two pictures made the
+                // whole campus change colour in one frame; this dissolves it,
+                // so the buildings that are working hardest come forward out
+                // of the flat pink rather than replacing it.
+                handover = 1;
+                startRamp('handover', 0, HANDOVER_MS);
+            } else {
+                reveals = [];
+                handover = 0;
+            }
+            uniformBuildings = 0;
+            uniformSolar = 0;
+            setFootprintHour(currentHour);
+            return;
+        }
+        if (!was) {
+            // Entering the introduction with nothing shown yet.
+            uniformBuildings = 0;
+            uniformSolar = 0;
+            handover = 1;
+            reveals = reveals.filter(function (r) { return r.target !== 'handover'; });
+        }
+        if (reveal) startReveal(reveal);
+        setFootprintHour(currentHour);
+    }
+
     // Line width is scaled against the largest flow anywhere in the horizon,
     // not against each line's own peak. Per-line normalising would draw a
     // 0.3 kW trickle as wide as a 1,269 kW grid feed, which is exactly the
@@ -1161,6 +1798,99 @@
         });
 
         source.setData(flowData);
+    }
+
+    // ------------------------------------------------------- drawing the lines
+    //
+    // The last step of the introduction draws the connections one at a time and
+    // holds them still, and pressing Finish sets them going. Everything arriving
+    // at once is the moment the picture stops being followable: forty-one lines
+    // appearing together is a web, whereas one after another is a community
+    // being wired up.
+    //
+    // The order is the story rather than the data's own: what the grid supplies
+    // first, then what the battery covers, then the roofs, and peer-to-peer
+    // sharing last - which is the point the whole introduction has been walking
+    // towards.
+    const KIND_ORDER = { grid: 0, battery: 1, pv: 2, building: 3 };
+    const FLOW_REVEAL_MS = 2600;
+    const FLOW_STILL_DASH = [2, 2];
+
+    let flowStill = false;
+    let flowRevealFrame = null;
+    let flowRevealStartedAt = 0;
+
+    function flowOrder() {
+        return flowData.features
+            .map(function (feature, index) { return { feature: feature, index: index }; })
+            .sort(function (a, b) {
+                const kindA = KIND_ORDER[a.feature.properties.kind];
+                const kindB = KIND_ORDER[b.feature.properties.kind];
+                if (kindA !== kindB) return (kindA || 9) - (kindB || 9);
+                // Biggest first within a kind, so the line that matters most
+                // is the one drawn while the room is still watching closely.
+                return (b.feature.properties.peak || 0) -
+                       (a.feature.properties.peak || 0);
+            });
+    }
+
+    function setFlowMode(mode) {
+        if (!flowData) return;
+        const source = map.getSource(FLOWS_SOURCE_ID);
+        if (!source) return;
+
+        if (mode !== 'still') {
+            flowStill = false;
+            if (flowRevealFrame !== null) {
+                cancelAnimationFrame(flowRevealFrame);
+                flowRevealFrame = null;
+            }
+            flowData.features.forEach(function (feature) {
+                feature.properties.revealed = 1;
+            });
+            source.setData(flowData);
+            startPulse();
+            return;
+        }
+
+        // Still: the dashes stop travelling and every line starts undrawn.
+        flowStill = true;
+        if (map.getLayer(FLOW_LAYER_ID)) {
+            map.setPaintProperty(FLOW_LAYER_ID, 'line-dasharray', FLOW_STILL_DASH);
+        }
+        flowData.features.forEach(function (feature) {
+            feature.properties.revealed = 0;
+        });
+        source.setData(flowData);
+
+        flowRevealStartedAt = performance.now();
+        if (flowRevealFrame === null) {
+            flowRevealFrame = requestAnimationFrame(stepFlowReveal);
+        }
+    }
+
+    function stepFlowReveal(now) {
+        flowRevealFrame = null;
+        if (!flowStill || !flowData) return;
+        const source = map.getSource(FLOWS_SOURCE_ID);
+        if (!source) return;
+
+        const order = flowOrder();
+        const each = FLOW_REVEAL_MS / Math.max(1, order.length);
+        const elapsed = now - flowRevealStartedAt;
+        let running = false;
+
+        order.forEach(function (entry, position) {
+            // Each line takes a little longer than its slot, so two are always
+            // arriving at once and the sequence reads as a wave rather than a
+            // metronome.
+            const t = Math.max(0, Math.min(1, (elapsed - position * each) / (each * 2.5)));
+            entry.feature.properties.revealed = t * t * (3 - 2 * t);
+            if (t < 1) running = true;
+        });
+        source.setData(flowData);
+
+        if (running) flowRevealFrame = requestAnimationFrame(stepFlowReveal);
     }
 
     // Day clock.
@@ -1489,6 +2219,9 @@
     }
 
     function deactivate() {
+        setFlowMode('running');
+        setUniform(false, null);
+        endChange();
         showCaption(null);
         setLayerVisibility(false);
         isActive = false;
@@ -1637,6 +2370,37 @@
         // table that was still showing bare streets.
         if (data.type === 'ecom_activate') {
             if (!isActive) activate();
+            return;
+        }
+
+        if (data.type === 'ecom_flows') {
+            setFlowMode(data.mode || 'running');
+            return;
+        }
+
+        if (data.type === 'ecom_uniform') {
+            setUniform(data.on, data.reveal || null);
+            return;
+        }
+
+        if (data.type === 'ecom_change') {
+            announceChange(data.change || null);
+            return;
+        }
+
+        // What the change did, once the dispatch has been run. Arrives while
+        // the animation is still going: the beats keep their own time so a slow
+        // backend cannot stall them, and the outcome is shown when it lands.
+        if (data.type === 'ecom_change_result') {
+            if (change) {
+                change.settleLine = data.line || '';
+                if (data.line) {
+                    showCaption({ title: change.spec.title || '',
+                                  line: change.spec.line || '',
+                                  figure: data.line });
+                    change.settleShown = true;
+                }
+            }
             return;
         }
 

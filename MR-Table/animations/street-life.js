@@ -151,8 +151,12 @@ function loadStreetLifeData() {
       return response.json();
     })
     .then(geojson => {
-      streetLifeData = geojson;
-      parseStreetPaths(geojson);
+      // Resolved through the scene, so a street someone pedestrianised arrives
+      // here already carrying highway: 'pedestrian'. parseStreetPaths sorts
+      // paths into vehicle/pedestrian/bus/cycle on that property alone, so no
+      // code below this line has to know an intervention happened.
+      streetLifeData = window.Scene ? Scene.resolve('streets', geojson) : geojson;
+      parseStreetPaths(streetLifeData);
       
       // Generate static streetlights along paths
       generateStreetlights();
@@ -1629,6 +1633,32 @@ window.addEventListener('resize', () => {
     staticLayerDirty = true;
   }
 });
+
+// Re-read the network when the scene changes. parseStreetPaths rebuilds
+// streetPaths from scratch, and the entities already on the road hold references
+// to the old path objects - so a car halfway down a street that has just been
+// pedestrianised would carry on driving down a path no longer in the list.
+// Clearing them lets startSpawning refill from the new classification, which is
+// the visible half of the effect: cars stop appearing there, pedestrians start.
+if (window.Scene) {
+  Scene.onChange((datasets) => {
+    if (!datasets.includes('streets') || !streetLifeDataLoaded) return;
+
+    const merged = Scene.dataset('streets');
+    if (!merged) return;
+
+    streetLifeData = merged;
+    parseStreetPaths(merged);
+    generateStreetlights();
+
+    vehicles = [];
+    pedestrians = [];
+    emergencyVehicle = null;
+    staticLayerDirty = true;
+
+    console.log('Street Life: network rebuilt from scene');
+  });
+}
 
 // Expose for external control
 window.streetLifeAnimation = {

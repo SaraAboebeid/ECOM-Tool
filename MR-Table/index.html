@@ -213,7 +213,12 @@
     <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
     <!-- GeoTIFF.js for reading DEM files directly in browser -->
     <script src="https://unpkg.com/geotiff@2.1.0/dist-browser/geotiff.js"></script>
+    <!-- Before main.js and every layer: the layers resolve their source data
+         through Scene, so it has to exist by the time they fetch. -->
+    <script src="scene.js"></script>
     <script src="main.js"></script>
+    <!-- After main.js, which is where `map` comes from. -->
+    <script src="animations/scene-overlay.js"></script>
     <script src="animations/grid-animation.js"></script>
     <script src="animations/street-glow-animation.js"></script>
     <script src="animations/isovist.js"></script>

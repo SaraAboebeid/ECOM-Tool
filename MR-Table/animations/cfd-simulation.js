@@ -164,23 +164,29 @@
     return w[k] * density * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u2);
   }
   
+  // Wherever the buildings came from, the scene's edits are merged in on the way
+  // through. A block placed in the authoring view is then an obstacle like any
+  // other and rasterizes down exactly the same path.
+  function setBuildingsFrom(geojson) {
+    const resolved = window.Scene ? Scene.resolve('buildings', geojson) : geojson;
+    buildingPolygons = resolved.features.filter(feature =>
+      feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
+    return buildingPolygons;
+  }
+
   function loadBuildingObstacles() {
     buildingPolygons = [];
-    
+
     // Try to get buildings from map
     if (typeof map !== 'undefined' && map.getSource && map.getSource('usergeo')) {
       const data = map.getSource('usergeo')._data;
       if (data && data.features) {
-        data.features.forEach(feature => {
-          if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-            buildingPolygons.push(feature);
-          }
-        });
+        setBuildingsFrom(data);
       }
     }
-    
+
     console.log(`CFD: Loaded ${buildingPolygons.length} building obstacles`);
-    
+
     if (buildingPolygons.length === 0) {
       // Try to load default buildings
       loadDefaultBuildings();
@@ -188,19 +194,14 @@
       rasterizeBuildings();
     }
   }
-  
+
   async function loadDefaultBuildings() {
     try {
       const response = await fetch('media/building-footprints.geojson');
       if (!response.ok) throw new Error('Building footprints not found');
-      
-      const geojson = await response.json();
-      geojson.features.forEach(feature => {
-        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-          buildingPolygons.push(feature);
-        }
-      });
-      
+
+      setBuildingsFrom(await response.json());
+
       console.log(`CFD: Loaded ${buildingPolygons.length} buildings from default file`);
       rasterizeBuildings();
     } catch (error) {
@@ -304,6 +305,38 @@
     console.log(`CFD: Buildings rasterized to screen-space grid (${holesFilled} interior holes filled)`);
   }
   
+  // Split out from the fetch so a tree belt added to the scene can be turned
+  // into obstacles again without going back to the network.
+  function buildTreeObstacles(geojson) {
+    // Process tree points into circular obstacles
+    treeObstacles = [];
+
+    // Use a seeded random for consistent radii per tree
+    const seededRandom = (seed) => {
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    };
+
+    geojson.features.forEach((feature, idx) => {
+      if (feature.geometry.type === 'Point') {
+        const coords = feature.geometry.coordinates;
+        const height = (feature.properties || {}).height || 10;
+
+        // Calculate radius based on height with random variation
+        const randomVariation = (seededRandom(idx) - 0.5) * 2 * TREE_RADIUS_VARIATION;
+        const radius = TREE_BASE_RADIUS + (height * TREE_HEIGHT_FACTOR) + randomVariation;
+
+        treeObstacles.push({
+          center: coords,
+          radius: Math.max(1, radius), // minimum 1 meter radius
+          properties: feature.properties || {}
+        });
+      }
+    });
+
+    return treeObstacles;
+  }
+
   async function loadTreeObstacles() {
     try {
       const response = await fetch('media/trees.geojson');
@@ -311,42 +344,17 @@
         console.warn('CFD: Trees file not found');
         return;
       }
-      
+
       const geojson = await response.json();
-      
-      // Process tree points into circular obstacles
-      treeObstacles = [];
-      
-      // Use a seeded random for consistent radii per tree
-      const seededRandom = (seed) => {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-      };
-      
-      geojson.features.forEach((feature, idx) => {
-        if (feature.geometry.type === 'Point') {
-          const coords = feature.geometry.coordinates;
-          const height = feature.properties.height || 10;
-          
-          // Calculate radius based on height with random variation
-          const randomVariation = (seededRandom(idx) - 0.5) * 2 * TREE_RADIUS_VARIATION;
-          const radius = TREE_BASE_RADIUS + (height * TREE_HEIGHT_FACTOR) + randomVariation;
-          
-          treeObstacles.push({
-            center: coords,
-            radius: Math.max(1, radius), // minimum 1 meter radius
-            properties: feature.properties
-          });
-        }
-      });
-      
+      buildTreeObstacles(window.Scene ? Scene.resolve('trees', geojson) : geojson);
+
       console.log(`CFD: Loaded ${treeObstacles.length} tree obstacles`);
-      
+
       // Rasterize trees to the grid
       if (INCLUDE_TREES) {
         rasterizeTrees();
       }
-      
+
     } catch (error) {
       console.warn('CFD: Failed to load trees:', error);
     }
@@ -1016,5 +1024,39 @@
         }
     }
   };
-  
+
+  // A block or a tree belt placed in the authoring view arrives here. Both are
+  // re-derived from the merged dataset rather than appended, so an undo removes
+  // them the same way an add put them there.
+  //
+  // The simulation is not reset. Cells that have just become solid still hold
+  // the distributions they had as open air, which bounce-back clears over the
+  // next few dozen steps - a second or so of settling, against a full restart
+  // that would blank the whole field in front of an audience.
+  if (window.Scene) {
+    Scene.onChange((datasets) => {
+      if (!obstacle) return; // Simulation has not been initialised yet
+
+      if (datasets.includes('buildings')) {
+        const merged = Scene.dataset('buildings');
+        if (merged) {
+          buildingPolygons = merged.features.filter(feature =>
+            feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
+          rasterizeBuildings();
+        }
+      }
+
+      if (datasets.includes('trees')) {
+        const merged = Scene.dataset('trees');
+        if (merged) {
+          buildTreeObstacles(merged);
+          // rasterizeTrees paints into the grid without clearing it first, so a
+          // rebuild has to start from an empty tree map or removed trees linger.
+          clearTreeObstacles();
+          if (INCLUDE_TREES) rasterizeTrees();
+        }
+      }
+    });
+  }
+
 })();

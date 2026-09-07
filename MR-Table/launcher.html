@@ -394,6 +394,10 @@
                 <span class="status-dot" id="controller-dot"></span>
                 <span>Controller</span>
             </div>
+            <div class="status-pill" id="backend-pill" title="Checking /api on this port">
+                <span class="status-dot" id="backend-dot"></span>
+                <span id="backend-label">Backend</span>
+            </div>
         </div>
     </header>
 
@@ -829,6 +833,48 @@
             status.textContent = message;
             status.className = type || '';
         }
+
+        // ===========================================
+        // The backend, on this same port
+        // ===========================================
+        //
+        // serve.py forwards /api to the dashboard backend, so everything the
+        // table needs is one origin: the launcher, the two windows, and the
+        // API the controller calls. Nothing here needs to know where the
+        // backend actually listens - that is the server's business - and the
+        // controller finds it the same way, by trying its own origin first.
+        //
+        // The table itself does not need it: the display animates its exported
+        // GeoJSON perfectly well with the backend down. Only the parameter
+        // controls in the panel go quiet, which is what this pill is for -
+        // knowing that before a demonstration rather than during one.
+        async function checkBackend() {
+            const dot = document.getElementById('backend-dot');
+            const pill = document.getElementById('backend-pill');
+            const label = document.getElementById('backend-label');
+            try {
+                const response = await fetch('api/health', { cache: 'no-store' });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const health = await response.json();
+                dot.classList.add('open');
+                label.textContent = 'Backend';
+                pill.title = 'Answering on this port at /api'
+                    + (health.pvgis_cached_orientations !== undefined
+                        ? ' - ' + health.pvgis_cached_orientations
+                          + ' PVGIS orientations cached'
+                        : '');
+            } catch (err) {
+                dot.classList.remove('open');
+                label.textContent = 'Backend down';
+                pill.title = 'Nothing answering at /api. The table still runs on '
+                    + 'its exported layer; the parameter controls will not. '
+                    + 'Start it with: python -m uvicorn app.main:app --reload '
+                    + '--port 8000 (in Dashboard/backend)';
+            }
+        }
+
+        checkBackend();
+        setInterval(checkBackend, 5000);
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {

@@ -1094,3 +1094,19 @@
     opacity: 0.35;
     cursor: default;
 }
+
+/* A control keeping time with the table.
+   The beats are 400 ms announce, 800 ms land, 600 ms settle: the tint comes up
+   with the scrim, holds while the marker lands, and leaves as the table comes
+   back. Anyone looking at the panel and anyone looking at the projection are
+   watching the same event. */
+@keyframes ecom-ctl-flash {
+    0%   { background-color: rgba(232, 238, 246, 0);    box-shadow: 0 0 0 0 rgba(232, 238, 246, 0); }
+    22%  { background-color: rgba(232, 238, 246, 0.22); box-shadow: 0 0 0 3px rgba(232, 238, 246, 0.35); }
+    66%  { background-color: rgba(232, 238, 246, 0.22); box-shadow: 0 0 0 3px rgba(232, 238, 246, 0.35); }
+    100% { background-color: rgba(232, 238, 246, 0);    box-shadow: 0 0 0 0 rgba(232, 238, 246, 0); }
+}
+.ecom-ctl-flash {
+    animation: ecom-ctl-flash 1800ms ease-out 1;
+    border-radius: 6px;
+}

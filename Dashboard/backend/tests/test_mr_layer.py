@@ -291,12 +291,85 @@ def test_a_roof_array_lands_on_its_host(layer):
 
 # ------------------------------------------------------------------ flows
 
-def test_flows_are_elbowed_not_straight(layer):
-    """Straight lines cut diagonally across the campus grid; the viewer bends
-    them, and the table has to bend them the same way."""
+def _square_on(point, size=0.0002):
+    """A little footprint ring centred on a point."""
+    lon, lat = point
+    return [[lon - size, lat - size], [lon + size, lat - size],
+            [lon + size, lat + size], [lon - size, lat + size],
+            [lon - size, lat - size]]
+
+
+def test_a_route_steers_around_a_building_in_the_way():
+    """The obstacle is built from the route it is meant to block.
+
+    Placing it by hand would only prove the router avoids a square somewhere
+    near the line; deriving it from the unobstructed geometry means the test
+    cannot pass by luck.
+    """
+    a, b = (11.9730, 57.6890), (11.9760, 57.6905)
+    plain = mr_layer.elbow(a, b, "A->B")
+
+    # A building sitting on the middle of the bend.
+    midpoint = plain[1]
+    blocker = [_square_on(midpoint)]
+    assert mr_layer._route_hits(plain, blocker) == 1, "the blocker must block"
+
+    routed = mr_layer.elbow(a, b, "A->B", blocker)
+    assert mr_layer._route_hits(routed, blocker) == 0
+    # Still a route between the same two points.
+    assert routed[0] == pytest.approx(list(a))
+    assert routed[-1] == pytest.approx(list(b))
+
+
+def test_a_clear_route_is_left_exactly_as_it_was():
+    """A picture that was already right must not shuffle when routing is on."""
+    a, b = (11.9730, 57.6890), (11.9760, 57.6905)
+    plain = mr_layer.elbow(a, b, "A->B")
+    far_away = [_square_on((11.9900, 57.6990))]
+
+    assert mr_layer.elbow(a, b, "A->B", far_away) == plain
+
+
+def test_the_campus_lines_cross_fewer_buildings_for_being_routed(layer):
+    """The whole layer, measured: routed against the same links unrouted."""
+    rings = mr_layer._footprint_rings(mr_layer.load_footprints())
+
+    before = after = 0
+    for flow in layer["flows"]["features"]:
+        props = flow["properties"]
+        own = {canonical(props["source"]), canonical(props["target"])}
+        obstacles = [ring for key, group in rings.items() if key not in own
+                     for ring in group]
+        drawn = flow["geometry"]["coordinates"]
+        after += mr_layer._route_hits(drawn, obstacles)
+        before += mr_layer._route_hits(
+            mr_layer.elbow(drawn[0], drawn[-1],
+                           f'{props["source"]}->{props["target"]}'),
+            obstacles)
+
+    assert after <= before, "routing must never make the crossings worse"
+
+
+def test_flows_are_never_drawn_straight(layer):
+    """Straight lines cut diagonally across the campus grid.
+
+    This used to assert exactly four points, which was the elbow rather than
+    the claim. Flows now follow the street network where it reaches both ends -
+    a dozen or more points - and fall back to a bent elbow where it does not.
+    What must remain true either way is that no flow is a bare line from one
+    end to the other.
+    """
     assert layer["flows"]["features"]
     for feature in layer["flows"]["features"]:
-        assert len(feature["geometry"]["coordinates"]) == 4
+        points = feature["geometry"]["coordinates"]
+        assert len(points) >= 3, "a flow should bend, not cut across"
+        # And it genuinely departs from the straight line between its ends,
+        # rather than having extra points strung along it.
+        first, last = points[0], points[-1]
+        span = max(abs(last[0] - first[0]), abs(last[1] - first[1]))
+        wandered = max(
+            max(abs(p[0] - first[0]), abs(p[1] - first[1])) for p in points[1:-1])
+        assert wandered > span * 0.05
 
 
 def test_flows_carry_both_owners_and_a_peak(layer):

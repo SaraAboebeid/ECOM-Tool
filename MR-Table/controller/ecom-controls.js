@@ -124,17 +124,30 @@
             figure: 'Members of the energy community',
             kinds: ['building'],
             pairs: [],
-            hour: 12
+            hour: 12,
+            // Every member alike, faded in together. Shading them by demand
+            // here would answer a question nobody has asked yet, and answer it
+            // badly: one hall dwarfs the rest, so thirty-one of the thirty-two
+            // would come up nearly black on the very step that introduces them
+            // as the community.
+            uniform: true,
+            reveal: 'buildings'
         },
         {
             key: 'solar',
             title: 'The roofs',
-            line: 'Eight of them carry solar. Brightest at midday, nothing at ' +
-                  'night - and never enough on its own.',
+            // Eight arrays, but only five roofs: the earlier wording said
+            // eight of the buildings carried solar, which is not what the
+            // scenario holds and is contradicted by the table itself - only
+            // five footprints light up.
+            line: 'Eight arrays on five of the thirty-two roofs. Brightest at ' +
+                  'midday, nothing at night - and never enough on its own.',
             figure: 'Generation, where it is made',
             kinds: ['building', 'pv'],
             pairs: [],
-            hour: 12
+            hour: 12,
+            uniform: true,
+            reveal: 'solar'
         },
         {
             key: 'grid',
@@ -145,7 +158,8 @@
             figure: 'Where the electricity comes from today',
             kinds: ['building', 'pv', 'grid'],
             pairs: [],
-            hour: 12
+            hour: 12,
+            uniform: true
         },
         {
             key: 'battery',
@@ -155,7 +169,8 @@
             figure: 'Shifting energy through the day',
             kinds: ['building', 'pv', 'grid', 'battery'],
             pairs: [],
-            hour: 19
+            hour: 19,
+            uniform: true
         },
         {
             key: 'charging',
@@ -165,7 +180,8 @@
             figure: 'A new load, on a schedule',
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
             pairs: [],
-            hour: 20
+            hour: 20,
+            uniform: true
         },
         {
             key: 'community',
@@ -174,11 +190,22 @@
                   'neighbour before anyone buys from outside, the battery ' +
                   'covers the evening, the car charges overnight, and the ' +
                   'grid makes up whatever is left.',
-            figure: 'Every line on the table at once',
+            figure: 'Press Finish to set it running',
             kinds: null,          // everything
             pairs: null,          // every flow, peer to peer included
-            hour: null,           // and the table takes its clock back
-            sound: true
+            // The hour is still held. This step is the community being wired
+            // up - the connections drawn one at a time and left standing - and
+            // the day only starts when the presenter says so. Forty-one lines
+            // appearing at once and immediately flowing is the moment the
+            // picture stops being followable.
+            hour: 19,
+            flows: 'still',
+            // The footprints hand back to their readings here: at a held hour
+            // the shading is a still reading of that hour, which is a fair
+            // thing to look at while the lines are being drawn.
+            uniform: false,
+            // Sound waits for the table to be running.
+            sound: false
         }
     ];
 
@@ -216,6 +243,7 @@
         hours: 24,
         playing: true,        // whether the table is running its own clock
         sound: false,         // the table's sonification, off until asked for
+        flash: null,          // the control keeping time with a change on the table
         story: -1,            // which step of the introduction, -1 for none
         layer: null,          // the last layer dispatched, for the hourly PV readout
         openGroup: 'members',
@@ -747,11 +775,24 @@
         setBusy('Dispatching…');
         setStatus('Dispatching…', 'busy');
 
+        const spec = buildSpec();
+        // Announced first, and deliberately not awaited: the announce beat is
+        // what the dispatch round trip happens inside, so the new layer lands
+        // during the animation instead of arriving after it as a jump.
+        const changing = describeChange(spec);
+        if (changing) {
+            channel.postMessage({ type: 'ecom_change', change: changing });
+            flashControl(changing);
+        }
+
         try {
-            const layer = await postJson('/api/mr/layer', buildSpec(),
+            const layer = await postJson('/api/mr/layer', spec,
                                          controller.signal);
             if (controller.signal.aborted) return;
             channel.postMessage({ type: 'ecom_layer', layer: layer });
+            if (changing) reportOutcome(layer);
+            lastApplied = clone(spec);
+            lastKpis = layer.kpis;
             // The backend is done; the table is not. Keep waiting.
             awaitDraw();
             state.dirty = false;
@@ -790,6 +831,9 @@
 
     function resetAll() {
         state.working = clone(state.base);
+        // Reset is itself a change, and the next Apply should describe the
+        // difference from what the table is showing - not from the scenario
+        // it happens to be returning to.
         applyPeriod();          // the picker keeps the date; only the model resets
         state.excluded = new Set();
         state.paramValues = {};
@@ -836,8 +880,15 @@
     let soundBeforeStory = null;
 
     function storyGo(index) {
+        const from = state.story;
         const leaving = state.story >= 0 && index < 0;
         const starting = state.story < 0 && index >= 0;
+        // Finishing the introduction is not the same as walking out of it. The
+        // last step ends with a community wired up and standing still, and
+        // Finish is the moment it starts running - so that hands the table over
+        // with the day going and the sound up, where Exit puts back whatever
+        // was there before.
+        const finishing = leaving && from === STORY.length - 1;
         if (starting) soundBeforeStory = state.sound;
         state.story = index;
 
@@ -845,13 +896,18 @@
             // Back to whatever the panel's own view filters say, the table's
             // own clock, and no caption.
             channel.postMessage({ type: 'ecom_caption', caption: null });
+            channel.postMessage({ type: 'ecom_uniform', on: false });
+            channel.postMessage({ type: 'ecom_flows', mode: 'running' });
             pushFilters();
             if (leaving) {
                 channel.postMessage({ type: 'ecom_release' });
-                // Every step but the last mutes the sound, so quitting at step
-                // three used to leave the table silent with no way to tell why.
-                // Put it back the way it was found.
-                if (soundBeforeStory !== null) {
+                // Every step mutes the sound, so quitting at step three used to
+                // leave the table silent with no way to tell why. Finishing
+                // hands over to a running table and brings it up; exiting part
+                // way puts back whatever was there before.
+                if (finishing) {
+                    channel.postMessage({ type: 'ecom_sound', on: true });
+                } else if (soundBeforeStory !== null) {
                     channel.postMessage({ type: 'ecom_sound',
                                           on: !!soundBeforeStory });
                 }
@@ -882,6 +938,17 @@
         } else {
             channel.postMessage({ type: 'ecom_release' });
         }
+
+        channel.postMessage({
+            type: 'ecom_uniform',
+            on: !!step.uniform,
+            reveal: step.reveal || null
+        });
+
+        channel.postMessage({
+            type: 'ecom_flows',
+            mode: step.flows === 'still' ? 'still' : 'running'
+        });
 
         // Sound arrives with the community, not before it.
         channel.postMessage({ type: 'ecom_sound', on: !!step.sound });
@@ -962,6 +1029,304 @@
                           'Start the introduction</button>') +
             '</div>' +
         '</div>';
+    }
+
+    // --------------------------------------------------------------- change
+    //
+    // The community as it was when the table was last drawn, so the next Apply
+    // can say what is different. Only the panel knows this: the backend is
+    // handed a whole community each time and has no idea which part of it the
+    // hand on the slider just moved.
+    // Seeded when the scenario loads, not left empty until the first Apply.
+    // Empty meant the first change anyone made - the one most likely to be
+    // demonstrated - was the one change that went unannounced.
+    let lastApplied = null;
+    let lastKpis = null;
+
+    function memberNames(spec) {
+        return (spec.buildings || []).map(function (b) { return b.name; });
+    }
+
+    function chargerNames(spec) {
+        return (spec.charge_points || []).map(function (cp) { return cp.name; });
+    }
+
+    function firstDifference(before, after) {
+        const gone = before.filter(function (n) { return after.indexOf(n) === -1; });
+        const came = after.filter(function (n) { return before.indexOf(n) === -1; });
+        if (came.length) return { name: came[0], action: 'add' };
+        if (gone.length) return { name: gone[0], action: 'remove' };
+        return null;
+    }
+
+    /** Where the table draws a building, from the layer it last drew. */
+    function buildingAt(name) {
+        const nodes = (state.layer && state.layer.nodes &&
+                       state.layer.nodes.features) || [];
+        const found = nodes.find(function (feature) {
+            return feature.properties.kind === 'building' &&
+                   feature.properties.name === name;
+        });
+        return found ? found.geometry.coordinates : null;
+    }
+
+    /** Where the table draws a shared asset, from the layer it last drew. */
+    function assetAt(kind) {
+        const nodes = (state.layer && state.layer.nodes &&
+                       state.layer.nodes.features) || [];
+        const found = nodes.find(function (feature) {
+            return feature.properties.kind === kind;
+        });
+        return found ? found.geometry.coordinates : null;
+    }
+
+    /** Each roof array by name, with how much panel it carries. */
+    function plantAreas(spec) {
+        const out = {};
+        (spec.pv_plants || []).forEach(function (plant) {
+            out[plant.name] = Math.round((plant.surface_area || 0) *
+                                         (plant.percentage || 100) / 100);
+        });
+        return out;
+    }
+
+    /** The building whose roof a given array sits on. */
+    function hostOfPlant(spec, plantName) {
+        const found = (spec.buildings || []).find(function (building) {
+            return (building.pv_plants || []).indexOf(plantName) !== -1;
+        });
+        return found ? found.name : null;
+    }
+
+    function roofTotal(spec) {
+        return (spec.pv_plants || []).reduce(function (total, plant) {
+            return total + (plant.surface_area || 0) * (plant.percentage || 100) / 100;
+        }, 0);
+    }
+
+    function periodLabel(spec) {
+        const p = spec.analysis_period || {};
+        return [p.start_month, p.start_day, p.start_hour,
+                p.end_month, p.end_day, p.end_hour].join('-');
+    }
+
+    /**
+     * One sentence about what this Apply is about to do, or null.
+     *
+     * One thing at a time on purpose: a change worth announcing is a change
+     * someone made deliberately, and a run of them is better told one after
+     * another than summed into "four things moved".
+     *
+     * Everything that re-dispatches is announced, not only the two kinds that
+     * have a marker to land. A tariff or a date has no place on the map, so it
+     * gets the dimming and the caption without a landing - the room still needs
+     * to know the table is about to change and why, and silence for those was
+     * most of the silence.
+     */
+    function describeChange(spec) {
+        if (!lastApplied) return null;
+        // Nothing to announce when nothing is different. Pressing Apply on an
+        // untouched community, or the panel's own opening dispatch, would
+        // otherwise dim the table and declare a recomputation that changes not
+        // one number on it.
+        if (JSON.stringify(lastApplied) === JSON.stringify(spec)) return null;
+
+        const charger = firstDifference(chargerNames(lastApplied),
+                                        chargerNames(spec));
+        if (charger) {
+            const list = charger.action === 'add' ? spec.charge_points
+                                                  : lastApplied.charge_points;
+            const cp = (list || []).find(function (c) {
+                return c.name === charger.name;
+            });
+            if (cp && cp.lat != null && cp.lon != null) {
+                return {
+                    kind: 'charge_point',
+                    action: charger.action,
+                    title: charger.action === 'add'
+                        ? 'Adding a charge point' : 'Removing a charge point',
+                    line: charger.name + ' · ' + CP_STREET,
+                    at: [cp.lon, cp.lat]
+                };
+            }
+        }
+
+        const member = firstDifference(memberNames(lastApplied),
+                                       memberNames(spec));
+        if (member) {
+            return {
+                kind: 'building',
+                action: member.action,
+                title: member.action === 'add'
+                    ? 'Joining the energy community'
+                    : 'Leaving the energy community',
+                line: member.name,
+                // Named as well as described, because the panel cannot always
+                // place it. A building being removed is on the table and has a
+                // centroid; a building being added is not drawn yet and has
+                // none - which is why adding one used to get the dimming and
+                // the caption but no landing, while removing the same building
+                // got the whole thing. The table knows where every footprint
+                // is, member or not, so it resolves the name itself.
+                name: member.name,
+                at: buildingAt(member.name)
+            };
+        }
+
+        const wasBattery = (lastApplied.batteries || [])[0];
+        const nowBattery = (spec.batteries || [])[0];
+        if (wasBattery && nowBattery &&
+                Math.round(wasBattery.capacity) !== Math.round(nowBattery.capacity)) {
+            const bigger = nowBattery.capacity > wasBattery.capacity;
+            return {
+                kind: 'battery',
+                action: bigger ? 'add' : 'remove',
+                title: bigger ? 'A bigger battery' : 'A smaller battery',
+                line: Math.round(wasBattery.capacity) + ' → ' +
+                      Math.round(nowBattery.capacity) + ' kWh',
+                at: assetAt('battery')
+            };
+        }
+
+        // Roof solar, named by the building it sits on so the table can land
+        // it there. Panels are not community assets standing on their own -
+        // they are a thing that happens to a roof, and the roof is where the
+        // room should be looking.
+        const wasPlants = plantAreas(lastApplied);
+        const nowPlants = plantAreas(spec);
+        const plantNames = Object.keys(nowPlants).concat(Object.keys(wasPlants));
+        for (let i = 0; i < plantNames.length; i += 1) {
+            const plant = plantNames[i];
+            const before = wasPlants[plant];
+            const after = nowPlants[plant];
+            if (before === after) continue;
+
+            const host = hostOfPlant(spec, plant) || hostOfPlant(lastApplied, plant);
+            const growing = (after || 0) > (before || 0);
+            return {
+                kind: 'pv',
+                action: growing ? 'add' : 'remove',
+                title: after === undefined ? 'Taking the panels off a roof'
+                     : before === undefined ? 'Putting panels on a roof'
+                     : growing ? 'More panel on a roof' : 'Less panel on a roof',
+                line: (host ? host + ' · ' : '') +
+                      (before === undefined ? (after + ' m²')
+                       : after === undefined ? ('was ' + before + ' m²')
+                       : (before + ' → ' + after + ' m²')),
+                // Named as well as placed: a roof on a building the table has
+                // not drawn - one outside the community - still has a
+                // footprint the table can find for itself.
+                name: host,
+                at: host ? buildingAt(host) : null
+            };
+        }
+
+        const wasRoof = Math.round(roofTotal(lastApplied));
+        const nowRoof = Math.round(roofTotal(spec));
+        if (wasRoof !== nowRoof) {
+            return {
+                kind: 'pv',
+                action: nowRoof > wasRoof ? 'add' : 'remove',
+                title: nowRoof > wasRoof ? 'More roof solar' : 'Less roof solar',
+                line: wasRoof + ' → ' + nowRoof + ' m² of panel',
+                at: null
+            };
+        }
+
+        if (periodLabel(lastApplied) !== periodLabel(spec)) {
+            return {
+                kind: 'action', action: 'add',
+                title: 'A different day',
+                line: 'Re-running the community over a new period',
+                at: null
+            };
+        }
+
+        // Something else re-dispatched: a tariff, the carbon intensity, the
+        // dispatch mode. No place on the map, but the table is about to change
+        // and the room should not have to guess why.
+        return {
+            kind: 'action', action: 'add',
+            title: 'Recomputing the community',
+            line: 'The parameters changed',
+            at: null
+        };
+    }
+
+    // The beats the table is running, so the panel can keep time with it.
+    const BEAT_MS = 400 + 800 + 600;
+
+    /**
+     * Flash the control that caused the change, while the table dims.
+     *
+     * Two screens, one event. Without this the panel gives no sign that the
+     * thing under your hand is what the room is now looking at - and on a
+     * table with a controller at one end and a projection at the other, that
+     * connection is the whole point of having both.
+     *
+     * Held in state rather than written straight onto the element, because the
+     * panel re-renders while the beat is still running and a class set on a
+     * node that is about to be replaced lasts no time at all.
+     */
+    function flashControl(changing) {
+        state.flash = { kind: changing.kind, name: changing.line, at: Date.now() };
+        paintFlash();
+        setTimeout(function () {
+            state.flash = null;
+            paintFlash();
+        }, BEAT_MS);
+    }
+
+    // The one element currently keeping time, so it can be released without
+    // sweeping the document for whatever was flashed last.
+    let flashed = null;
+
+    function paintFlash() {
+        if (flashed && flashed.classList) {
+            flashed.classList.remove('ecom-ctl-flash');
+        }
+        flashed = null;
+        if (!state.flash) return;
+
+        const target = flashTarget(state.flash);
+        if (target && target.classList) {
+            target.classList.add('ecom-ctl-flash');
+            flashed = target;
+        }
+    }
+
+    function flashTarget(flash) {
+        if (flash.kind === 'charge_point') {
+            // The name is the first half of "CP 2 · Gibraltarvallsvagen".
+            const name = String(flash.name).split(' · ')[0];
+            const button = document.querySelector(
+                '[data-cp-remove="' + name.replace(/"/g, '') + '"]');
+            if (button) return button.parentElement || button;
+        }
+        if (flash.kind === 'building') {
+            // By attribute rather than by reading every label's text: the name
+            // is already on the row, and matching on rendered text breaks the
+            // moment a row shows anything but the bare name.
+            const row = document.querySelector(
+                '[data-member="' + String(flash.name).replace(/"/g, '') + '"]');
+            if (row) return row;
+        }
+        // Everything else - a tariff, a different day, a resized battery - has
+        // no single row of its own. The status line is where the panel already
+        // says what it is doing, so that is what keeps time.
+        return document.getElementById('ecom-ctl-status');
+    }
+
+    function reportOutcome(layer) {
+        const before = lastKpis && lastKpis.self_sufficiency;
+        const after = layer.kpis && layer.kpis.self_sufficiency;
+        if (typeof before === 'number' && typeof after === 'number') {
+            channel.postMessage({
+                type: 'ecom_change_result',
+                line: 'Self-sufficiency ' + before.toFixed(2) + '% → ' +
+                      after.toFixed(2) + '%'
+            });
+        }
     }
 
     // ------------------------------------------------------------ optimizer
@@ -1721,7 +2086,8 @@
         const rows = all.map(function (b) {
             const on = !state.excluded.has(b.name);
             return '' +
-                '<label class="ecom-ctl-member' + (on ? '' : ' is-off') + '">' +
+                '<label class="ecom-ctl-member' + (on ? '' : ' is-off') + '"' +
+                ' data-member="' + esc(b.name) + '">' +
                     '<input type="checkbox" data-member="' + esc(b.name) + '"' +
                         (on ? ' checked' : '') + '>' +
                     '<span class="ecom-ctl-member-name">' + esc(b.name) + '</span>' +
@@ -1951,6 +2317,7 @@
         paintSpan();
         paintSky();
         paintLink();
+        paintFlash();
         renderKpis();
         renderView();
         pingDisplay();
@@ -2343,6 +2710,11 @@
         loadParams();
 
         state.working = clone(state.base);
+        // The community as it stands before anyone has touched anything. The
+        // first edit is measured against this, so the first change made after
+        // opening the panel - the one most likely to be demonstrated - is
+        // announced like any other instead of passing in silence.
+        lastApplied = clone(state.base);
 
         // Seed the picker from the scenario rather than a hardcoded June, so
         // the date shown is the date the table is actually about to dispatch.
