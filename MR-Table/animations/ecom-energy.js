@@ -652,19 +652,34 @@
                                    : 'rgba(255,255,255,0.22)') + '"></span>');
         }
 
-        captionBox.innerHTML =
-            '<div style="margin-bottom:9px">' + dots.join('') + '</div>' +
-            '<div style="font-size:20px;font-weight:600;letter-spacing:0.01em">' +
-                escapeHtml(caption.title || '') + '</div>' +
-            (caption.line
-                ? '<div style="font-size:14px;opacity:0.72;margin-top:5px;' +
-                  'line-height:1.45">' + escapeHtml(caption.line) + '</div>'
-                : '') +
-            (caption.figure
-                ? '<div style="font-size:15px;margin-top:9px;color:' +
-                  (KIND_COLORS.action || '#e8eef6') + '">' +
-                  escapeHtml(caption.figure) + '</div>'
-                : '');
+        // A step of the introduction shows its progress and nothing else.
+        //
+        // The words belong to whoever is presenting. On a projection table the
+        // room is looking at the campus, and a paragraph in the corner is
+        // either unread or read instead of listening - while the presenter is
+        // saying the same thing better. What the table still owes the room is
+        // where it has got to, which is what the dots are for.
+        //
+        // A change to the community is not a step, carries no progress row,
+        // and keeps its text: nobody is narrating those, and "self-sufficiency
+        // 10.77% to 10.76%" is the whole point of showing it.
+        const isStep = typeof caption.step === 'number';
+
+        captionBox.style.padding = isStep ? '12px 16px' : '14px 18px';
+        captionBox.innerHTML = isStep
+            ? '<div>' + dots.join('') + '</div>'
+            : ('<div style="font-size:20px;font-weight:600;' +
+                   'letter-spacing:0.01em">' +
+                   escapeHtml(caption.title || '') + '</div>' +
+               (caption.line
+                   ? '<div style="font-size:14px;opacity:0.72;margin-top:5px;' +
+                     'line-height:1.45">' + escapeHtml(caption.line) + '</div>'
+                   : '') +
+               (caption.figure
+                   ? '<div style="font-size:15px;margin-top:9px;color:' +
+                     (KIND_COLORS.action || '#e8eef6') + '">' +
+                     escapeHtml(caption.figure) + '</div>'
+                   : ''));
         captionBox.style.opacity = '1';
     }
 
