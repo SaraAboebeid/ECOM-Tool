@@ -51,8 +51,15 @@
 Dashboard/backend/cache/
 
 # Editor and OS
+# Personal editor state stays out; how to run this project does not. The Live
+# Server root, its /api proxy and the backend task are facts about the table,
+# not preferences - without them Go Live serves the pages on an origin with no
+# backend behind it, which looks like a broken dashboard rather than a missing
+# setting.
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
 .idea/
 .DS_Store
 Thumbs.db

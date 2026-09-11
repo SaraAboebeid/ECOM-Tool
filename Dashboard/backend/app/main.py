@@ -58,6 +58,10 @@ app = FastAPI(
 # same-origin and needs nothing here, but it is just as often opened straight
 # off :8090 - without that origin listed, the browser blocks the call and the
 # panel can only report that it found no backend.
+# Live Server on :5500 is the third way in, for working on the table rather than
+# showing it. Its proxy forwards /api and makes those calls same-origin as well,
+# so that entry is only a safety net: with the proxy off the panel falls back to
+# calling :8000 outright, and this is what keeps the browser from blocking it.
 # Vite claims 5173 and walks up from there when it is taken - another project
 # left running, or a dev server that did not shut down - so the dashboard can
 # land anywhere in that range. Two named ports meant the dashboard came up on
@@ -67,6 +71,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8090", "http://127.0.0.1:8090",   # MR-Table
+        "http://localhost:5500", "http://127.0.0.1:5500",   # MR-Table via Live Server
     ],
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):51[7-9][0-9]",
     allow_methods=["*"],

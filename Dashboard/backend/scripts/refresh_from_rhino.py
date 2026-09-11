@@ -19,6 +19,10 @@ The order matters, because each step reads the one before:
     3. build_campus_definition.py   -> backend/data/campus_community.json
        The community the dashboard dispatches.
 
+    4. build_table_footprints.py    -> backend/data/table_footprints.geojson
+       The MR table's outlines: Lantmäteriet's buildings under the ids step 2
+       wrote, so a building the model renames or adds reaches the table too.
+
 WHEN THE MODEL MOVES
     export_footprints_geojson.py carries a fitted LOCAL_TO_SWEREF transform,
     because background image.3dm sits in a local coordinate system rather than
@@ -41,6 +45,7 @@ STEPS = [
     ("extract_rhino_geometry.py", "footprint areas, heights, floors"),
     ("export_footprints_geojson.py", "polygons, centroids, roof areas"),
     ("build_campus_definition.py", "community definition"),
+    ("build_table_footprints.py", "MR table outlines"),
 ]
 
 # The campus sits here. A centroid outside this box means the fitted transform

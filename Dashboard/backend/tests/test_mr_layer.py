@@ -130,6 +130,132 @@ def test_a_member_accounts_for_every_hour_it_was_served(layer):
     assert 0.0 <= ecom["self_sufficiency"] <= 100.0
 
 
+# ------------------------------------------------------------- footprints
+
+def _seam(lon0, lon1, lat):
+    """A ring that runs out along a line and straight back: what a join
+    between two parts of a footprint was left behind as. No area, 30 m long."""
+    return [[lon0, lat], [lon1, lat], [lon1, lat + 1e-9], [lon0, lat]]
+
+
+def _drawn(layer_json, footprint_id):
+    return next(f["geometry"] for f in layer_json["buildings"]["features"]
+                if f["properties"]["id"] == footprint_id)
+
+
+def _use_footprints(monkeypatch, *features):
+    text = json.dumps({"type": "FeatureCollection", "features": list(features)})
+    monkeypatch.setattr(mr_layer, "_footprint_text", lambda: text)
+
+
+def test_a_seam_is_not_drawn_as_part_of_the_building(client, monkeypatch):
+    """The table strokes every ring of a footprint, so a seam comes out as a
+    bright line across the roof. A real courtyard is a ring too, and stays."""
+    outer = square(11.973, 57.688)[0]
+    courtyard = square(11.9731, 57.6881, size=0.0001)[0]
+    _use_footprints(
+        monkeypatch,
+        {"type": "Feature", "properties": {"id": "hall-a"},
+         "geometry": {"type": "Polygon", "coordinates": [
+             outer, _seam(11.9730, 11.9735, 57.6883), courtyard]}},
+        {"type": "Feature", "properties": {"id": "idealara"},
+         "geometry": {"type": "Polygon", "coordinates": square(11.976, 57.689)}},
+    )
+    response = client.post("/api/mr/layer", json=definition())
+    assert response.status_code == 200, response.text
+
+    geometry = _drawn(response.json(), "hall-a")
+    assert geometry["coordinates"] == [outer, courtyard]
+
+
+def test_a_sliver_part_goes_with_its_seam(client, monkeypatch):
+    """A part whose outer ring has no width has nothing inside it to keep."""
+    _use_footprints(
+        monkeypatch,
+        {"type": "Feature", "properties": {"id": "hall-a"},
+         "geometry": {"type": "MultiPolygon", "coordinates": [
+             square(11.973, 57.688), [_seam(11.9740, 11.9745, 57.6885)]]}},
+        {"type": "Feature", "properties": {"id": "idealara"},
+         "geometry": {"type": "Polygon", "coordinates": square(11.976, 57.689)}},
+    )
+    response = client.post("/api/mr/layer", json=definition())
+    assert response.status_code == 200, response.text
+
+    geometry = _drawn(response.json(), "hall-a")
+    assert geometry == {"type": "Polygon",
+                        "coordinates": square(11.973, 57.688)}
+
+
+def test_a_footprint_that_is_nothing_but_seams_is_left_alone():
+    """Better a stray line on the table than a building that silently isn't."""
+    geometry = {"type": "Polygon",
+                "coordinates": [_seam(11.9730, 11.9735, 57.6883)]}
+    assert mr_layer._without_seams(geometry) == geometry
+
+
+def test_the_campus_footprints_carry_no_seams():
+    """The real file, not a stub: every ring the table strokes is a shape."""
+    geo = json.loads(mr_layer.FOOTPRINTS.read_text(encoding="utf-8"))
+    for feature in geo["features"]:
+        feature["geometry"] = mr_layer._without_seams(feature["geometry"])
+
+    rings = [ring for f in geo["features"] for ring in mr_layer._rings_of(f)]
+    assert rings
+    assert min(mr_layer._ring_width(r) for r in rings) >= mr_layer.SEAM_WIDTH_M
+
+    # And the courtyards EDIT is built around are still open.
+    edit = next(f for f in geo["features"] if f["properties"]["id"] == "edit")
+    assert len(edit["geometry"]["coordinates"]) == 3     # outer + 2 courtyards
+
+
+def _campus():
+    return json.loads(mr_layer.FOOTPRINTS.read_text(encoding="utf-8"))["features"]
+
+
+def test_the_table_draws_the_mr_studios_outlines():
+    """Lantmäteriet's buildings, as every other layer on the table has them -
+    not the Rhino model's. A building that falls back is one the MR Studio's
+    footprints do not have, and worth knowing about."""
+    fallen_back = [f["properties"]["id"] for f in _campus()
+                   if f["properties"].get("geometry_source") != "Lantmäteriet"]
+    assert fallen_back == []
+
+
+def test_no_campus_building_is_drawn_in_pieces_that_share_a_wall():
+    """Each piece of a footprint is stroked, so two pieces meeting along a wall
+    draw a line across the roof. Pieces are fine; pieces touching are not."""
+    def to_m(point, origin):
+        kx = 111_320.0 * math.cos(math.radians(origin[1]))
+        return ((point[0] - origin[0]) * kx, (point[1] - origin[1]) * 110_540.0)
+
+    def gap(a, b):
+        """Nearest approach of two rings, vertex to edge, in metres."""
+        def point_to_segment(p, s, e):
+            dx, dy = e[0] - s[0], e[1] - s[1]
+            length = dx * dx + dy * dy
+            t = 0 if not length else max(0, min(1, ((p[0] - s[0]) * dx
+                                                    + (p[1] - s[1]) * dy) / length))
+            return math.dist(p, (s[0] + t * dx, s[1] + t * dy))
+        return min(min(point_to_segment(p, s, e) for s, e in zip(b, b[1:])
+                       for p in a),
+                   min(point_to_segment(p, s, e) for s, e in zip(a, a[1:])
+                       for p in b))
+
+    touching = []
+    for feature in _campus():
+        geometry = feature["geometry"]
+        if geometry["type"] != "MultiPolygon":
+            continue
+        origin = geometry["coordinates"][0][0][0]
+        outers = [[to_m(p, origin) for p in part[0]]
+                  for part in geometry["coordinates"]]
+        for i in range(len(outers)):
+            for j in range(i + 1, len(outers)):
+                if gap(outers[i], outers[j]) < 0.2:
+                    touching.append(feature["properties"]["id"])
+    assert touching == []
+
+
 # ------------------------------------------------------------------ nodes
 
 def test_buildings_sit_on_their_footprint_centroid(layer):

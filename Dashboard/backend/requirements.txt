@@ -7,3 +7,6 @@ networkx>=3.2
 
 # dev
 pytest>=8.0
+
+# scripts only - scripts/build_table_footprints.py; the server never imports it
+shapely>=2.0

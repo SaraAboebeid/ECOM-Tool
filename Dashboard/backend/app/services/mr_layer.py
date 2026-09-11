@@ -22,7 +22,12 @@ from functools import lru_cache
 from pathlib import Path
 
 DASHBOARD = Path(__file__).resolve().parents[3]
-FOOTPRINTS = DASHBOARD / "public" / "buildings.geojson"
+# The outlines the table draws: the MR Studio's own buildings (Lantmäteriet),
+# under the dashboard's ids. Not public/buildings.geojson directly - that is the
+# Rhino model, which builds a hall out of pieces, and the table strokes every
+# piece's edge as a line across the roof. scripts/build_table_footprints.py
+# makes this file from both; rerun it when either changes.
+FOOTPRINTS = DASHBOARD / "backend" / "data" / "table_footprints.geojson"
 
 # The same street network the table draws under everything else. Flows follow
 # it because that is where a cable goes: under the road, not through the middle
@@ -438,9 +443,77 @@ def _footprint_text() -> str:
     return FOOTPRINTS.read_text(encoding="utf-8")
 
 
+# Narrower than this and a ring is a seam in the data, not a shape of the
+# building. The footprints were assembled from parts, and where two parts met
+# the join was often left behind as a "hole" that runs out along a wall and
+# straight back: no area, so a fill never shows it, but the table's outline and
+# solar halo stroke every ring, and each one comes out as a bright line through
+# the middle of a roof. 1.5 m is under three pixels at the table's scale. The
+# real courtyards in the set are 3.4 m across and up.
+SEAM_WIDTH_M = 1.5
+
+
+def _ring_width(ring) -> float:
+    """Mean width of a ring in metres: twice its area over its perimeter.
+
+    A square 10 m on a side is 5 m wide by this measure, a ring that doubles
+    back on itself is 0 m wide whatever its length - which is the distinction
+    that matters, and one that area alone cannot draw: a long seam and a small
+    real light-well can have similar areas.
+    """
+    if len(ring) < 4:
+        return 0.0
+    lon0, lat0 = ring[0][0], ring[0][1]
+    kx = 111_320.0 * math.cos(math.radians(lat0))
+    ky = 110_540.0
+    pts = [((lon - lon0) * kx, (lat - lat0) * ky) for lon, lat, *_ in ring]
+    area = abs(sum(x1 * y2 - x2 * y1
+                   for (x1, y1), (x2, y2) in zip(pts, pts[1:]))) / 2
+    perimeter = sum(math.dist(p, q) for p, q in zip(pts, pts[1:]))
+    return 2 * area / perimeter if perimeter else 0.0
+
+
+def _without_seams(geometry: dict) -> dict:
+    """The same footprint with its zero-width rings taken out.
+
+    A seam among the holes is dropped on its own. A seam as the outer ring of
+    a part takes the whole part with it: there is nothing inside a ring with
+    no width for its holes to be holes of. A footprint that would lose every
+    part is left alone rather than made to vanish from the table.
+    """
+    kind = geometry.get("type")
+    if kind == "Polygon":
+        parts = [geometry["coordinates"]]
+    elif kind == "MultiPolygon":
+        parts = geometry["coordinates"]
+    else:
+        return geometry
+
+    kept = []
+    for part in parts:
+        if not part or _ring_width(part[0]) < SEAM_WIDTH_M:
+            continue
+        kept.append([part[0]] + [hole for hole in part[1:]
+                                 if _ring_width(hole) >= SEAM_WIDTH_M])
+    if not kept:
+        return geometry
+    if kind == "Polygon" or len(kept) == 1:
+        return {"type": "Polygon", "coordinates": kept[0]}
+    return {"type": "MultiPolygon", "coordinates": kept}
+
+
 def load_footprints() -> dict:
-    """A fresh copy of the footprints per call - the caller writes into it."""
-    return json.loads(_footprint_text())
+    """A fresh copy of the footprints per call - the caller writes into it.
+
+    Cleaned of seams on the way in, so every consumer sees the same buildings:
+    the drawn layer, the router's obstacles and the centroids things are placed
+    on, which would otherwise be averaged over the seams' vertices too.
+    """
+    geo = json.loads(_footprint_text())
+    for feature in geo.get("features", []):
+        if feature.get("geometry"):
+            feature["geometry"] = _without_seams(feature["geometry"])
+    return geo
 
 
 def _centroids(geo: dict) -> dict:

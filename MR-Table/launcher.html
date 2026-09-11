@@ -498,8 +498,13 @@
                 </select>
             </div>
             <div id="calibrate-preview-container" style="width: 100%; aspect-ratio: 16/9; background: #1a1a1a; border-radius: 8px; margin: 0.75rem 0; overflow: hidden; position: relative;">
-                <canvas id="calibrate-preview" style="width: 100%; height: 100%; object-fit: contain;"></canvas>
-                <div id="calibrate-status" style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: #888; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">No camera</div>
+                <video id="calibrate-video" autoplay muted playsinline style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #1a1a1a;"></video>
+                <canvas id="calibrate-preview" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none;"></canvas>
+                <div id="calibrate-view-toggle" style="position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;">
+                    <button type="button" data-view="camera" onclick="setPreviewView('camera')" style="padding:3px 9px; border:1px solid rgba(255,255,255,0.14); border-radius:5px; font-size:0.72rem; cursor:pointer; font-family:inherit; line-height:1.4;">Camera</button>
+                    <button type="button" data-view="detection" onclick="setPreviewView('detection')" style="padding:3px 9px; border:1px solid rgba(255,255,255,0.14); border-radius:5px; font-size:0.72rem; cursor:pointer; font-family:inherit; line-height:1.4;">Detection</button>
+                </div>
+                <div id="calibrate-status" style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: #888; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; max-width: calc(100% - 16px);">No camera</div>
             </div>
             <div class="secondary-btns" style="grid-template-columns: 1fr 1fr;">
                 <button class="btn-secondary" onclick="startAutoCalibrate()" id="start-calibrate-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: #10b981;">
@@ -512,7 +517,7 @@
                 </button>
             </div>
             <div style="margin-top: 0.75rem;">
-                <a href="calibration/aruco-markers.html" target="_blank" class="btn-secondary" style="text-decoration: none; display: flex;">
+                <a href="calibration/calibration-tile.html" target="_blank" class="btn-secondary" style="text-decoration: none; display: flex;">
                     <span class="material-icons">print</span>
                     Print Markers
                 </a>
@@ -958,6 +963,66 @@
             }
         }
         
+        // What the preview shows. The canvas is the detector's view: the frame
+        // with marker outlines and a status block drawn over it. That is the
+        // right picture while calibrating and the wrong one for aiming a
+        // camera, which is done by watching the picture move - at 15fps
+        // through a marker detector it does not move so much as lurch. So the
+        // stream gets its own element and is what the card shows by default,
+        // and the detector's view is one button away.
+        let previewView = 'camera';
+
+        function setPreviewView(view) {
+            previewView = view;
+            const video = document.getElementById('calibrate-video');
+            const canvas = document.getElementById('calibrate-preview');
+            if (video) video.style.display = view === 'camera' ? 'block' : 'none';
+            if (canvas) canvas.style.display = view === 'camera' ? 'none' : 'block';
+            document.querySelectorAll('#calibrate-view-toggle button')
+                .forEach((btn) => {
+                    const on = btn.dataset.view === view;
+                    btn.style.background = on ? 'rgba(59,130,246,0.85)'
+                                              : 'rgba(0,0,0,0.55)';
+                    btn.style.color = on ? '#fff' : '#9aa4b2';
+                });
+        }
+
+        // A camera that is shuttered, switched off at the keyboard, or held by
+        // another application still opens, still reports a resolution, and
+        // still fills the preview - with black. On screen that is
+        // indistinguishable from a page that has failed, and the status line
+        // underneath it says "Camera ready", which settles the question the
+        // wrong way. So the frame is read, and a dark one is named as dark.
+        let darkSince = null;
+        let frameCount = 0;
+
+        function noteFrameBrightness(ctx, canvas, statusEl) {
+            frameCount += 1;
+            if (frameCount % 15 !== 0) return;      // ~1s apart at 15fps
+            const w = canvas.width, h = canvas.height;
+            if (!w || !h) return;
+            // The middle of the frame only: the detector writes its status
+            // block into the top-left corner, in green, brightly enough to
+            // pass a black frame off as a lit one.
+            const box = ctx.getImageData(
+                Math.round(w * 0.3), Math.round(h * 0.3),
+                Math.max(1, Math.round(w * 0.4)), Math.max(1, Math.round(h * 0.4)));
+            let sum = 0;
+            for (let i = 0; i < box.data.length; i += 4) {
+                sum += box.data[i] + box.data[i + 1] + box.data[i + 2];
+            }
+            const mean = sum / (box.data.length / 4) / 3;
+            const now = performance.now();
+            if (mean > 8) { darkSince = null; return; }
+            if (darkSince === null) { darkSince = now; return; }
+            // Two seconds, so that a hand over the lens is not an error.
+            if (now - darkSince > 2000 && statusEl) {
+                statusEl.textContent = 'Camera open but every frame is black - '
+                    + 'check the privacy shutter, the camera key, or another '
+                    + 'app holding it';
+            }
+        }
+
         async function startCameraPreviewLauncher(deviceId) {
             const statusEl = document.getElementById('calibrate-status');
             const canvas = document.getElementById('calibrate-preview');
@@ -980,15 +1045,38 @@
                     canvas.width = debugCanvas.width;
                     canvas.height = debugCanvas.height;
                     ctx.drawImage(debugCanvas, 0, 0);
+                    noteFrameBrightness(ctx, canvas, statusEl);
                 };
-                
+
                 launcherCalibrator.onStatusUpdate = (msg) => {
                     statusEl.textContent = msg;
                 };
-                
+
                 await launcherCalibrator.startPreview(deviceId);
-                statusEl.textContent = 'Camera ready';
+
+                // The card shows the stream itself rather than a copy of it
+                // drawn frame by frame: the same MediaStream the detector is
+                // reading, so nothing asks the device for a second one - which
+                // some cameras refuse outright and others answer by dropping
+                // the first.
+                const video = document.getElementById('calibrate-video');
+                if (video) {
+                    video.srcObject = launcherCalibrator.stream;
+                    video.muted = true;
+                    try { await video.play(); } catch (err) { /* muted: rare */ }
+                }
+                darkSince = null;
+                setPreviewView(previewView);
+
+                const shape = launcherCalibrator.canvas
+                    ? launcherCalibrator.canvas.width + '\u00d7'
+                      + launcherCalibrator.canvas.height
+                    : '';
+                statusEl.textContent = shape ? 'Camera ready: ' + shape
+                                             : 'Camera ready';
             } catch (err) {
+                const video = document.getElementById('calibrate-video');
+                if (video) video.srcObject = null;
                 statusEl.textContent = 'Error: ' + err.message;
             }
         }
@@ -1006,6 +1094,11 @@
             
             startBtn.disabled = true;
             stopBtn.disabled = false;
+            // Markers being found is the whole of what there is to watch here,
+            // and calibrating restarts the camera - the element's stream ends
+            // with it, so the raw view would go black just as it got
+            // interesting.
+            setPreviewView('detection');
             
             try {
                 await initCalibratorFromLauncher();
@@ -1074,6 +1167,7 @@
         });
         
         // Init camera list
+        setPreviewView('camera');
         populateCameraList();
     </script>
 </body>
