@@ -11,7 +11,7 @@ An interactive mixed-reality urban visualisation platform built for the ACE MR S
 
 ### 🗺️ Main Map View
 
-The default view displays a dark basemap centred on the study area in Gothenburg, Sweden. Several basemap options are available, including OpenStreetMap, Carto Positron/Dark, Esri Satellite, and OpenTopoMap.
+The default view displays a dark basemap centred on the study area in Gothenburg, Sweden. Several basemap options are available, including OpenStreetMap, Carto Positron/Dark, Esri Satellite, and OpenTopoMap, plus a plain black ground with no map at all - one press of the basemap button from the default - for projecting a layer on its own.
 
 ### 🚀 Launcher
 

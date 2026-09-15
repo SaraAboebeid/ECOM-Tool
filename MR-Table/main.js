@@ -131,6 +131,15 @@ const basemaps = {
     ],
     tileSize: 256,
     attribution: '&copy; OpenTopoMap'
+  },
+  // No map at all: a black table for the layers to stand on alone - no
+  // streets, no names, nothing the projector lights that is not the layer's
+  // own. A background layer rather than an empty choice, so the ground is
+  // black whatever the page behind the canvas happens to be painted.
+  black: {
+    id: 'black-source',
+    background: '#000000',
+    attribution: ''
   }
 };
 
@@ -142,6 +151,16 @@ map.on('load', () => {
     if (bm.vector) {
       // Only the one that starts visible; the others load when selected.
       if (key === currentBasemapKey) addVectorBasemap(key, bm);
+      return;
+    }
+    if (bm.background) {
+      // Named like the raster layers, so setBasemap switches it the same way.
+      map.addLayer({
+        id: bm.id + '-layer',
+        type: 'background',
+        paint: { 'background-color': bm.background },
+        layout: { visibility: key === currentBasemapKey ? 'visible' : 'none' }
+      });
       return;
     }
     map.addSource(bm.id, { type: 'raster', tiles: bm.tiles, tileSize: bm.tileSize });
@@ -429,7 +448,9 @@ window.addEventListener('resize', () => {
 });
 
 // Basemap switcher
-const basemapKeys = ['cartoDark', 'cartoPositron', 'osm', 'esri', 'opentopo'];
+// Black second: one press from the default, since it is the one used with the
+// projector rather than for finding your way around.
+const basemapKeys = ['cartoDark', 'black', 'cartoPositron', 'osm', 'esri', 'opentopo'];
 let currentBasemapIndex = 0; // Start with cartoDark
 
 const basemapToggleBtn = document.getElementById('basemap-toggle');
