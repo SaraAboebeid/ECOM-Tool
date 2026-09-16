@@ -96,6 +96,21 @@
     // The colour a building sits at when it is drawing nothing. Not black: an
     // unlit member is still a member, and the table has to show it as one.
     const DEMAND_COLD = '#2a0b23';
+
+    // How much colour a member gets before its demand is counted at all.
+    //
+    // Everything is shaded against the busiest building-hour on the campus, and
+    // that hour belongs to MC2 at 1,286 kW while Vasa 13 draws 0.04. Even under
+    // a square root that put seventeen of the thirty-two members below 0.2 at
+    // noon - a shade indistinguishable from unlit on a projection table, so
+    // half the community looked as though it were not in it. Membership is the
+    // first thing the table has to say; how hard each one is working is the
+    // second. So a member starts here and its demand spends what is left.
+    const MEMBER_FLOOR = 0.35;
+    // Same argument for a roof: five buildings carry PV and the smallest array
+    // would otherwise never be visible against the largest one at noon. Only
+    // while the sun is actually on it - an unlit roof at night is the truth.
+    const SOLAR_FLOOR = 0.3;
     const SOLAR_BASE_FILTER = ['==', ['get', 'has_pv'], 1];
     const NODE_BASE_FILTER = ['!=', ['get', 'kind'], 'pv'];
 
@@ -405,9 +420,16 @@
         return '#' + pair(channel(0)) + pair(channel(2)) + pair(channel(4));
     }
 
+    // MapLibre rejects an opacity outside 0..1 outright - it logs the value and
+    // keeps the old one - so the frame is simply lost. Clamped here rather than
+    // at each caller: this is the one place every one of them goes through.
+    function held(value) {
+        return Math.max(0, Math.min(1, value));
+    }
+
     function paintChange(scrim, ringRadius, ringOpacity, glow, markSize, markOpacity,
                          holeMetres) {
-        map.setPaintProperty(SCRIM_LAYER_ID, 'fill-opacity', scrim);
+        map.setPaintProperty(SCRIM_LAYER_ID, 'fill-opacity', held(scrim));
         if (change && holeMetres !== undefined && holeMetres !== change.hole) {
             change.hole = holeMetres;
             const source = map.getSource(SCRIM_SOURCE_ID);
@@ -545,7 +567,11 @@
 
     function stepChange(now) {
         if (!change) return;
-        const elapsed = now - change.startedAt;
+        // Never negative. requestAnimationFrame reports the time the frame
+        // began, which can be a few milliseconds before the change was started
+        // - the first beat then computed a scrim opacity below zero, which
+        // MapLibre refuses, and the table's first frame of the change was lost.
+        const elapsed = Math.max(0, now - change.startedAt);
         const total = ANNOUNCE_MS + LAND_MS + SETTLE_MS;
 
         if (elapsed < ANNOUNCE_MS) {
@@ -987,6 +1013,10 @@
     }
 
     function makeIcon(kind, withPv) {
+        // The assets have one look, gauge or not: this plain version is what
+        // the change animation lands, and it hands over to the gauge in place.
+        if (ASSET_DRAW[kind]) return makeFillIcon(kind, 1);
+
         const size = ICON_SIZE * ICON_SCALE;
         const canvas = document.createElement('canvas');
         canvas.width = size;
@@ -1071,62 +1101,212 @@
     // its own colour and glyph so they are still telling different stories.
     const FILLED_KINDS = ['battery', 'grid', 'charge_point'];
 
+    // ---- The community's assets, drawn for a projector --------------------
+    //
+    // A projector has one ink, and it is light. The markers these replace were
+    // dark rounded squares with a coloured hairline: on the table the square
+    // was simply absent - black is what a projector shows by not shining - and
+    // what was left was a 1.8px outline and a thin glyph on a 21px marker,
+    // about twelve metres of campus. So every part of these emits:
+    //
+    //   * each has its own silhouette - pylon, cell, bolt-in-a-ring - because
+    //     projected colour washes out and shape is what survives it;
+    //   * the empty part of a gauge is dim, never dark, so an idle asset still
+    //     reads as the thing it is;
+    //   * strokes are thick and pushed toward white, the brightest thing a
+    //     projector can make, keeping just enough hue to say which kind;
+    //   * each carries its own glow, baked in;
+    //   * a thin dark keyline under the light, which costs nothing on black
+    //     and keeps them legible on the light basemaps.
+    //
+    // And roughly twice the size. Each still fills, the way each always has,
+    // but in the shape of what it is: the pylon lights from the ground up with
+    // how hard the campus is drawing on it, the battery fills cell by cell,
+    // the charge point's ring sweeps round as the car charges.
+    const ASSET_BOX = 56;          // CSS px, glow included
+
+    function lighten(hex, amount) {
+        const h = hex.replace('#', '');
+        const mix = [0, 2, 4].map(function (i) {
+            const v = parseInt(h.slice(i, i + 2), 16);
+            return Math.round(v + (255 - v) * amount);
+        });
+        return 'rgb(' + mix.join(',') + ')';
+    }
+
+    function fade(hex, alpha) {
+        const h = hex.replace('#', '');
+        return 'rgba(' + [0, 2, 4].map(function (i) {
+            return parseInt(h.slice(i, i + 2), 16);
+        }).join(',') + ',' + alpha + ')';
+    }
+
+    // Path2D.roundRect is recent; arcTo has been everywhere for a decade.
+    function roundedRect(x, y, w, h, r) {
+        const p = new Path2D();
+        p.moveTo(x + r, y);
+        p.arcTo(x + w, y, x + w, y + h, r);
+        p.arcTo(x + w, y + h, x, y + h, r);
+        p.arcTo(x, y + h, x, y, r);
+        p.arcTo(x, y, x + w, y, r);
+        p.closePath();
+        return p;
+    }
+
+    // Stroke a path three times: a dark keyline, a glow, then the light.
+    function luminousStroke(ctx, path, colour, width) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = width + 2.2;
+        ctx.stroke(path);
+        ctx.shadowColor = colour;
+        ctx.shadowBlur = 7 * ICON_SCALE;
+        ctx.strokeStyle = lighten(colour, 0.35);
+        ctx.lineWidth = width;
+        ctx.stroke(path);
+        ctx.restore();
+    }
+
+    // Fill a region dim, then light the bottom `level` of it.
+    function gauge(ctx, region, colour, level, top, bottom) {
+        ctx.save();
+        ctx.clip(region);
+        ctx.fillStyle = fade(colour, 0.2);
+        ctx.fillRect(0, 0, ASSET_BOX, ASSET_BOX);
+        if (level > 0) {
+            const y = bottom - (bottom - top) * level;
+            ctx.shadowColor = colour;
+            ctx.shadowBlur = 5 * ICON_SCALE;
+            ctx.fillStyle = fade(colour, 0.92);
+            ctx.fillRect(0, y, ASSET_BOX, bottom - y + 1);
+        }
+        ctx.restore();
+    }
+
+    const ASSET_DRAW = {
+        // A lattice pylon: the one shape everybody reads as "the grid".
+        //
+        // Here the whole tower is the gauge, not a fill behind it. Filling
+        // the silhouette was tried first and could not be read: a lattice is
+        // mostly strokes, and bright strokes over a fill looked the same at
+        // nothing as at full. So the pylon stands as a dim ghost, and the
+        // lattice itself lights up from the ground as the campus draws harder.
+        grid: function (ctx, colour, level) {
+            const tower = new Path2D(
+                'M17 48 L24.5 13 L28 8 L31.5 13 L39 48 Z' +
+                'M13 17 H43 V20.5 H13 Z M16 26 H40 V29.5 H16 Z');
+            const frame = new Path2D(
+                // legs and peak
+                'M17 48 L24.5 13 L28 8 L31.5 13 L39 48' +
+                // cross-arms, with insulators hanging off the tips
+                'M13 18.5 H43 M16 27.5 H40' +
+                'M13.5 18.5 V22.5 M42.5 18.5 V22.5 M16.5 27.5 V31 M39.5 27.5 V31');
+            const bracing = new Path2D(
+                'M24.5 13 L31.5 18.5 M31.5 13 L24.5 18.5' +
+                'M23.3 18.5 L32.6 27.5 M32.7 18.5 L23.3 27.5' +
+                'M21.4 27.5 L35.4 38 M34.6 27.5 L20.6 38' +
+                'M20.6 38 L39 48 M35.4 38 L17 48');
+
+            // The ghost: there even when nothing is flowing.
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = fade(colour, 0.1);
+            ctx.fill(tower);
+            [[frame, 2.6], [bracing, 1.4]].forEach(function (part) {
+                ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+                ctx.lineWidth = part[1] + 2.2;
+                ctx.stroke(part[0]);
+                ctx.strokeStyle = fade(colour, 0.4);
+                ctx.lineWidth = part[1];
+                ctx.stroke(part[0]);
+            });
+            ctx.restore();
+
+            // The lit part, from the ground up. The range runs a little past
+            // the peak and the feet so that full is the whole tower, strokes
+            // and all.
+            if (level > 0) {
+                const top = 5, bottom = 51;
+                const edge = bottom - (bottom - top) * level;
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, edge, ASSET_BOX, ASSET_BOX - edge);
+                ctx.clip();
+                gauge(ctx, tower, colour, 1, top, bottom);
+                luminousStroke(ctx, frame, colour, 2.6);
+                luminousStroke(ctx, bracing, colour, 1.4);
+                ctx.restore();
+            }
+        },
+
+        // An upright cell with its terminal: four segments that light from
+        // the bottom, the gauge every phone has taught everybody to read.
+        battery: function (ctx, colour, level) {
+            const segments = 4;
+            const gap = 2;
+            const inner = { x: 21.5, y: 16.5, w: 13, h: 29 };
+            const segH = (inner.h - gap * (segments - 1)) / segments;
+            for (let i = 0; i < segments; i += 1) {
+                const bottom = inner.y + inner.h - i * (segH + gap);
+                const cell = new Path2D();
+                cell.rect(inner.x, bottom - segH, inner.w, segH);
+                const share = Math.max(0, Math.min(1, level * segments - i));
+                gauge(ctx, cell, colour, share, bottom - segH, bottom);
+            }
+            luminousStroke(ctx, roundedRect(18, 13, 20, 36, 4), colour, 3);
+            luminousStroke(ctx, roundedRect(24, 8, 8, 5, 1.5), colour, 2.4);
+        },
+
+        // A bolt inside a ring. The bolt is always lit - it is what the thing
+        // is - and the ring is how far tonight's charge has got: sweeping
+        // round clockwise from the top, and empty again once the car has gone.
+        charge_point: function (ctx, colour, level) {
+            const cx = 28, cy = 28, r = 19;
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+            ctx.lineWidth = 5.6;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = fade(colour, 0.24);
+            ctx.lineWidth = 3.4;
+            ctx.stroke();
+            if (level > 0) {
+                ctx.shadowColor = colour;
+                ctx.shadowBlur = 7 * ICON_SCALE;
+                ctx.strokeStyle = lighten(colour, 0.35);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * level);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            const bolt = new Path2D('M30.5 11 L19 30 H27.5 L25.5 45 L37 26 H28.5 Z');
+            ctx.save();
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+            ctx.lineWidth = 2.4;
+            ctx.stroke(bolt);
+            ctx.shadowColor = colour;
+            ctx.shadowBlur = 8 * ICON_SCALE;
+            ctx.fillStyle = lighten(colour, 0.45);
+            ctx.fill(bolt);
+            ctx.restore();
+        }
+    };
+
     function makeFillIcon(kind, level) {
-        const size = ICON_SIZE * ICON_SCALE;
+        const size = ASSET_BOX * ICON_SCALE;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
-        const colour = KIND_COLORS[kind];
-
-        const r = 7 * ICON_SCALE;
-        const pad = 1.5 * ICON_SCALE;
-        const w = size - pad * 2;
-
-        const shell = function () {
-            ctx.beginPath();
-            ctx.moveTo(pad + r, pad);
-            ctx.arcTo(pad + w, pad, pad + w, pad + w, r);
-            ctx.arcTo(pad + w, pad + w, pad, pad + w, r);
-            ctx.arcTo(pad, pad + w, pad, pad, r);
-            ctx.arcTo(pad, pad, pad + w, pad, r);
-            ctx.closePath();
-        };
-
-        // An empty vessel: outline only, so an empty one still reads as the
-        // thing it is rather than disappearing.
-        shell();
-        ctx.fillStyle = 'rgba(10, 20, 24, 0.72)';
-        ctx.fill();
-        ctx.strokeStyle = colour;
-        ctx.lineWidth = 1.8 * ICON_SCALE;
-        ctx.stroke();
-
-        // The charge, rising from the bottom.
-        if (level > 0) {
-            ctx.save();
-            shell();
-            ctx.clip();
-            const height = w * level;
-            ctx.fillStyle = colour;
-            ctx.globalAlpha = 0.9;
-            ctx.fillRect(pad, pad + w - height, w, height);
-            ctx.restore();
-        }
-
-        // The glyph over the top, in whichever ink stays legible against the
-        // part of the marker it happens to sit on.
-        ctx.strokeStyle = level > 0.55 ? '#04212a' : colour;
-        ctx.lineWidth = 1.9 * ICON_SCALE;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.save();
-        const inset = 4 * ICON_SCALE;
-        ctx.translate(inset, inset);
-        ctx.scale((size - inset * 2) / 24, (size - inset * 2) / 24);
-        ctx.stroke(new Path2D(GLYPHS[kind]));
-        ctx.restore();
-
+        ctx.scale(ICON_SCALE, ICON_SCALE);
+        ASSET_DRAW[kind](ctx, KIND_COLORS[kind], level);
         return ctx.getImageData(0, 0, size, size);
     }
 
@@ -1160,8 +1340,10 @@
     // as the travelling dashes - MapLibre cannot keyframe a paint property, and
     // one timer keeps the two motions in step instead of beating against each
     // other.
-    const RING_MIN = 11;
-    const RING_MAX = 52;
+    // From the edge of the dark stage outward: starting inside it, a ring was
+    // hidden behind the marker for the first third of its run.
+    const RING_MIN = 26;
+    const RING_MAX = 70;
 
     function addPulseLayers() {
         PULSES.forEach(function (pulse) {
@@ -1176,16 +1358,21 @@
                     filter: pulse.filter,
                     paint: {
                         'circle-color': colour,
-                        'circle-radius': ['+', 18, ['*', 30, level]],
-                        'circle-opacity': ['+', 0.18, ['*', 0.42, level]],
+                        // Always wider than the stage below, so there is a rim
+                        // of glow round it even when the asset is idle.
+                        'circle-radius': ['+', 34, ['*', 30, level]],
+                        'circle-opacity': ['+', 0.22, ['*', 0.42, level]],
                         'circle-blur': 1
                     }
                 });
             }
 
-            // A lit disc for the marker to sit on. The halo alone reads as a
-            // smudge behind an icon; this is what makes the node look like
-            // something energy is passing through.
+            // A dark stage for the marker to stand on.
+            //
+            // This was a lit disc in the asset's colour - bright under a bright
+            // icon, which on a projector is one blob. Dark reads as contrast
+            // on the table: glow, then a ring of black, then the marker lit
+            // inside it. On the black basemap it is simply a hole in the halo.
             if (!map.getLayer(pulse.coreId)) {
                 map.addLayer({
                     id: pulse.coreId,
@@ -1193,10 +1380,10 @@
                     source: NODES_SOURCE_ID,
                     filter: pulse.filter,
                     paint: {
-                        'circle-color': colour,
-                        'circle-radius': ['+', 9, ['*', 4, level]],
-                        'circle-opacity': ['+', 0.45, ['*', 0.35, level]],
-                        'circle-blur': 0.55
+                        'circle-color': '#000000',
+                        'circle-radius': 25,
+                        'circle-opacity': 0.82,
+                        'circle-blur': 0.25
                     }
                 });
             }
@@ -1316,10 +1503,11 @@
                     // Community assets read a step larger - they serve every
                     // member, and the grid connection vanishing into the
                     // building markers is the wrong emphasis.
+                    // The assets are drawn at their own size (ASSET_BOX).
                     'icon-size': [
                         'case',
                         ['==', ['get', 'kind'], 'building'], 0.62,
-                        0.82
+                        1
                     ],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
@@ -1334,8 +1522,11 @@
                         ['get', 'name']
                     ],
                     'text-font': ['Open Sans Regular'],
-                    'text-size': 9.5,
-                    'text-offset': [0, 1.5],
+                    // Under the asset's body, clear of its glow: the markers
+                    // are twice what they were and the old offset put the name
+                    // across the bottom of the icon.
+                    'text-size': 11,
+                    'text-offset': [0, 2.3],
                     'text-anchor': 'top',
                     'text-optional': true,
                     'text-padding': 3
@@ -1630,12 +1821,19 @@
 
             const series = (ecom && ecom.demand_hourly) || [];
             const now = series[hour] || 0;
-            const demand = demandCeiling > 0
+            const shade = demandCeiling > 0
                 ? Math.sqrt(now / demandCeiling) : 0;
+            // A member is always visibly a member; a non-member stays dark.
+            const demand = ecom
+                ? MEMBER_FLOOR + (1 - MEMBER_FLOOR) * shade
+                : 0;
 
             const sun = ((ecom && ecom.solar_hourly) || [])[hour] || 0;
-            const solar = solarCeiling > 0
+            const glow = solarCeiling > 0
                 ? Math.sqrt(sun / solarCeiling) : 0;
+            const solar = sun > 0
+                ? SOLAR_FLOOR + (1 - SOLAR_FLOOR) * glow
+                : 0;
 
             if (handover > 0) {
                 // Part way out of the introduction: the flat pink every member

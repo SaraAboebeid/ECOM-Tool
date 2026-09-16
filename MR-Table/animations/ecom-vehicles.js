@@ -700,36 +700,53 @@
 
     // ---------------------------------------------------------------- icon
 
+    // Half as big again as it was, drawn at three times the resolution and lit
+    // like the rest of the layer. At the old 28px and 0.85 the car was about
+    // fourteen metres of campus in a dark body colour: on the projector it was
+    // a speck you had to already know about to follow across a street.
+    const CAR_SCALE = 3;
+    const CAR_GROW = 1.55;
+
     /** A small car, drawn once and handed to MapLibre as an image. */
     function makeCarIcon() {
-        const size = 28;
+        const size = 46;
         const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = size * CAR_SCALE;
+        canvas.height = size * CAR_SCALE;
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
 
+        ctx.scale(CAR_SCALE, CAR_SCALE);
         // Pointing up: icon-rotate turns it to the heading.
         ctx.translate(size / 2, size / 2);
+        ctx.scale(CAR_GROW, CAR_GROW);
 
-        ctx.fillStyle = CAR_COLOR;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-        ctx.lineWidth = 1;
+        const body = function () {
+            ctx.beginPath();
+            ctx.moveTo(-4.5, -9);
+            ctx.lineTo(4.5, -9);
+            ctx.lineTo(6, -2);
+            ctx.lineTo(6, 8);
+            ctx.lineTo(-6, 8);
+            ctx.lineTo(-6, -2);
+            ctx.closePath();
+        };
 
-        // Body.
-        ctx.beginPath();
-        ctx.moveTo(-4.5, -9);
-        ctx.lineTo(4.5, -9);
-        ctx.lineTo(6, -2);
-        ctx.lineTo(6, 8);
-        ctx.lineTo(-6, 8);
-        ctx.lineTo(-6, -2);
-        ctx.closePath();
-        ctx.fill();
+        // A dark keyline first, so it still reads on a pale basemap.
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.lineWidth = 2.4;
+        body();
         ctx.stroke();
 
+        ctx.shadowColor = CAR_COLOR;
+        ctx.shadowBlur = 5 * CAR_SCALE;
+        ctx.fillStyle = CAR_COLOR;
+        body();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
         // Windscreen, so the car has a front at a glance.
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillStyle = 'rgba(0, 20, 8, 0.55)';
         ctx.beginPath();
         ctx.moveTo(-3.5, -7.5);
         ctx.lineTo(3.5, -7.5);
@@ -738,7 +755,7 @@
         ctx.closePath();
         ctx.fill();
 
-        return ctx.getImageData(0, 0, size, size);
+        return ctx.getImageData(0, 0, size * CAR_SCALE, size * CAR_SCALE);
     }
 
     function ensureLayer() {
@@ -746,7 +763,7 @@
 
         if (!map.hasImage(ICON_ID)) {
             const image = makeCarIcon();
-            if (image) map.addImage(ICON_ID, image);
+            if (image) map.addImage(ICON_ID, image, { pixelRatio: CAR_SCALE });
         }
         if (!map.getSource(SOURCE_ID)) {
             map.addSource(SOURCE_ID, {
@@ -761,7 +778,7 @@
                 source: SOURCE_ID,
                 layout: {
                     'icon-image': ICON_ID,
-                    'icon-size': 0.85,
+                    'icon-size': 1,
                     'icon-rotate': ['get', 'heading'],
                     // Turn with the map: a car is on a road, and a road turns
                     // when the table's map is rotated to face the room.

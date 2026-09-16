@@ -97,6 +97,15 @@ PV_OVERRIDES = {
     },
 }
 
+# Where the campus meets the grid: on Aschebergsgatan, by the substation. The
+# Grasshopper model has no geographic position for it - only a spot on its own
+# canvas - so this is the one place the coordinate lives, and every rebuild of
+# the definition carries it. Chosen as the point on the street, within sight
+# of the substation, furthest from any Lantmäteriet building (18 m): the tie
+# is drawn with a glow several times its own size, and on the projection table
+# a marker that spills onto a roof reads as belonging to that building.
+GRID_SUBSTATION = {"lat": 57.690634, "lon": 11.973668}
+
 # Coordinates are drawn in a ~1200 x 1200 image space with y increasing
 # downward; the graph canvas centres on the origin with y increasing upward.
 COORD_CENTRE = 600.0
@@ -568,6 +577,7 @@ def build(year: str, include_without_demand: bool,
             "selling_price": {"fixed": 0.55},
             "carbon_intensity": {"fixed": 41.0},
             **({"location": grid_where} if (grid_where := position_for(coords, "GRID")) else {}),
+            **GRID_SUBSTATION,
         },
         "analysis_period": {
             "start_month": 6, "start_day": 1, "start_hour": 0,
