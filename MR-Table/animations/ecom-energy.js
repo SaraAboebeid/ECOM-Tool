@@ -709,8 +709,11 @@
             startedAt: performance.now(),
             settleLine: null
         };
-        showCaption({ title: spec.title || 'Changing the community',
-                      line: spec.line || '' });
+        // No card on the table: what changed is written on the controller,
+        // next to its spinner, by the person who changed it. The table's part
+        // is the change itself. Any caption still up (an introduction line)
+        // gives way to it.
+        showCaption(null);
         // The clock stands still for the beat: one thing moving at a time.
         stopClock();
         stepChange(change.startedAt);
@@ -753,12 +756,6 @@
             paintChange(SCRIM_DEPTH * (1 - t), 0, 0, 0, 1,
                         change.removing ? 0 : (change.landed ? 1 - t : 1),
                         HOLE_CLOSED_M);
-            if (change.settleLine && !change.settleShown) {
-                change.settleShown = true;
-                showCaption({ title: change.spec.title || '',
-                              line: change.spec.line || '',
-                              figure: change.settleLine });
-            }
         } else {
             // Leave the outcome up for a moment before handing the table back.
             //
@@ -1176,6 +1173,11 @@
             'pv', KIND_COLORS.pv,
             KIND_COLORS.building
         ];
+        // Lines kept visible however little they carry: the battery's, and any
+        // ending at a charge point (node ids "CP_<name>").
+        const floored = ['any',
+            ['==', ['get', 'kind'], 'battery'],
+            ['==', ['slice', ['to-string', ['get', 'target']], 0, 3], 'CP_']];
 
         if (!map.getLayer(FLOW_GLOW_ID)) {
             map.addLayer({
@@ -1211,17 +1213,19 @@
                     // but invisible, and the only red on the table was gone.
                     // It is one asset the community is built around, and it
                     // has to be seen doing what it does however small that is.
+                    // The same goes for a charge point: one car at 11 kW beside
+                    // a megawatt grid tie was drawn at under a fifth opacity and
+                    // two pixels wide, and read as no connection at all.
                     'line-width': ['+',
-                        ['case', ['==', ['get', 'kind'], 'battery'], 2.2, 0.8],
+                        ['case', floored, 2.2, 0.8],
                         ['*', 6.5, ['get', 'share']]],
                     // Just short of full, so two crossing lines still read as
                     // two rather than as a join.
-                    // Only while it is moving something: an idle battery line
-                    // stays dark like any other.
+                    // Only while it is moving something: an idle battery or
+                    // charger line stays dark like any other.
                     'line-opacity': ['*', 0.82, ['get', 'revealed'],
                         ['case',
-                            ['all', ['==', ['get', 'kind'], 'battery'],
-                                    ['>', ['get', 'share'], 0]],
+                            ['all', floored, ['>', ['get', 'share'], 0]],
                             ['max', 0.6, ['get', 'share']],
                             ['get', 'share']]]
                 }
@@ -2568,13 +2572,36 @@
             return;
         }
         if (!was) {
-            // Entering the introduction with nothing shown yet.
-            uniformBuildings = 0;
-            uniformSolar = 0;
+            // Entering the introduction. Only the step that introduces a layer
+            // starts it from nothing; a later step finds it already there -
+            // otherwise arriving at the roofs faded the buildings out and back
+            // in, which reads as the buildings being introduced a second time.
+            uniformBuildings = reveal === 'buildings' ? 0 : 1;
+            uniformSolar = (reveal === 'buildings' || reveal === 'solar') ? 0 : 1;
             handover = 1;
             reveals = reveals.filter(function (r) { return r.target !== 'handover'; });
         }
         if (reveal) startReveal(reveal);
+
+        // Each step stands on the ones before it. The introduction builds the
+        // picture up a layer at a time so the room is never asked to take in
+        // two new things at once, and a later step taking away what an earlier
+        // one established undoes exactly that.
+        //
+        // It did: the roofs step only kept the buildings pink if the table
+        // still believed it was in the introduction. Anything that said
+        // otherwise in between - a second controller tab starting or leaving
+        // its own introduction, a jump to a later step - reset the buildings to
+        // dark, and "The roofs" arrived with the buildings switched off. So a
+        // step now brings up whatever belongs before it rather than assuming it
+        // is already there: past the buildings, the buildings; past the roofs,
+        // the roofs too.
+        if (reveal !== 'buildings' && uniformBuildings < 1) {
+            startReveal('buildings');
+        }
+        if (reveal !== 'buildings' && reveal !== 'solar' && uniformSolar < 1) {
+            startReveal('solar');
+        }
         setFootprintHour(currentHour);
     }
 
@@ -2791,16 +2818,49 @@
     // The community's headline figures, for the KPI bars. A live dispatch sends
     // them alongside the layer; the committed export keeps them in its meta.
     let layerKpis = null;
+    let layerHours = null;
 
     function announceKpis() {
         const kpis = layerKpis ||
             (layerData && layerData.ecom_meta && layerData.ecom_meta.kpis) || null;
-        if (kpis) ecomChannel.postMessage({ type: 'ecom_kpis', kpis: kpis });
+        // With the hours they cover: the committed export is one day and a live
+        // dispatch is the definition's two, so a total is only comparable per day.
+        const hours = layerHours ||
+            (layerData && layerData.ecom_meta && layerData.ecom_meta.hours) || 24;
+        if (kpis) {
+            ecomChannel.postMessage({ type: 'ecom_kpis',
+                                      kpis: Object.assign({}, kpis, communityCounts()),
+                                      hours: hours });
+        }
+    }
+
+    // What the panel's own controls change, counted off the layer: the
+    // members, the chargers, and what the chargers drew. The dispatch totals
+    // cannot show a charge point - one car beside a megawatt campus - so the
+    // bars are handed these as well.
+    function communityCounts() {
+        const nodes = (nodeData && nodeData.features) || [];
+        const flows = (flowData && flowData.features) || [];
+        let members = 0;
+        let chargers = 0;
+        nodes.forEach(function (f) {
+            const kind = f.properties && f.properties.kind;
+            if (kind === 'building') members += 1;
+            else if (kind === 'charge_point') chargers += 1;
+        });
+        let ev = 0;
+        flows.forEach(function (f) {
+            const p = f.properties || {};
+            if (String(p.target || '').indexOf('CP_') !== 0) return;
+            (p.flow_hourly || []).forEach(function (v) { ev += Math.max(0, v || 0); });
+        });
+        return { members: members, chargers: chargers, total_ev_charging: ev };
     }
 
     function applyLayer(layer) {
         if (!layer || !layer.buildings || !layer.nodes || !layer.flows) return;
         layerKpis = layer.kpis || null;
+        layerHours = (layer.meta && layer.meta.hours) || null;
 
         layerData = layer.buildings;
         nodeData = layer.nodes;
@@ -3263,15 +3323,12 @@
         // What the change did, once the dispatch has been run. Arrives while
         // the animation is still going: the beats keep their own time so a slow
         // backend cannot stall them, and the outcome is shown when it lands.
+        // The words are said on the controller, beside its spinner; the table
+        // shows the change itself and the bars show what it did.
         if (data.type === 'ecom_change_result') {
             if (change) {
                 change.settleLine = data.line || '';
-                if (data.line) {
-                    showCaption({ title: change.spec.title || '',
-                                  line: change.spec.line || '',
-                                  figure: data.line });
-                    change.settleShown = true;
-                }
+                change.settleShown = true;
             }
             return;
         }

@@ -728,6 +728,13 @@
 
     let applyTimer = null;
     let inFlight = null;
+    // Something changed while a dispatch was running. It is sent when that one
+    // lands, as a single follow-up carrying everything touched in the meantime.
+    let applyPending = false;
+    // Whoever asked for those changes, waiting for the follow-up to land - so
+    // "await apply()" still means "until my change is on the table", queued or
+    // not, rather than returning the moment it was put in the queue.
+    let pendingWaiters = [];
 
     function markDirty() {
         state.dirty = true;
@@ -766,10 +773,26 @@
             applyTimer = null;
         }
 
-        // A drag that outruns the dispatch would otherwise stack requests and
-        // land them out of order, painting the table with an older community
-        // than the one the slider is showing.
-        if (inFlight) inFlight.abort();
+        // One dispatch at a time, and a running one is never cancelled.
+        //
+        // It used to be: a new change aborted the dispatch in flight, so requests
+        // could not land out of order. But a dispatch takes about eight seconds,
+        // and a person does not wait eight seconds between touches - so most
+        // changes were cancelled before they landed. Two things followed. A
+        // charge point was announced, its marker landed and held, and the layer
+        // that would have drawn it never came: the marker timed out and the icon
+        // vanished. And the next change was described against the last one that
+        // HAD landed, so a grid price moved after an unfinished battery change
+        // was announced as "A bigger battery".
+        //
+        // Now the change waits its turn. Order is still guaranteed - there is
+        // never more than one request out - and everything touched meanwhile
+        // goes in one follow-up, described against what the table then shows.
+        if (inFlight) {
+            applyPending = true;
+            setStatus('Queued - the table catches up when this one lands…', 'busy');
+            return new Promise(function (resolve) { pendingWaiters.push(resolve); });
+        }
         const controller = new AbortController();
         inFlight = controller;
 
@@ -782,8 +805,14 @@
         // what the dispatch round trip happens inside, so the new layer lands
         // during the animation instead of arriving after it as a jump.
         const changing = describeChange(spec);
+        // Said here, beside the spinner, for every change - the table only
+        // shows it. A change with no place on the map is not sent at all.
+        panelChange = changing || null;
         if (changing) {
-            channel.postMessage({ type: 'ecom_change', change: changing });
+            setBusy(changing.title, changing.line);
+            if (!changing.onPanel) {
+                channel.postMessage({ type: 'ecom_change', change: changing });
+            }
             flashControl(changing);
         }
 
@@ -792,11 +821,12 @@
                                          controller.signal);
             if (controller.signal.aborted) return;
             channel.postMessage({ type: 'ecom_layer', layer: layer });
-            if (changing) reportOutcome(layer);
+            const outcome = changing ? outcomeLine(layer) : null;
+            if (changing && !changing.onPanel) reportOutcome(layer);
             lastApplied = clone(spec);
             lastKpis = layer.kpis;
             // The backend is done; the table is not. Keep waiting.
-            awaitDraw();
+            awaitDraw(outcome);
             state.dirty = false;
 
             // A shorter span can leave the hour past the end of the new day.
@@ -828,6 +858,17 @@
             // one before it, so painting them inside the request leaves them
             // dimmed and captioned "previous run" over figures that are current.
             renderKpis();
+            // What was touched while this ran, now that it has landed.
+            if (applyPending && inFlight === null) {
+                applyPending = false;
+                const waiters = pendingWaiters;
+                pendingWaiters = [];
+                setTimeout(function () {
+                    applyNow().then(function () {
+                        waiters.forEach(function (resolve) { resolve(); });
+                    });
+                }, 0);
+            }
         }
     }
 
@@ -1304,13 +1345,15 @@
         }
 
         // Something else re-dispatched: a tariff, the carbon intensity, the
-        // dispatch mode. No place on the map, but the table is about to change
-        // and the room should not have to guess why.
+        // dispatch mode. No place on the map, so it is said on the panel, beside
+        // the spinner, by whoever changed it - the table just moves to the new
+        // figures.
         return {
             kind: 'action', action: 'add',
             title: 'Recomputing the community',
             line: 'The parameters changed',
-            at: null
+            at: null,
+            onPanel: true
         };
     }
 
@@ -1378,16 +1421,16 @@
         return document.getElementById('ecom-ctl-status');
     }
 
-    function reportOutcome(layer) {
+    function outcomeLine(layer) {
         const before = lastKpis && lastKpis.self_sufficiency;
         const after = layer.kpis && layer.kpis.self_sufficiency;
-        if (typeof before === 'number' && typeof after === 'number') {
-            channel.postMessage({
-                type: 'ecom_change_result',
-                line: 'Self-sufficiency ' + before.toFixed(2) + '% → ' +
-                      after.toFixed(2) + '%'
-            });
-        }
+        if (typeof before !== 'number' || typeof after !== 'number') return null;
+        return 'Self-sufficiency ' + before.toFixed(1) + '% → ' + after.toFixed(1) + '%';
+    }
+
+    function reportOutcome(layer) {
+        const line = outcomeLine(layer);
+        if (line) channel.postMessage({ type: 'ecom_change_result', line: line });
     }
 
     // ------------------------------------------------------------ optimizer
@@ -1462,8 +1505,11 @@
 
     let busyEl = null;
     let drawTimer = null;
+    // A change announced on the panel rather than on the table, kept up
+    // through the draw so its title does not give way to the generic one.
+    let panelChange = null;
 
-    function setBusy(text) {
+    function setBusy(text, detail) {
         if (drawTimer !== null) {
             clearTimeout(drawTimer);
             drawTimer = null;
@@ -1481,21 +1527,50 @@
         }
 
         if (!text) {
+            panelChange = null;
             busyEl.className = 'ecom-busy';
             return;
         }
 
         busyEl.innerHTML =
             '<span class="ecom-busy-spinner"></span>' +
-            '<span class="ecom-busy-text">' + esc(text) + '</span>';
-        busyEl.className = 'ecom-busy is-on';
+            '<span class="ecom-busy-body">' +
+                '<span class="ecom-busy-text">' + esc(text) + '</span>' +
+                (detail ? '<span class="ecom-busy-detail">' + esc(detail) + '</span>' : '') +
+            '</span>';
+        busyEl.className = 'ecom-busy is-on' + (detail ? ' has-detail' : '');
     }
 
     /** Waiting on the table now, with a limit. */
-    function awaitDraw() {
-        setBusy('Drawing on the table…');
+    // How long a change's card stays up, spinner gone, once the table has it.
+    const DONE_HOLD_MS = 2600;
+    let drawnOutcome = null;
+
+    /**
+     * The table has redrawn. A plain dispatch just clears; a change keeps its
+     * card a moment longer with what it did, since the table no longer says.
+     */
+    function finishBusy() {
+        if (!panelChange || !busyEl || !drawnOutcome) {
+            setBusy(null);
+            return;
+        }
+        if (drawTimer !== null) clearTimeout(drawTimer);
+        setBusy(panelChange.title, drawnOutcome);
+        busyEl.className += ' is-done';
         drawTimer = setTimeout(function () {
             drawTimer = null;
+            setBusy(null);
+        }, DONE_HOLD_MS);
+    }
+
+    function awaitDraw(outcome) {
+        drawnOutcome = outcome || null;
+        if (panelChange) setBusy(panelChange.title, 'Drawing on the table…');
+        else setBusy('Drawing on the table…');
+        drawTimer = setTimeout(function () {
+            drawTimer = null;
+            panelChange = null;
             setBusy(null);
             if (!state.link.up) {
                 setStatus('Dispatched, but no display is listening - see the ' +
@@ -2964,7 +3039,7 @@
             state.link.active = true;
             state.link.at = Date.now();
             // What the spinner was waiting for: the table has redrawn.
-            setBusy(null);
+            finishBusy();
             paintLink();
             setStatus('Table redrew: ' + data.flows + ' flows · ' + data.period, 'ok');
             channel.postMessage({ type: 'ecom_sound_request' });

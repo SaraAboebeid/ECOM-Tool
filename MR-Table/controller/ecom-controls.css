@@ -947,6 +947,35 @@
     transform: translate(-50%, 0);
 }
 
+.ecom-busy-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+/* A title and a line under it: a card rather than a pill. */
+.ecom-busy.has-detail {
+    border-radius: 14px;
+    padding: 0.75rem 1.2rem;
+}
+
+.ecom-busy.has-detail .ecom-busy-text {
+    font-size: 1.05rem;
+}
+
+/* Landed: the spinner gives way to a tick. */
+.ecom-busy.is-done .ecom-busy-spinner {
+    animation: none;
+    border-color: #4ade80;
+    background: radial-gradient(circle, #4ade80 0 3px, transparent 4px);
+}
+
+.ecom-busy-detail {
+    font-size: 0.82rem;
+    font-weight: 400;
+    opacity: 0.72;
+}
+
 .ecom-busy-spinner {
     width: 16px;
     height: 16px;
