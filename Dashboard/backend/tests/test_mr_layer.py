@@ -311,16 +311,42 @@ def test_a_battery_stands_in_the_building_that_hosts_it(client):
     """A community battery is a cabinet in a plant room, not a thing in a field.
 
     'not-a-member' is deliberate: a landlord can put a battery in a building
-    whose meter is not in the scheme, which is the case on the campus - the
-    battery lives in AWL, and AWL has no dispatch data of its own.
+    whose meter is not in the scheme. (On the campus AWL was exactly that until
+    its measurements arrived.)
+
+    In the middle of the building, not the average of its corners. The corner
+    average counts the ring's closing point twice, which drags it toward one
+    corner, and for a footprint in several parts it lands between them - AWL's
+    battery stood on the wall where two of its blocks meet.
     """
     spec = definition(batteries=[{"name": "BAT01", "capacity": 500.0,
                                   "host": "not-a-member"}])
     layer = client.post("/api/mr/layer", json=spec).json()
 
     lon, lat = _asset(layer, "battery")["geometry"]["coordinates"]
-    want_lon, want_lat = _centre_of(square(11.980, 57.690))
-    assert (lon, lat) == pytest.approx((want_lon, want_lat))
+    # square(11.980, 57.690) is 0.0004 on a side: its middle is half that in.
+    assert (lon, lat) == pytest.approx((11.9802, 57.6902), abs=1e-9)
+
+
+def test_a_battery_in_a_building_of_several_parts_stands_in_the_largest(client, monkeypatch):
+    """A small annexe must not pull the battery out onto the join between blocks."""
+    main = square(11.980, 57.690)[0]
+    annexe = square(11.9806, 57.6900, size=0.0001)[0]
+    text = json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"id": "hall-a"},
+         "geometry": {"type": "Polygon", "coordinates": square(11.973, 57.688)}},
+        {"type": "Feature", "properties": {"id": "idealara"},
+         "geometry": {"type": "Polygon", "coordinates": square(11.976, 57.689)}},
+        {"type": "Feature", "properties": {"id": "plant-room"},
+         "geometry": {"type": "MultiPolygon", "coordinates": [[main], [annexe]]}},
+    ]})
+    monkeypatch.setattr(mr_layer, "_footprint_text", lambda: text)
+    spec = definition(batteries=[{"name": "BAT01", "capacity": 500.0,
+                                  "host": "plant-room"}])
+    layer = client.post("/api/mr/layer", json=spec).json()
+
+    lon, lat = _asset(layer, "battery")["geometry"]["coordinates"]
+    assert (lon, lat) == pytest.approx((11.9802, 57.6902), abs=1e-9)
 
 
 def test_the_lines_move_with_it(client):

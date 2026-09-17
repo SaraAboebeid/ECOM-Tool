@@ -538,6 +538,50 @@ def _centroids(geo: dict) -> dict:
     return centroids
 
 
+def _main_block_centres(geo: dict) -> dict:
+    """The middle of each footprint's largest part, weighted by area.
+
+    Where something stands *inside* a building - the battery in AWL - it has to
+    be inside it. The vertex average _centroids gives is fine for a line to aim
+    at, but for a footprint in several parts it is the middle of the corners,
+    not of the building: AWL is three blocks, and that average fell exactly on
+    the join between two of them, so the battery stood on a wall. The area
+    centroid of the biggest block is inside that block for any building shaped
+    like one.
+    """
+    centres = {}
+    for feature in geo["features"]:
+        key = canonical(feature["properties"].get("id", ""))
+        geometry = feature.get("geometry") or {}
+        kind = geometry.get("type")
+        parts = ([geometry["coordinates"]] if kind == "Polygon"
+                 else geometry["coordinates"] if kind == "MultiPolygon" else [])
+        best = None
+        for part in parts:
+            if not part:
+                continue
+            ring = part[0]
+            # Measured from the first corner. In raw degrees every cross
+            # product is a few hundred while the area they sum to is a ten
+            # millionth, and the cancellation cost a sixth of a metre.
+            ox, oy = ring[0][0], ring[0][1]
+            area = cx = cy = 0.0
+            for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+                x1, y1, x2, y2 = x1 - ox, y1 - oy, x2 - ox, y2 - oy
+                cross = x1 * y2 - x2 * y1
+                area += cross
+                cx += (x1 + x2) * cross
+                cy += (y1 + y2) * cross
+            if abs(area) < 1e-18:
+                continue
+            centre = (ox + cx / (3 * area), oy + cy / (3 * area))
+            if best is None or abs(area) > best[0]:
+                best = (abs(area), centre)
+        if best is not None:
+            centres[key] = best[1]
+    return centres
+
+
 def _endpoint(value):
     return value if isinstance(value, str) else value.get("id", "")
 
@@ -666,9 +710,12 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
     assets = [n for n in dispatch["nodes"]
               if n.get("type") in ("grid", "battery", "charge_point")
               or is_community_pv(n)]
+    block_centres = _main_block_centres(geo)
     for index, node in enumerate(assets):
         fixed = placements.get(node["id"])
-        host = centroids.get(canonical(node.get("host") or ""))
+        # In the middle of the building it stands in, not on a wall of it.
+        host_key = canonical(node.get("host") or "")
+        host = block_centres.get(host_key) or centroids.get(host_key)
         carried = ((node["lon"], node["lat"])
                    if node.get("lat") is not None and node.get("lon") is not None
                    else None)
@@ -699,6 +746,12 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
                               or node.get("installed_capacity") or 0.0),
             "placeholder": True,
         }
+        # The building it stands in, if it stands in one. The table draws a
+        # hosted battery as the building itself rather than as a marker on top
+        # of it - at table scale the marker and its glow were as wide as the
+        # roof - so it has to know which footprint that is.
+        if node.get("host"):
+            properties["host"] = canonical(node["host"])
         if node["type"] == "charge_point":
             # The table draws the vehicle itself, so it needs to know there is
             # one and when it is there. Without the schedule it could only infer

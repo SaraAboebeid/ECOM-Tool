@@ -14,6 +14,7 @@ Run with the backend up:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime
 import urllib.request
@@ -39,7 +40,10 @@ FLOWS_FILE = OUT_DIR / "ecom-flows.geojson"
 ANALYSIS_DAY = {"start_month": 6, "start_day": 1, "start_hour": 0,
                 "end_month": 6, "end_day": 1, "end_hour": 23}
 
-API = "http://127.0.0.1:8000"
+# Overridable, because port 8000 is a common default and not always ours: on
+# this machine another project's API has held it, answering /api/health like
+# any backend and returning a web page for everything else.
+API = os.environ.get("ECOM_API", "http://127.0.0.1:8000")
 
 
 def fetch(path: str, payload=None):
@@ -82,6 +86,14 @@ def main() -> int:
     stamp = datetime.now().astimezone().isoformat(timespec="seconds")
     for part in ("buildings", "nodes", "flows"):
         layer[part]["generated"] = stamp
+
+    # The community's headline figures, so the table's KPI bars have something
+    # to show from the moment it opens rather than only after the first change.
+    # A live POST /api/mr/layer carries the same block; this is that block for
+    # the committed picture.
+    kpis = layer.get("kpis") or dispatch.get("kpis")
+    if kpis:
+        layer["buildings"].setdefault("ecom_meta", {})["kpis"] = kpis
 
     OUT_FILE.write_text(json.dumps(layer["buildings"]), encoding="utf-8")
     NODES_FILE.write_text(json.dumps(layer["nodes"]), encoding="utf-8")

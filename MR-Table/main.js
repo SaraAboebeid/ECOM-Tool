@@ -461,6 +461,79 @@ basemapToggleBtn.addEventListener('click', () => {
   showToast(`Basemap: ${newBasemap}`);
 });
 
+// ---- muting the table ------------------------------------------------------
+//
+// Two different things make sound here: the city ambience, which is an <audio>
+// element street-life creates, and the energy layer's sonification, which is
+// Web Audio listening on the controller channel. One switch has to cover both
+// or "mute" means "mute half of it".
+//
+// Muted unless someone says otherwise, and remembered: the table usually runs
+// in a room where the sound is somebody else's decision, and a projector that
+// starts humming on its own when a page reloads is nobody's idea of a demo.
+// Press M at the display to turn it on, or use the controller's own sound
+// switch - which this respects, rather than fighting.
+const MUTE_KEY = 'ace.display.muted';
+let displayMuted = true;
+try {
+  const saved = localStorage.getItem(MUTE_KEY);
+  if (saved !== null) displayMuted = saved === '1';
+} catch (e) { /* private window, or storage blocked: the default stands */ }
+
+const muteChannel = (() => {
+  try { return new BroadcastChannel('map_controller_channel'); } catch (e) { return null; }
+})();
+
+// Anything made later starts the way the table is set.
+const NativeAudio = window.Audio;
+if (NativeAudio) {
+  window.Audio = function (...args) {
+    const element = new NativeAudio(...args);
+    element.muted = displayMuted;
+    return element;
+  };
+  window.Audio.prototype = NativeAudio.prototype;
+}
+
+function applyMute(announce) {
+  document.querySelectorAll('audio, video').forEach((el) => { el.muted = displayMuted; });
+  if (muteChannel) {
+    muteChannel.postMessage({ type: 'ecom_sound', on: !displayMuted });
+  }
+  try { localStorage.setItem(MUTE_KEY, displayMuted ? '1' : '0'); } catch (e) { /* as above */ }
+  if (announce && typeof showToast === 'function') {
+    showToast(displayMuted ? 'Display muted' : 'Display sound on');
+  }
+}
+
+function setDisplayMuted(on) {
+  displayMuted = !!on;
+  applyMute(true);
+}
+
+// A layer switching its own sound on must not get past the mute. The energy
+// layer does exactly that at the end of its introduction.
+if (muteChannel) {
+  muteChannel.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (displayMuted && data.type === 'ecom_sound' && data.on === true) {
+      muteChannel.postMessage({ type: 'ecom_sound', on: false });
+    }
+  });
+}
+
+document.addEventListener('keydown', (event) => {
+  const tag = (event.target && event.target.tagName) || '';
+  if (event.key !== 'm' && event.key !== 'M') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  setDisplayMuted(!displayMuted);
+});
+
+applyMute(false);
+
+window.setDisplayMuted = setDisplayMuted;
+window.isDisplayMuted = () => displayMuted;
+
 // expose setBasemap for debugging
 window.setBasemap = setBasemap;
 window.map = map;

@@ -118,7 +118,10 @@
         {
             key: 'buildings',
             title: 'The buildings',
-            line: 'Thirty-two buildings on campus, each with a year of measured ' +
+            // Counts are filled in from the scenario when the step is sent -
+            // see storyText. They were typed in once, and went stale the day
+            // AWL's measurements arrived and the community grew by one.
+            line: '{members} buildings on campus, each with a year of measured ' +
                   'electricity behind it. This is the demand the community has ' +
                   'to cover.',
             figure: 'Members of the energy community',
@@ -136,11 +139,10 @@
         {
             key: 'solar',
             title: 'The roofs',
-            // Eight arrays, but only five roofs: the earlier wording said
-            // eight of the buildings carried solar, which is not what the
-            // scenario holds and is contradicted by the table itself - only
-            // five footprints light up.
-            line: 'Eight arrays on five of the thirty-two roofs. Brightest at ' +
+            // Arrays and roofs are counted separately: several roofs carry two
+            // arrays, and an earlier wording that counted arrays as buildings
+            // was contradicted by the table, where fewer footprints light up.
+            line: '{arrays} arrays on {roofs} of the {members} roofs. Brightest at ' +
                   'midday, nothing at night - and never enough on its own.',
             figure: 'Generation, where it is made',
             kinds: ['building', 'pv'],
@@ -879,6 +881,29 @@
     // What the sound was doing before the introduction muted it.
     let soundBeforeStory = null;
 
+    /**
+     * A step's words with the community's own numbers in them.
+     *
+     * Members are the buildings the table actually colours - the layer's
+     * match count - not every building in the definition: four of those have
+     * a demand and no footprint, and a figure the table cannot show is a
+     * figure the room can check against the table and find wrong.
+     */
+    function storyText(text) {
+        if (!text) return text;
+        const base = state.base || {};
+        const buildings = base.buildings || [];
+        const members = (state.layer && state.layer.matched) || buildings.length;
+        const roofs = buildings.filter(function (b) {
+            return (b.pv_plants || []).length > 0;
+        }).length;
+        const arrays = (base.pv_plants || []).length;
+        return String(text)
+            .replace(/\{members\}/g, members)
+            .replace(/\{roofs\}/g, roofs)
+            .replace(/\{arrays\}/g, arrays);
+    }
+
     function storyGo(index) {
         const from = state.story;
         const leaving = state.story >= 0 && index < 0;
@@ -955,7 +980,8 @@
 
         channel.postMessage({
             type: 'ecom_caption',
-            caption: { title: step.title, line: step.line, figure: step.figure,
+            caption: { title: step.title, line: storyText(step.line),
+                       figure: storyText(step.figure),
                        step: index + 1, of: STORY.length }
         });
 
@@ -1192,32 +1218,67 @@
         // it there. Panels are not community assets standing on their own -
         // they are a thing that happens to a roof, and the roof is where the
         // room should be looking.
+        // Every roof that changed, not the first one found.
+        //
+        // "Cover every roof at 80%" is one press and thirty roofs, and naming
+        // only the first of them sent the table to spotlight one building while
+        // the other twenty-nine quietly turned yellow behind the scrim. It read
+        // as a change to that building.
         const wasPlants = plantAreas(lastApplied);
         const nowPlants = plantAreas(spec);
         const plantNames = Object.keys(nowPlants).concat(Object.keys(wasPlants));
-        for (let i = 0; i < plantNames.length; i += 1) {
-            const plant = plantNames[i];
+        const changed = [];
+        const seen = {};
+        plantNames.forEach(function (plant) {
+            if (seen[plant]) return;
+            seen[plant] = true;
             const before = wasPlants[plant];
             const after = nowPlants[plant];
-            if (before === after) continue;
+            if (before === after) return;
+            changed.push({
+                plant: plant,
+                before: before,
+                after: after,
+                host: hostOfPlant(spec, plant) || hostOfPlant(lastApplied, plant),
+                growing: (after || 0) > (before || 0)
+            });
+        });
 
-            const host = hostOfPlant(spec, plant) || hostOfPlant(lastApplied, plant);
-            const growing = (after || 0) > (before || 0);
+        if (changed.length) {
+            const growing = changed.filter(function (c) { return c.growing; }).length
+                            >= changed.length / 2;
+            const area = function (rows, pick) {
+                return Math.round(rows.reduce(function (sum, c) {
+                    return sum + (pick(c) || 0);
+                }, 0));
+            };
+            const one = changed.length === 1 ? changed[0] : null;
             return {
                 kind: 'pv',
                 action: growing ? 'add' : 'remove',
-                title: after === undefined ? 'Taking the panels off a roof'
-                     : before === undefined ? 'Putting panels on a roof'
-                     : growing ? 'More panel on a roof' : 'Less panel on a roof',
-                line: (host ? host + ' · ' : '') +
-                      (before === undefined ? (after + ' m²')
-                       : after === undefined ? ('was ' + before + ' m²')
-                       : (before + ' → ' + after + ' m²')),
+                title: one
+                    ? (one.after === undefined ? 'Taking the panels off a roof'
+                       : one.before === undefined ? 'Putting panels on a roof'
+                       : one.growing ? 'More panel on a roof' : 'Less panel on a roof')
+                    : (growing ? 'Panels on ' + changed.length + ' roofs'
+                               : 'Panels off ' + changed.length + ' roofs'),
+                line: one
+                    ? ((one.host ? one.host + ' · ' : '') +
+                       (one.before === undefined ? (one.after + ' m²')
+                        : one.after === undefined ? ('was ' + one.before + ' m²')
+                        : (one.before + ' → ' + one.after + ' m²')))
+                    : (area(changed, function (c) { return c.before; }) + ' → ' +
+                       area(changed, function (c) { return c.after; }) + ' m² of panel'),
                 // Named as well as placed: a roof on a building the table has
                 // not drawn - one outside the community - still has a
                 // footprint the table can find for itself.
-                name: host,
-                at: host ? buildingAt(host) : null
+                name: one ? one.host : null,
+                at: one && one.host ? buildingAt(one.host) : null,
+                // Every roof it touches, so the table can light them together.
+                targets: changed.filter(function (c) { return c.host; })
+                    .map(function (c) {
+                        return { name: c.host, at: buildingAt(c.host) };
+                    })
             };
         }
 

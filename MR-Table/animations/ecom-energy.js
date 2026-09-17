@@ -35,6 +35,10 @@
     const FLOWS_SOURCE_ID = 'ecom-flows-source';
     const FLOW_LAYER_ID = 'ecom-flows';
     const FLOW_GLOW_ID = 'ecom-flows-glow';
+    // One travelling light per line, and the glow around it.
+    const FLOW_HEAD_SOURCE_ID = 'ecom-flow-heads-source';
+    const FLOW_HEAD_GLOW_ID = 'ecom-flows-head-glow';
+    const FLOW_HEAD_ID = 'ecom-flows-head';
 
     // Two nodes get a pulse rather than just a marker: the grid tie and the
     // battery. Both are places energy passes THROUGH in a direction, and the
@@ -112,6 +116,28 @@
     // while the sun is actually on it - an unlit roof at night is the truth.
     const SOLAR_FLOOR = 0.3;
     const SOLAR_BASE_FILTER = ['==', ['get', 'has_pv'], 1];
+
+    // The building that holds the community battery, drawn as the battery.
+    //
+    // A marker on the roof could not work at this scale: the icon was 21 m
+    // across, its dark stage 29 m and its glow 75 m, over a footprint 74 m
+    // wide - the battery covered the building it was meant to belong to, and
+    // it sat on a wall, because AWL is modelled in three parts and the middle
+    // of them all lands on a join. So the building itself is the vessel: its
+    // outline lights and its floor fills as the charge goes in and out.
+    // Two readings on one building, because a building can be both.
+    //
+    // AWL holds the battery and will have a demand of its own as soon as its
+    // data arrives. Tinting the whole footprint red would overwrite the pink
+    // that says what it is drawing, so the charge is drawn as a level rising
+    // inside the outline instead - the same vessel-filling the battery marker
+    // uses, at the size of a building. The pink fill underneath is untouched:
+    // demand is the fill, charge is the level, solar is the halo.
+    const BATTERY_HOST_FILL_ID = 'ecom-battery-host-fill';
+    const BATTERY_HOST_LINE_ID = 'ecom-battery-host-line';
+    const BATTERY_LEVEL_SOURCE_ID = 'ecom-battery-level-source';
+    const BATTERY_LEVEL_ID = 'ecom-battery-level';
+    const BATTERY_HOST_FILTER = ['==', ['get', 'batteryHost'], 1];
     const NODE_BASE_FILTER = ['!=', ['get', 'kind'], 'pv'];
 
     const ecomChannel = new BroadcastChannel('map_controller_channel');
@@ -127,6 +153,8 @@
     let solarCeiling = 0;
     let nodeData = null;
     let flowData = null;
+    // Footprint ids that hold a battery, by folded name.
+    let batteryHosts = {};
     let isLoaded = false;
     let isActive = false;
     let currentHour = 0;
@@ -185,6 +213,9 @@
     function prepare() {
         hourCount = (layerData.ecom_meta && layerData.ecom_meta.hours) || 24;
 
+        // The routes changed, so the lights have new ground to cover.
+        measureFlows();
+
         // Flows start at zero width; setHour fills them in.
         flowData.features.forEach(function (feature) {
             feature.properties.flowNow = 0;
@@ -199,11 +230,63 @@
         // MapLibre exposes nested GeoJSON properties as JSON strings, so an
         // expression cannot read a field inside `ecom` - demandNow has to be
         // written flat, hour by hour, for the fill to interpolate on it.
+        // Which footprint holds the battery, if any. Folded the way the
+        // backend folds it, so 'Kårhus' and 'karhus' are the same building.
+        batteryHosts = {};
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            if (props.kind !== 'battery' || !props.host) return;
+            batteryHosts[foldName(props.host)] = true;
+            // The marker steps aside for the building: a badge on the edge
+            // rather than a disc over the roof.
+            props.hostedBattery = 1;
+        });
+
+        // A battery in a building lies along the building. The marker is drawn
+        // upright, and AWL runs at an angle across the table, so an upright
+        // battery standing on it read as something dropped there rather than
+        // something built in.
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            props.iconRotate = 0;
+            if (props.hostedBattery !== 1) return;
+            const host = layerData.features.find(function (building) {
+                return foldName(building.properties.id) === foldName(props.host);
+            });
+            if (host) props.iconRotate = alongBuilding(host);
+        });
+
+        // Where each building sits across the table, 0 at the left edge and 1
+        // at the right, in screen terms: the map is turned about 93 degrees, so
+        // "across the table" is not east-west.
+        const bearing = (typeof map.getBearing === 'function' ? map.getBearing() : 0)
+            * Math.PI / 180;
+        const rightX = Math.cos(bearing);
+        const rightY = -Math.sin(bearing);
+        let minAcross = Infinity;
+        let maxAcross = -Infinity;
+        layerData.features.forEach(function (feature) {
+            const centre = footprintCentre(feature);
+            if (!centre) { feature.properties.sweepAt = 0; return; }
+            const along = centre[0] * 0.5351 * rightX + centre[1] * rightY;
+            feature.properties.sweepAt = along;
+            if (along < minAcross) minAcross = along;
+            if (along > maxAcross) maxAcross = along;
+        });
+        layerData.features.forEach(function (feature) {
+            feature.properties.sweepAt = maxAcross > minAcross
+                ? (feature.properties.sweepAt - minAcross) / (maxAcross - minAcross)
+                : 0;
+        });
+
         demandCeiling = 0;
         solarCeiling = 0;
         layerData.features.forEach(function (feature) {
             const ecom = feature.properties.ecom;
             feature.properties.hasData = ecom ? 1 : 0;
+            feature.properties.batteryHost =
+                batteryHosts[foldName(feature.properties.id)] ? 1 : 0;
+            feature.properties.storedNow = 0;
             feature.properties.demandNow = 0;
             feature.properties.solarNow = 0;
             // The solar halo and the owner filter both read these off the
@@ -381,10 +464,22 @@
      * GeoJSON asks for and what tells a renderer which part to leave alone.
      */
     function scrimWithHole(at, radiusMetres) {
+        return scrimWithHoles(at ? [at] : [], radiusMetres);
+    }
+
+    /**
+     * The same, with a hole for each place the change touches.
+     *
+     * "Panels on every roof" is one change in thirty places. Spotlighting the
+     * first of them and letting the rest arrive afterwards said the change was
+     * about that one building, which it was not.
+     */
+    function scrimWithHoles(points, radiusMetres) {
         const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
         const rings = [world];
 
-        if (at) {
+        (points || []).forEach(function (at) {
+            if (!at) return;
             const lat = at[1];
             const dLat = radiusMetres / 110540;
             const dLon = radiusMetres / (111320 * Math.cos(lat * Math.PI / 180));
@@ -397,7 +492,7 @@
                            lat + Math.sin(angle) * dLat]);
             }
             rings.push(hole);
-        }
+        });
 
         return {
             type: 'FeatureCollection',
@@ -433,8 +528,19 @@
         if (change && holeMetres !== undefined && holeMetres !== change.hole) {
             change.hole = holeMetres;
             const source = map.getSource(SCRIM_SOURCE_ID);
-            if (source) source.setData(scrimWithHole(change.at, holeMetres));
+            // A change in many places has no spotlight - set at the start of
+            // the beat, and kept that way here, where every frame used to put
+            // all thirty holes back.
+            if (source) {
+                source.setData(scrimWithHoles(
+                    change.bulk ? [] : (change.places || [change.at]), holeMetres));
+            }
         }
+        // Rings travel from every feature in the source at once. For a change
+        // in one place that is the point; for a change in thirty it is thirty
+        // expanding rings crossing each other, so they are left out and the
+        // lit roofs carry it.
+        const rings = change && change.bulk ? 0 : ringOpacity;
         CHANGE_RING_IDS.forEach(function (id, index) {
             // Each ring is a beat behind the one in front, so the wave has a
             // direction rather than pulsing as one.
@@ -442,12 +548,14 @@
             const share = Math.max(0, Math.min(1, (ringRadius / 420) - lag));
             map.setPaintProperty(id, 'circle-radius', share * 420);
             map.setPaintProperty(id, 'circle-stroke-opacity',
-                                 share > 0 ? ringOpacity * (1 - index * 0.28) : 0);
+                                 share > 0 ? held(rings * (1 - index * 0.28)) : 0);
         });
-        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-radius', ringRadius * 0.55);
-        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-opacity', glow);
+        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-radius',
+                             change && change.bulk ? ringRadius * 0.3
+                                                   : ringRadius * 0.55);
+        map.setPaintProperty(CHANGE_GLOW_ID, 'circle-opacity', held(glow));
         map.setLayoutProperty(CHANGE_MARK_ID, 'icon-size', markSize);
-        map.setPaintProperty(CHANGE_MARK_ID, 'icon-opacity', markOpacity);
+        map.setPaintProperty(CHANGE_MARK_ID, 'icon-opacity', held(markOpacity));
     }
 
     function endChange() {
@@ -509,7 +617,10 @@
 
         const removing = spec.action === 'remove';
         const colour = KIND_COLORS[spec.kind] || KIND_COLORS.action || '#e8eef6';
-        const icon = 'ecom-' + spec.kind;
+        // A roof array has no marker of its own - the building carries the
+        // solar badge - so a PV change borrows it. Asking for 'ecom-pv', which
+        // is never registered, drew nothing at all.
+        const icon = spec.kind === 'pv' ? 'ecom-building-pv' : 'ecom-' + spec.kind;
 
         // A building joining is not in the layer the panel last drew, so it
         // arrives with a name and no position. Every footprint is here though,
@@ -519,6 +630,18 @@
         // BroadcastChannel hands each listener its own structured clone, so
         // writing to it changes nothing anyone else can see - which makes it a
         // quiet way to look like you are sharing state when you are not.
+        // Where the building the panel names is drawn.
+        const placeOf = function (name) {
+            if (!name || !layerData) return null;
+            const want = foldName(name);
+            const found = layerData.features.find(function (feature) {
+                const ecom = feature.properties.ecom;
+                return (ecom && foldName(ecom.name) === want) ||
+                       foldName(feature.properties.id) === want;
+            });
+            return found ? footprintCentre(found) : null;
+        };
+
         let at = spec.at || null;
         if (!at && spec.name && layerData) {
             // Folded before comparing, the way the backend matches a dispatch
@@ -539,21 +662,49 @@
         // which of the community's parts this is about before anything lands.
         // Kept well down towards black: a saturated wash over the whole table
         // would be a colour cast, not a scrim.
+        // Every place this change touches. One roof or thirty, the beat is the
+        // same shape - the table dims, the places it happens to light up, the
+        // marks land - because it is one change either way.
+        const places = (spec.targets || [])
+            .map(function (target) {
+                return target && target.at ? target.at : placeOf(target && target.name);
+            })
+            .filter(Boolean);
+        if (!places.length && at) places.push(at);
+
+        // One place gets the spotlight and a marker landing on it. Many places
+        // get neither. Thirty 240 m holes in one polygon overlap, and where
+        // holes overlap they fill back in - the table came up patchy with dark
+        // blotches rather than lit - and thirty markers popping in large and
+        // shrinking was a swarm, not a change. So the table just dims, and the
+        // change itself arrives as a wave across it when the layer lands.
+        const many = places.length > 1;
+
         map.setPaintProperty(SCRIM_LAYER_ID, 'fill-color', darkened(colour, 0.22));
-        map.getSource(SCRIM_SOURCE_ID).setData(scrimWithHole(at, HOLE_OPEN_M));
+        map.getSource(SCRIM_SOURCE_ID).setData(
+            scrimWithHoles(many ? [] : places, HOLE_OPEN_M));
 
         map.getSource(CHANGE_SOURCE_ID).setData({
             type: 'FeatureCollection',
-            features: at ? [{
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: at },
-                properties: { colour: colour, icon: icon }
-            }] : []
+            features: (many ? [] : places).map(function (point) {
+                return {
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: point },
+                    properties: { colour: colour, icon: icon }
+                };
+            })
         });
 
         change = {
             spec: spec,
-            at: at,
+            at: places[0] || at,
+            places: places,
+            // Rings are drawn from the same source, so thirty places would send
+            // thirty expanding rings across the table at once. With the whole
+            // campus lighting up there is nothing left to point at anyway.
+            bulk: many,
+            // Panels on many roofs: the halos sweep in once the layer lands.
+            sweepSolar: many && spec.kind === 'pv' && !removing,
             removing: removing,
             startedAt: performance.now(),
             settleLine: null
@@ -594,9 +745,14 @@
                         0.5 * (1 - t), size, markOpacity, hole);
         } else if (elapsed < total) {
             const t = (elapsed - ANNOUNCE_MS - LAND_MS) / SETTLE_MS;
-            // Back up to full, the marker handed over to the real layer.
+            // Back up to full, the marker handed over to the real layer - but
+            // only once there is a real layer to hand over to. The dispatch
+            // takes about two seconds and the beat is one and a half, so on a
+            // slow one the marker used to fade out before the thing it stood
+            // for existed, and the new charge point appeared to blink.
             paintChange(SCRIM_DEPTH * (1 - t), 0, 0, 0, 1,
-                        change.removing ? 0 : 1 - t, HOLE_CLOSED_M);
+                        change.removing ? 0 : (change.landed ? 1 - t : 1),
+                        HOLE_CLOSED_M);
             if (change.settleLine && !change.settleShown) {
                 change.settleShown = true;
                 showCaption({ title: change.spec.title || '',
@@ -605,7 +761,14 @@
             }
         } else {
             // Leave the outcome up for a moment before handing the table back.
-            paintChange(0, 0, 0, 0, 1, 0);
+            //
+            // If the dispatch outran the beat, the marker is still standing in
+            // for something that does not exist yet. It goes when the layer
+            // lands, over a fifth of a second rather than in one frame: a cut
+            // here reads as the thing vanishing, which is what it was doing.
+            const handover = change.landedAt
+                ? Math.min(1, (now - change.landedAt) / 200) : 0;
+            paintChange(0, 0, 0, 0, 1, change.removing ? 0 : 1 - handover);
             if (change.holdUntil === undefined) {
                 change.holdUntil = now + 2600;
             }
@@ -650,8 +813,11 @@
         if (!captionBox) {
             captionBox = document.createElement('div');
             captionBox.id = 'ecom-caption';
+            // Clear of the KPI bar along the bottom edge (46px) and of the
+            // left sidebar (60px): at left 28 / bottom 28 a change's caption
+            // was drawn straight over the figures it had just changed.
             captionBox.style.cssText = [
-                'position:fixed', 'left:28px', 'bottom:28px', 'z-index:900',
+                'position:fixed', 'left:78px', 'bottom:66px', 'z-index:900',
                 'max-width:520px', 'padding:14px 18px',
                 'background:rgba(8,12,16,0.82)',
                 'border:1px solid rgba(255,255,255,0.10)',
@@ -886,6 +1052,67 @@
             });
         }
 
+        // The battery's building. Drawn from the footprint source, on its own
+        // filter rather than the members' one: AWL holds the battery but is not
+        // a member of the community - it has no measured demand - so without
+        // this it is not drawn at all.
+        if (!map.getLayer(BATTERY_HOST_FILL_ID)) {
+            map.addLayer({
+                id: BATTERY_HOST_FILL_ID,
+                type: 'fill',
+                source: SOURCE_ID,
+                filter: BATTERY_HOST_FILTER,
+                paint: {
+                    'fill-color': KIND_COLORS.battery,
+                    // Faint, and not driven by the charge: this only says the
+                    // building holds a battery. How much is in it is the level
+                    // above, and how much the building is drawing is the pink
+                    // fill underneath, which this must not drown.
+                    'fill-opacity': 0.12
+                }
+            });
+        }
+
+        // The charge itself, rising from the south edge of the footprint.
+        if (!map.getSource(BATTERY_LEVEL_SOURCE_ID)) {
+            map.addSource(BATTERY_LEVEL_SOURCE_ID, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+        }
+        if (!map.getLayer(BATTERY_LEVEL_ID)) {
+            map.addLayer({
+                id: BATTERY_LEVEL_ID,
+                type: 'fill',
+                source: BATTERY_LEVEL_SOURCE_ID,
+                paint: {
+                    'fill-color': KIND_COLORS.battery,
+                    'fill-opacity': 0.62
+                }
+            });
+        }
+
+        if (!map.getLayer(BATTERY_HOST_LINE_ID)) {
+            map.addLayer({
+                id: BATTERY_HOST_LINE_ID,
+                type: 'line',
+                source: SOURCE_ID,
+                filter: BATTERY_HOST_FILTER,
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: {
+                    // Steady, not driven by the charge: the outline says which
+                    // building holds the battery and has to say it whether the
+                    // battery is full or flat. The level inside says how much.
+                    'line-color': KIND_COLORS.battery,
+                    // Heavy enough to hold its own beside a solar halo on the
+                    // same footprint.
+                    'line-width': 3.4,
+                    'line-opacity': 0.95,
+                    'line-blur': 1.2
+                }
+            });
+        }
+
         // A thin edge, so a building nobody is using still reads as a building
         // rather than as a smudge on the map.
         if (!map.getLayer(OUTLINE_LAYER_ID)) {
@@ -935,6 +1162,13 @@
             map.addSource(FLOWS_SOURCE_ID, { type: 'geojson', data: flowData });
         }
 
+        if (!map.getSource(FLOW_HEAD_SOURCE_ID)) {
+            map.addSource(FLOW_HEAD_SOURCE_ID, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+        }
+
         const colorByKind = [
             'match', ['get', 'kind'],
             'grid', KIND_COLORS.grid,
@@ -970,11 +1204,80 @@
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': colorByKind,
-                    'line-width': ['+', 0.8, ['*', 6.5, ['get', 'share']]],
+                    // The battery's lines get a floor. Width and opacity follow
+                    // a line's share of the busiest flow on campus, which is the
+                    // grid at over a megawatt; the battery moves a few kilowatts,
+                    // so its lines came out at a fraction of a percent - there
+                    // but invisible, and the only red on the table was gone.
+                    // It is one asset the community is built around, and it
+                    // has to be seen doing what it does however small that is.
+                    'line-width': ['+',
+                        ['case', ['==', ['get', 'kind'], 'battery'], 2.2, 0.8],
+                        ['*', 6.5, ['get', 'share']]],
                     // Just short of full, so two crossing lines still read as
                     // two rather than as a join.
-                    'line-opacity': ['*', 0.82, ['get', 'share'],
-                                     ['get', 'revealed']]
+                    // Only while it is moving something: an idle battery line
+                    // stays dark like any other.
+                    'line-opacity': ['*', 0.82, ['get', 'revealed'],
+                        ['case',
+                            ['all', ['==', ['get', 'kind'], 'battery'],
+                                    ['>', ['get', 'share'], 0]],
+                            ['max', 0.6, ['get', 'share']],
+                            ['get', 'share']]]
+                }
+            });
+        }
+
+        // Which way, and therefore to which building.
+        //
+        // The dash already travels, and it is not enough: a repeating pattern
+        // has no beginning, so at a glance it reads as texture on a line rather
+        // than as one thing going somewhere. Arrows were tried next and were
+        // worse - forty lines of chevrons is a diagram, not a table.
+        //
+        // This is a single light per line instead. It sets off from whatever is
+        // supplying, runs the length of the route, and goes out as it reaches
+        // the building. One moving point is followable across a room in a way
+        // that a pattern is not, and where it stops is the answer to the
+        // question: that building, the one it just arrived at.
+        if (!map.getLayer(FLOW_HEAD_GLOW_ID)) {
+            map.addLayer({
+                id: FLOW_HEAD_GLOW_ID,
+                type: 'circle',
+                source: FLOW_HEAD_SOURCE_ID,
+                paint: {
+                    'circle-color': colorByKind,
+                    'circle-radius': ['*',
+                        ['+', 9, ['*', 16, ['get', 'share']]],
+                        ['+', 1, ['*', 1.1, ['get', 'land']]]],
+                    'circle-opacity': ['*', 0.45, ['get', 'alpha']],
+                    'circle-blur': 1
+                }
+            });
+        }
+
+        if (!map.getLayer(FLOW_HEAD_ID)) {
+            map.addLayer({
+                id: FLOW_HEAD_ID,
+                type: 'circle',
+                source: FLOW_HEAD_SOURCE_ID,
+                paint: {
+                    // Pushed towards white: the brightest thing a projector can
+                    // make, so the head reads as the light and the line it runs
+                    // along as the wire.
+                    // Except the battery's. Red pushed that far towards white is
+                    // salmon, and a salmon light leaving AWL read as one more
+                    // pink building line - the battery's energy looked pink.
+                    'circle-color': ['match', ['get', 'kind'],
+                        'grid', lighten(KIND_COLORS.grid, 0.55),
+                        'battery', lighten(KIND_COLORS.battery, 0.12),
+                        'pv', lighten(KIND_COLORS.pv, 0.55),
+                        lighten(KIND_COLORS.building, 0.55)],
+                    'circle-radius': ['*',
+                        ['+', 2.4, ['*', 4.4, ['get', 'share']]],
+                        ['+', 1, ['*', 0.5, ['get', 'land']]]],
+                    'circle-opacity': ['get', 'alpha'],
+                    'circle-blur': 0.25
                 }
             });
         }
@@ -1359,9 +1662,15 @@
                     paint: {
                         'circle-color': colour,
                         // Always wider than the stage below, so there is a rim
-                        // of glow round it even when the asset is idle.
-                        'circle-radius': ['+', 34, ['*', 30, level]],
-                        'circle-opacity': ['+', 0.22, ['*', 0.42, level]],
+                        // of glow round it even when the asset is idle. Off
+                        // entirely for an asset standing in a building: a 75 m
+                        // glow over a 74 m roof is not a marker, it is a wash.
+                        'circle-radius': ['case',
+                            ['==', ['get', 'hostedBattery'], 1], 0,
+                            ['+', 34, ['*', 30, level]]],
+                        'circle-opacity': ['case',
+                            ['==', ['get', 'hostedBattery'], 1], 0,
+                            ['+', 0.22, ['*', 0.42, level]]],
                         'circle-blur': 1
                     }
                 });
@@ -1381,8 +1690,12 @@
                     filter: pulse.filter,
                     paint: {
                         'circle-color': '#000000',
-                        'circle-radius': 25,
-                        'circle-opacity': 0.82,
+                        // No stage for a battery in a building: a black disc
+                        // on the roof is a hole in the building it belongs to.
+                        'circle-radius': ['case',
+                            ['==', ['get', 'hostedBattery'], 1], 0, 25],
+                        'circle-opacity': ['case',
+                            ['==', ['get', 'hostedBattery'], 1], 0, 0.82],
                         'circle-blur': 0.25
                     }
                 });
@@ -1481,6 +1794,16 @@
             });
         }
 
+        // The battery's outline goes over the solar halo, not under it.
+        //
+        // AWL has panels as well as the battery, and the halo is wide and
+        // blurred where the battery's edge is a line. Drawn in the order the
+        // layers were added, the yellow buried the red - worst on the
+        // introduction's battery step, where every roof is held lit and the
+        // one building that step is about looked like any other solar roof.
+        if (map.getLayer(BATTERY_HOST_LINE_ID)) {
+            map.moveLayer(BATTERY_HOST_LINE_ID);
+        }
 
         // Roof arrays get no marker of their own: they sit on their host, and
         // the building already carries the solar halo.
@@ -1503,12 +1826,22 @@
                     // Community assets read a step larger - they serve every
                     // member, and the grid connection vanishing into the
                     // building markers is the wrong emphasis.
-                    // The assets are drawn at their own size (ASSET_BOX).
+                    // The assets are drawn at their own size (ASSET_BOX) -
+                    // a battery standing in a building included. It was shrunk
+                    // to a badge once the building became the gauge, but what
+                    // covered the roof was never the icon: it was the dark disc
+                    // and the 75 m glow under it, and those stay off for a
+                    // hosted battery. At a badge's size the introduction's
+                    // battery step had nothing on the table to point at.
                     'icon-size': [
                         'case',
                         ['==', ['get', 'kind'], 'building'], 0.62,
                         1
                     ],
+                    // Zero for everything but a battery built into a building,
+                    // which lies along it. Screen-relative, because the turn is
+                    // already worked out against the map's own rotation.
+                    'icon-rotate': ['coalesce', ['get', 'iconRotate'], 0],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
                     // The label is part of the same symbol so it can never be
@@ -1555,7 +1888,9 @@
         const value = visible ? 'visible' : 'none';
         [
             FILL_LAYER_ID, OUTLINE_LAYER_ID, SOLAR_LAYER_ID,
-            FLOW_GLOW_ID, FLOW_LAYER_ID, NODE_LAYER_ID
+            BATTERY_HOST_FILL_ID, BATTERY_LEVEL_ID, BATTERY_HOST_LINE_ID,
+            FLOW_GLOW_ID, FLOW_LAYER_ID, FLOW_HEAD_GLOW_ID, FLOW_HEAD_ID,
+            NODE_LAYER_ID
         ].concat(PULSE_LAYER_IDS).forEach(function (id) {
             if (map.getLayer(id)) {
                 map.setLayoutProperty(id, 'visibility', value);
@@ -1590,6 +1925,94 @@
 
     let pulseTimer = null;
 
+    // ---- the travelling lights ------------------------------------------
+    //
+    // Each route measured once, so stepping a light along it is a lookup and an
+    // interpolation rather than a walk of every vertex on every tick. The
+    // routes only change when a new layer lands, which is where this is rebuilt.
+    let headPaths = [];
+
+    function measureFlows() {
+        headPaths = [];
+        if (!flowData || !flowData.features) return;
+        flowData.features.forEach(function (feature, index) {
+            const coords = (feature.geometry && feature.geometry.coordinates) || [];
+            if (coords.length < 2) return;
+            const steps = [0];
+            let total = 0;
+            for (let i = 1; i < coords.length; i += 1) {
+                // Flat enough over a campus; this is for pacing a dot, not
+                // for navigation.
+                const dx = (coords[i][0] - coords[i - 1][0]) * 0.5351;
+                const dy = coords[i][1] - coords[i - 1][1];
+                total += Math.sqrt(dx * dx + dy * dy);
+                steps.push(total);
+            }
+            headPaths.push({
+                coords: coords,
+                steps: steps,
+                total: total,
+                // Spread along the cycle so they do not all set off together,
+                // which would read as one pulse of the whole campus.
+                offset: (index * 0.37) % 1,
+                properties: feature.properties
+            });
+        });
+    }
+
+    /** Where along the route a fraction lands. */
+    function pointAt(path, fraction) {
+        const want = path.total * fraction;
+        let i = 1;
+        while (i < path.steps.length - 1 && path.steps[i] < want) i += 1;
+        const span = path.steps[i] - path.steps[i - 1];
+        const share = span > 0 ? (want - path.steps[i - 1]) / span : 0;
+        const a = path.coords[i - 1];
+        const b = path.coords[i];
+        return [a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share];
+    }
+
+    // One run from end to end. Slow enough to follow across a table, which is
+    // the whole point of it: a light nobody can track says no more than a dash.
+    const HEAD_PERIOD_MS = 4200;
+
+    function paintHeads() {
+        const source = map.getSource(FLOW_HEAD_SOURCE_ID);
+        if (!source) return;
+        if (flowStill || !headPaths.length) {
+            source.setData({ type: 'FeatureCollection', features: [] });
+            return;
+        }
+
+        const now = performance.now() / HEAD_PERIOD_MS;
+        const features = [];
+        headPaths.forEach(function (path) {
+            const props = path.properties || {};
+            const share = props.share || 0;
+            const revealed = props.revealed === undefined ? 1 : props.revealed;
+            // Nothing moving means no light: an idle line is still a wire.
+            if (share <= 0.001 || revealed <= 0.01) return;
+            const phase = (now + path.offset) % 1;
+            // Full brightness for the run, not a bell curve: sin() put the
+            // light at its dimmest exactly where it arrives, which is the one
+            // place it has something to say. It fades up quickly as it leaves,
+            // holds, and flares out over the last tenth - at the building.
+            const arriving = phase > 0.9 ? (phase - 0.9) / 0.1 : 0;
+            const alpha = Math.min(1, phase / 0.06) * (1 - arriving) * revealed;
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: pointAt(path, phase) },
+                properties: Object.assign({}, props, {
+                    alpha: alpha,
+                    // Spreading as it is spent, so the last thing the eye sees
+                    // is a small burst on the building it was going to.
+                    land: arriving
+                })
+            });
+        });
+        source.setData({ type: 'FeatureCollection', features: features });
+    }
+
     function startPulse() {
         if (pulseTimer !== null) return;
         pulseTimer = setInterval(function () {
@@ -1605,6 +2028,7 @@
             }
             ringStep = (ringStep + 1) % RING_STEPS;
             paintRings();
+            paintHeads();
         }, 55);
     }
 
@@ -1709,7 +2133,7 @@
         });
 
         source.setData(nodeData);
-        setFootprintHour(hour);
+        setFootprintHour(hour, stored);
         setFlowHour(hour);
         reportForSound(hour, stored);
         reportVehicles(hour);
@@ -1803,8 +2227,164 @@
      * 1,286 kW in a single hour, and on a linear scale everything but the
      * three biggest buildings would sit at the dark end all day.
      */
-    function setFootprintHour(hour) {
+    /**
+     * How far to turn an upright marker so it lies along a building, in degrees
+     * clockwise on the screen.
+     *
+     * The long axis is the longest wall of the building's largest part - a
+     * rectangle-ish block has one direction worth following and its longest
+     * side is it. That direction is a compass bearing on the ground; the table's
+     * map is itself turned (about -93 degrees), so the turn on screen is the
+     * wall's bearing less the map's. Kept within a quarter turn either way, so
+     * the battery's terminal points up the table rather than down it.
+     */
+    function alongBuilding(feature) {
+        const geometry = feature.geometry || {};
+        const parts = geometry.type === 'Polygon' ? [geometry.coordinates]
+            : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+        const toMetres = function (point, lat) {
+            return [point[0] * 111320 * Math.cos(lat * Math.PI / 180),
+                    point[1] * 110540];
+        };
+        const area = function (ring) {
+            let sum = 0;
+            for (let i = 0; i < ring.length - 1; i += 1) {
+                sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+            }
+            return Math.abs(sum);
+        };
+        let biggest = null;
+        parts.forEach(function (part) {
+            if (part && part[0] && (!biggest || area(part[0]) > area(biggest))) {
+                biggest = part[0];
+            }
+        });
+        if (!biggest || biggest.length < 3) return 0;
+
+        const lat = biggest[0][1];
+        let longest = 0;
+        let bearing = 0;
+        for (let i = 0; i < biggest.length - 1; i += 1) {
+            const a = toMetres(biggest[i], lat);
+            const b = toMetres(biggest[i + 1], lat);
+            const dx = b[0] - a[0];
+            const dy = b[1] - a[1];
+            const length = Math.sqrt(dx * dx + dy * dy);
+            if (length > longest) {
+                longest = length;
+                bearing = Math.atan2(dx, dy) * 180 / Math.PI;
+            }
+        }
+
+        const mapBearing = typeof map.getBearing === 'function' ? map.getBearing() : 0;
+        let turn = bearing - mapBearing;
+        turn = ((turn % 180) + 180) % 180;       // a wall has no direction: 0..180
+        if (turn > 90) turn -= 180;              // and upright wins a tie: -90..90
+        return turn;
+    }
+
+    /**
+     * The part of a ring on the low side of a line.
+     *
+     * Sutherland-Hodgman against one edge: walk the ring, keep the points
+     * under the line, and where a side crosses it put a point on the crossing.
+     * Enough for a building - they are small and close to convex - and it
+     * keeps courtyards as courtyards, because every ring is clipped alike.
+     *
+     * The line is given as a measure rather than a latitude, because the table
+     * is rotated: its map runs at a bearing of about -93 degrees, so a level
+     * rising with latitude rises sideways across the table. A vessel has to
+     * fill towards the top of the table, whatever the map is doing.
+     */
+    function ringUnder(ring, measure, limit) {
+        const out = [];
+        for (let i = 0; i < ring.length; i += 1) {
+            const a = ring[i];
+            const b = ring[(i + 1) % ring.length];
+            const fa = measure(a);
+            const fb = measure(b);
+            if (fa <= limit) out.push(a);
+            if ((fa <= limit) !== (fb <= limit)) {
+                const t = (limit - fa) / (fb - fa);
+                out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+            }
+        }
+        if (out.length < 3) return null;
+        out.push(out[0].slice());
+        return out;
+    }
+
+    /** The charge drawn as a level inside the building that holds it. */
+    function paintBatteryLevel(stored) {
+        const source = map.getSource(BATTERY_LEVEL_SOURCE_ID);
+        if (!source || !layerData) return;
+
+        // Which way is up, on the table rather than on the globe. A map at
+        // bearing b shows that compass direction at the top of the screen, so
+        // "up" on the ground is (sin b, cos b) - and the level is measured
+        // along it.
+        const bearing = (typeof map.getBearing === 'function' ? map.getBearing() : 0)
+            * Math.PI / 180;
+        const ux = Math.sin(bearing);
+        const uy = Math.cos(bearing);
+        const metres = 111320 * Math.cos(57.689 * Math.PI / 180);
+        const measure = function (point) {
+            return point[0] * metres * ux + point[1] * 110540 * uy;
+        };
+
+        const features = [];
+        layerData.features.forEach(function (feature) {
+            if (feature.properties.batteryHost !== 1) return;
+            const level = Math.max(0, Math.min(1, stored || 0));
+            if (level <= 0.001) return;
+
+            const geometry = feature.geometry;
+            const parts = geometry.type === 'Polygon'
+                ? [geometry.coordinates]
+                : (geometry.type === 'MultiPolygon' ? geometry.coordinates : []);
+            let low = Infinity;
+            let high = -Infinity;
+            parts.forEach(function (part) {
+                part[0].forEach(function (point) {
+                    const value = measure(point);
+                    if (value < low) low = value;
+                    if (value > high) high = value;
+                });
+            });
+            if (!isFinite(low) || high <= low) return;
+            const limit = low + (high - low) * level;
+
+            const clipped = [];
+            parts.forEach(function (part) {
+                const rings = [];
+                part.forEach(function (ring) {
+                    const cut = ringUnder(ring, measure, limit);
+                    if (cut) rings.push(cut);
+                });
+                // A hole whose outer ring was cut away has nothing to be a
+                // hole of, so the part goes only if its outer ring survived.
+                if (rings.length) clipped.push(rings);
+            });
+            if (!clipped.length) return;
+
+            features.push({
+                type: 'Feature',
+                properties: { id: feature.properties.id, storedNow: level },
+                geometry: { type: 'MultiPolygon', coordinates: clipped }
+            });
+        });
+        source.setData({ type: 'FeatureCollection', features: features });
+    }
+
+    // The charge the table last showed. The reveal animations repaint the
+    // footprints every frame without an hour change to recompute it from, and
+    // passing nothing drained the battery's building to empty mid-animation.
+    let lastStored = 0;
+
+    function setFootprintHour(hour, stored) {
         if (!layerData) return;
+        if (stored === undefined) stored = lastStored;
+        lastStored = stored || 0;
         const source = map.getSource(SOURCE_ID);
         if (!source) return;
 
@@ -1831,8 +2411,17 @@
             const sun = ((ecom && ecom.solar_hourly) || [])[hour] || 0;
             const glow = solarCeiling > 0
                 ? Math.sqrt(sun / solarCeiling) : 0;
+            // The wave: a roof lights once the sweep has passed its place on
+            // the table, left to right, and is fully lit once it has gone by.
+            // Only the roofs that just got panels - one that already had them
+            // did not change, and going dark to come back with the rest said
+            // it had.
+            const across = feature.properties.sweepAt || 0;
+            const reached = feature.properties.sweeping === 1
+                ? Math.max(0, Math.min(1, solarSweep * 1.6 - across * 0.6))
+                : 1;
             const solar = sun > 0
-                ? SOLAR_FLOOR + (1 - SOLAR_FLOOR) * glow
+                ? (SOLAR_FLOOR + (1 - SOLAR_FLOOR) * glow) * reached
                 : 0;
 
             if (handover > 0) {
@@ -1849,8 +2438,13 @@
 
             feature.properties.demandNow = demand;
             feature.properties.solarNow = solar;
+            // The battery's building fills and empties with it.
+            if (feature.properties.batteryHost === 1) {
+                feature.properties.storedNow = stored || 0;
+            }
         });
         source.setData(layerData);
+        paintBatteryLevel(stored);
     }
 
     // ------------------------------------------------------- uniform reveal
@@ -1888,15 +2482,22 @@
     // it grows from nothing the way the eye expects light to.
     const SOLAR_REVEAL_MS = 2000;
 
+    // Panels arriving on many roofs at once: the halos come in as a wave across
+    // the table rather than all in one frame. One is fully arrived.
+    let solarSweep = 1;
+    const SWEEP_MS = 2400;
+
     function levelOf(target) {
         if (target === 'solar') return uniformSolar;
         if (target === 'handover') return handover;
+        if (target === 'sweep') return solarSweep;
         return uniformBuildings;
     }
 
     function setLevel(target, value) {
         if (target === 'solar') uniformSolar = value;
         else if (target === 'handover') handover = value;
+        else if (target === 'sweep') solarSweep = value;
         else uniformBuildings = value;
     }
 
@@ -2187,16 +2788,55 @@
     // This is the same payload the committed export holds, built by the same
     // app/services/mr_layer.py, so a slider moved at the table and a file
     // written by export_mr_layer.py cannot draw two different pictures.
+    // The community's headline figures, for the KPI bars. A live dispatch sends
+    // them alongside the layer; the committed export keeps them in its meta.
+    let layerKpis = null;
+
+    function announceKpis() {
+        const kpis = layerKpis ||
+            (layerData && layerData.ecom_meta && layerData.ecom_meta.kpis) || null;
+        if (kpis) ecomChannel.postMessage({ type: 'ecom_kpis', kpis: kpis });
+    }
+
     function applyLayer(layer) {
         if (!layer || !layer.buildings || !layer.nodes || !layer.flows) return;
+        layerKpis = layer.kpis || null;
 
         layerData = layer.buildings;
         nodeData = layer.nodes;
         flowData = layer.flows;
 
+        // The change beat can now hand over: what it was standing in for is
+        // real. Until this arrives the marker holds, because a marker that
+        // fades on a timer leaves a gap - the charge point blinked out and came
+        // back a second later when the dispatch finally answered.
+        let sweep = false;
+        if (change && !change.landed) {
+            change.landed = true;
+            change.landedAt = performance.now();
+            sweep = !!change.sweepSolar;
+        }
+        // Held dark until the repaint below, then brought up as a wave. Only
+        // while the layer is on: nothing would ever bring it back up otherwise.
+        if (sweep && isActive) solarSweep = 0;
+        else sweep = false;
+        // Which roofs the wave is for: the ones the change named.
+        const newRoofs = {};
+        if (sweep && change && change.spec && change.spec.targets) {
+            change.spec.targets.forEach(function (target) {
+                if (target && target.name) newRoofs[foldName(target.name)] = true;
+            });
+        }
+
         // prepare() re-derives flowCeiling from these flows, so the width scale
         // follows the new community rather than the one it replaced.
         prepare();
+
+        layerData.features.forEach(function (feature) {
+            const ecom = feature.properties.ecom;
+            feature.properties.sweeping =
+                sweep && ecom && newRoofs[foldName(ecom.name)] ? 1 : 0;
+        });
 
         // Marked loaded so a later activate() uses what was pushed rather than
         // fetching the export over the top of it.
@@ -2217,8 +2857,10 @@
 
         applyFilters(viewFilters);
         setHour(currentHour % hourCount);
+        if (sweep) startRamp('sweep', 1, SWEEP_MS, 'inOut');
 
         ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });
+        announceKpis();
 
         // Sent after the sources are written, not before: this is the
         // controller's evidence that the table actually redrew, rather than
@@ -2264,6 +2906,16 @@
             map.setLayoutProperty(SOLAR_LAYER_ID, 'visibility',
                                   shown('pv') ? 'visible' : 'none');
         }
+        // The lit building is the battery, so it goes when the battery goes -
+        // otherwise unticking Storage leaves a red building behind with
+        // nothing on the table to say what it is.
+        [BATTERY_HOST_FILL_ID, BATTERY_HOST_LINE_ID, BATTERY_LEVEL_ID]
+            .forEach(function (id) {
+            if (map.getLayer(id)) {
+                map.setLayoutProperty(id, 'visibility',
+                                      shown('battery') ? 'visible' : 'none');
+            }
+        });
     }
 
     function applyFilters(filters) {
@@ -2275,6 +2927,8 @@
             map.setFilter(SOLAR_LAYER_ID, SOLAR_BASE_FILTER);
             map.setFilter(FLOW_LAYER_ID, null);
             map.setFilter(FLOW_GLOW_ID, null);
+            map.setFilter(FLOW_HEAD_GLOW_ID, null);
+            map.setFilter(FLOW_HEAD_ID, null);
             applyHaloVisibility(null);
             return;
         }
@@ -2357,8 +3011,12 @@
         map.setFilter(SOLAR_LAYER_ID, ['all'].concat(solarTests));
         applyHaloVisibility(kinds);
         const flowFilter = flowTests.length ? ['all'].concat(flowTests) : null;
+        // The heads carry their line's properties, so one filter serves both:
+        // a hidden flow must not leave its light running across the table.
         map.setFilter(FLOW_LAYER_ID, flowFilter);
         map.setFilter(FLOW_GLOW_ID, flowFilter);
+        map.setFilter(FLOW_HEAD_GLOW_ID, flowFilter);
+        map.setFilter(FLOW_HEAD_ID, flowFilter);
     }
 
     // -------------------------------------------------------------- control
@@ -2429,6 +3087,7 @@
             type: 'ecom_summary',
             summary: buildSummary()
         });
+        announceKpis();
     }
 
     function deactivate() {

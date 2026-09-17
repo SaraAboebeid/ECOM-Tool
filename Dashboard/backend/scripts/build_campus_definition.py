@@ -106,6 +106,27 @@ PV_OVERRIDES = {
 # a marker that spills onto a roof reads as belonging to that building.
 GRID_SUBSTATION = {"lat": 57.690634, "lon": 11.973668}
 
+# Which building each battery stands in. graph.json has no room for it - a
+# battery there is a node on a canvas, not a thing in a building - so this is
+# the only place it is written down, and every rebuild carries it.
+#
+# The table draws a hosted battery as the building itself: AWL's outline lights
+# and its floor fills with the charge. Without this the battery goes back to
+# the ring of assets with nowhere of their own, which is where it was when the
+# only thing anybody knew about it was its capacity.
+#
+# Corroborated by the measurements: AWL's sheet in the campus workbook carries
+# bess_capacity 50 and bess_power 12.5 where every other building carries zero.
+BATTERY_HOSTS = {"Battery-01": "AWL"}
+
+# Where each charge point stands on the street. Same story as the substation
+# and the battery: graph.json only places a charger on its own canvas, so the
+# real position was set by hand in the generated file - and the next rebuild
+# threw it away. Found when AWL's demand was imported and the definition
+# regenerated: the charger fell back to the ring of shared assets, and the car
+# that parks at it had nowhere on the street to drive to.
+CHARGE_POINT_POSITIONS = {"CP": {"lat": 57.688039, "lon": 11.980541}}
+
 # Coordinates are drawn in a ~1200 x 1200 image space with y increasing
 # downward; the graph canvas centres on the origin with y increasing upward.
 COORD_CENTRE = 600.0
@@ -534,6 +555,9 @@ def build(year: str, include_without_demand: bool,
         where = position_for(coords, node.get("name"), node_id, "Battery")
         if where:
             battery_entry["location"] = where
+        host = BATTERY_HOSTS.get(battery_entry["name"])
+        if host:
+            battery_entry["host"] = host
         batteries.append(battery_entry)
 
     charge_points = []
@@ -558,6 +582,7 @@ def build(year: str, include_without_demand: bool,
         where = position_for(coords, node.get("name"), node_id)
         if where:
             cp_entry["location"] = where
+        cp_entry.update(CHARGE_POINT_POSITIONS.get(cp_entry["name"], {}))
         charge_points.append(cp_entry)
         notes.append(
             f"{node_id}: graph.json records no vehicle details, only that "

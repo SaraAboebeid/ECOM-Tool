@@ -541,6 +541,23 @@
         "x": -218.94,
         "y": 265.44
       }
+    },
+    {
+      "name": "AWL",
+      "owner": "Akademiska Hus",
+      "building_type": "MediumOffice",
+      "footprint_area": 1979.5,
+      "number_of_floors": 7,
+      "pv_plants": [
+        "AWL-PV"
+      ],
+      "demand": {
+        "csv_path": "C:\\Users\\saraabo\\Desktop\\ECOM\\Data\\energy_data\\07.44_AWL_2022.csv"
+      },
+      "location": {
+        "x": -404.46,
+        "y": -362.64
+      }
     }
   ],
   "pv_plants": [
@@ -635,6 +652,16 @@
         "cost_per_kwp": 3100.0,
         "embodied_co2_per_kwp": 615.0
       }
+    },
+    {
+      "name": "AWL-PV",
+      "surface_area": 719.85,
+      "percentage": 90.0,
+      "system_loss": 14.0,
+      "slope": 0.0,
+      "azimuth": 180.0,
+      "lat": 57.68873,
+      "lon": 11.977887
     }
   ],
   "batteries": [
@@ -647,7 +674,7 @@
       "lifespan": 10.0,
       "degradation": 2.0,
       "initial_soc_fraction": 0.0926,
-      "host": "awl"
+      "host": "AWL"
     }
   ],
   "charge_points": [
