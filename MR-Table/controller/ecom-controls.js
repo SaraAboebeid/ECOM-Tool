@@ -431,61 +431,153 @@
     // and offering 100 invited a number nobody could build.
     const MAX_ROOF_COVERAGE = 80;
 
-    // Where a charge point can go.
+    // Where a charge point can go: in the P-hus, the campus parking house.
     //
-    // Read out of the same street network the table draws, rather than a list
-    // of coordinates typed in here: a charger belongs on a road, and this is
-    // the road they are being put on. A position along it is one number, which
-    // is a far easier thing to set on a touch screen than a pair of decimals.
-    const CP_STREET = 'Gibraltarvallsvägen';
-    const STREET_URL = 'media/street-network.geojson';
+    // It used to be a stretch of Gibraltarvallsvägen, on the reasoning that a
+    // charger belongs on a road. It belongs in the car park: that is where the
+    // cars on this campus stand long enough to charge, and it is where CP was
+    // put. A new charger appearing on the old street read as the table undoing
+    // the move.
+    //
+    // Read out of the footprints the table itself draws rather than a list of
+    // coordinates typed in here, so the bays follow the building. A position
+    // along the building is one number, which is a far easier thing to set on a
+    // touch screen than a pair of decimals.
+    const CP_PLACE = 'the P-hus';
+    const CP_PLACE_ID = 'p-hus';
+    const FOOTPRINTS_URL = 'media/ecom/ecom-buildings.geojson';
 
-    let streetPath = null;          // [[lon, lat], ...] south to north
+    // Bays inside the building, ordered along its length. Kept this far from
+    // its walls, because the marker is drawn with a glow several times its own
+    // size and one on the edge reads as standing in the street outside.
+    const BAY_CLEARANCE_M = 8;
 
-    async function loadStreet() {
-        if (streetPath) return streetPath;
-        try {
-            const response = await fetch(STREET_URL, { cache: 'no-store' });
-            if (!response.ok) throw new Error(STREET_URL + ': ' + response.status);
-            const data = await response.json();
-            const points = [];
-            (data.features || []).forEach(function (feature) {
-                const name = (feature.properties || {}).name || '';
-                // The file is latin-1 in places, so match on the stem rather
-                // than the accented spelling.
-                if (name.indexOf('Gibraltarvallsv') !== 0) return;
-                const coords = feature.geometry.coordinates;
-                const flat = typeof coords[0][0] === 'number'
-                    ? coords
-                    : coords.reduce(function (all, part) { return all.concat(part); }, []);
-                points.push.apply(points, flat);
-            });
-            points.sort(function (a, b) { return a[1] - b[1]; });
-            streetPath = points.length ? points : null;
-        } catch (error) {
-            streetPath = null;
+    let bays = null;                // [[lon, lat], ...] one end of the house to the other
+
+    function ringsOf(geometry) {
+        if (!geometry) return [];
+        if (geometry.type === 'Polygon') return [geometry.coordinates[0]];
+        if (geometry.type === 'MultiPolygon') {
+            return geometry.coordinates.map(function (part) { return part[0]; });
         }
-        return streetPath;
+        return [];
     }
 
-    /** A point some fraction of the way along the street, 0 south to 1 north. */
-    function alongStreet(fraction) {
-        if (!streetPath || !streetPath.length) return null;
+    function insideRing(point, ring) {
+        let hit = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], yi = ring[i][1];
+            const xj = ring[j][0], yj = ring[j][1];
+            if (((yi > point[1]) !== (yj > point[1])) &&
+                (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi)) hit = !hit;
+        }
+        return hit;
+    }
+
+    // Longitude degrees are shorter than latitude ones; at this latitude by
+    // this much. Enough for distances across one building.
+    const LON_SCALE = 0.5351;
+    const M_PER_DEG = 111320;
+
+    function metresFromWalls(point, ring) {
+        let near = Infinity;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const a = ring[i], b = ring[j];
+            const dx = (b[0] - a[0]) * LON_SCALE, dy = b[1] - a[1];
+            const px = (point[0] - a[0]) * LON_SCALE, py = point[1] - a[1];
+            const t = Math.max(0, Math.min(1,
+                (px * dx + py * dy) / (dx * dx + dy * dy || 1e-12)));
+            near = Math.min(near, Math.hypot(px - t * dx, py - t * dy));
+        }
+        return near * M_PER_DEG;
+    }
+
+    async function loadBays() {
+        if (bays) return bays;
+        try {
+            const response = await fetch(FOOTPRINTS_URL, { cache: 'no-store' });
+            if (!response.ok) throw new Error(FOOTPRINTS_URL + ': ' + response.status);
+            const data = await response.json();
+            const house = (data.features || []).find(function (feature) {
+                return (feature.properties || {}).id === CP_PLACE_ID;
+            });
+            const ring = ringsOf(house && house.geometry).sort(function (a, b) {
+                return b.length - a.length;
+            })[0];
+            if (!ring) throw new Error('no ' + CP_PLACE_ID + ' footprint');
+
+            // The building's own length: the two corners furthest apart.
+            let axis = null;
+            ring.forEach(function (a) {
+                ring.forEach(function (b) {
+                    const dx = (b[0] - a[0]) * LON_SCALE, dy = b[1] - a[1];
+                    const span = dx * dx + dy * dy;
+                    if (!axis || span > axis.span) axis = { a: a, b: b, span: span };
+                });
+            });
+
+            const xs = ring.map(function (p) { return p[0]; });
+            const ys = ring.map(function (p) { return p[1]; });
+            const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+            const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+            const found = [];
+            for (let i = 0; i <= 40; i += 1) {
+                for (let j = 0; j <= 40; j += 1) {
+                    const point = [x0 + (x1 - x0) * i / 40, y0 + (y1 - y0) * j / 40];
+                    if (!insideRing(point, ring)) continue;
+                    if (metresFromWalls(point, ring) < BAY_CLEARANCE_M) continue;
+                    // Where it falls along the building's length, so the slider
+                    // runs end to end rather than across the grid's rows.
+                    const dx = (axis.b[0] - axis.a[0]) * LON_SCALE, dy = axis.b[1] - axis.a[1];
+                    const px = (point[0] - axis.a[0]) * LON_SCALE, py = point[1] - axis.a[1];
+                    found.push({ point: point, at: (px * dx + py * dy) / (axis.span || 1e-12) });
+                }
+            }
+            found.sort(function (a, b) { return a.at - b.at; });
+            bays = found.length ? found.map(function (f) { return f.point; }) : null;
+        } catch (error) {
+            bays = null;
+        }
+        return bays;
+    }
+
+    /** A bay some fraction of the way along the building, 0 to 1. */
+    function alongHouse(fraction) {
+        if (!bays || !bays.length) return null;
         const at = Math.max(0, Math.min(1, fraction));
-        const index = Math.round(at * (streetPath.length - 1));
-        return streetPath[index];
+        const index = Math.round(at * (bays.length - 1));
+        return bays[index];
     }
 
-    /** How far along the street a charge point currently sits. */
-    function streetPosition(cp) {
-        if (!streetPath || cp.lat == null) return 0.5;
+    /**
+     * Space the chargers out along the car park, as evenly as it allows.
+     *
+     * Called with the new one already in the list. The building is about
+     * seventy metres long, so three chargers put one at each end and one in the
+     * middle; picking a free spot for the new one alone left the third twenty
+     * metres from the first, which at table scale is one blur of two markers.
+     * Positions set by hand on the slider are overwritten - a charger being
+     * added is the moment to lay them out again.
+     */
+    function spaceOut(points) {
+        if (!bays || !bays.length) return;
+        const n = points.length;
+        points.forEach(function (cp, index) {
+            const spot = alongHouse(n === 1 ? 0.5 : index / (n - 1));
+            if (spot) { cp.lon = spot[0]; cp.lat = spot[1]; }
+        });
+    }
+
+    /** How far along the building a charge point currently stands. */
+    function housePosition(cp) {
+        if (!bays || cp.lat == null) return 0.5;
         let best = 0;
         let bestGap = Infinity;
-        streetPath.forEach(function (point, index) {
+        bays.forEach(function (point, index) {
             const gap = Math.abs(point[1] - cp.lat) + Math.abs(point[0] - cp.lon);
             if (gap < bestGap) { bestGap = gap; best = index; }
         });
-        return streetPath.length > 1 ? best / (streetPath.length - 1) : 0.5;
+        return bays.length > 1 ? best / (bays.length - 1) : 0.5;
     }
 
     function chargePoints() {
@@ -502,8 +594,7 @@
         let n = points.length + 1;
         while (taken.has(name)) { n += 1; name = 'CP ' + n; }
 
-        // Spread down the street rather than stacked on the last one.
-        const spot = alongStreet((points.length + 1) / 6) || [null, null];
+        const spot = alongHouse(0.5) || [null, null];
 
         const cp = {
             name: name,
@@ -527,6 +618,7 @@
         if (spot[0] != null) { cp.lon = spot[0]; cp.lat = spot[1]; }
 
         state.working.charge_points = points.concat([cp]);
+        spaceOut(state.working.charge_points);
     }
 
     function removeChargePoint(name) {
@@ -1212,7 +1304,7 @@
                     action: charger.action,
                     title: charger.action === 'add'
                         ? 'Adding a charge point' : 'Removing a charge point',
-                    line: charger.name + ' · ' + CP_STREET,
+                    line: charger.name + ' · ' + CP_PLACE,
                     at: [cp.lon, cp.lat]
                 };
             }
@@ -2163,7 +2255,7 @@
 
         const rows = points.map(function (cp, index) {
             const placed = cp.lat != null;
-            const position = Math.round(streetPosition(cp) * 100);
+            const position = Math.round(housePosition(cp) * 100);
             return '' +
                 '<div class="ecom-cp">' +
                     '<div class="ecom-cp-head">' +
@@ -2184,16 +2276,16 @@
                         value: (cp.ev && cp.ev.daily_distance) || 35,
                         min: 0, max: 200, step: 5, unit: 'km'
                     }) +
-                    (streetPath
+                    (bays
                         ? slider({
                               name: 'cp_pos:' + index,
-                              label: 'Along ' + CP_STREET,
+                              label: 'Along ' + CP_PLACE,
                               value: position, min: 0, max: 100, step: 2,
-                              unit: '% north',
-                              hint: placed ? '' : 'Not placed yet - move this to put it on the street.'
+                              unit: '%',
+                              hint: placed ? '' : 'Not placed yet - move this to put it in the car park.'
                           })
-                        : '<span class="ecom-ctl-hint">The street network has ' +
-                          'not loaded, so this one stays at the middle of the ' +
+                        : '<span class="ecom-ctl-hint">The footprints have not ' +
+                          'loaded, so this one stays at the middle of the ' +
                           'campus with the other shared assets.</span>') +
                     '<label class="ecom-ctl-check">' +
                         '<input type="checkbox" data-cp-v2g="' + index + '"' +
@@ -2590,9 +2682,9 @@
                 if (cp.ev) cp.ev.daily_distance = Math.max(1, value);
                 set(value + ' km');
             } else if (parts[0] === 'cp_pos') {
-                const spot = alongStreet(value / 100);
+                const spot = alongHouse(value / 100);
                 if (spot) { cp.lon = spot[0]; cp.lat = spot[1]; }
-                set(value + ' % north');
+                set(value + ' %');
             }
             markDirty();
             return;
@@ -2833,10 +2925,10 @@
             return;
         }
 
-        // The road the chargers stand on, for the position slider. Not awaited:
-        // the panel opens on Members and the group is closed until someone asks
-        // for it.
-        loadStreet().then(function () {
+        // The car park the chargers stand in, for the position slider. Not
+        // awaited: the panel opens on Members and the group is closed until
+        // someone asks for it.
+        loadBays().then(function () {
             if (state.openGroup === 'mobility') render();
         });
 

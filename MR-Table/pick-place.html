@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pick a place on campus</title>
+    <!--
+      A scratch page for pointing at a building.
+
+      The campus data names 43 buildings and the Lantmateriet set carries 788
+      footprints with almost no names, so a building nobody has written down -
+      Kraftcentralen, say - cannot be looked up. This is how it gets pointed at
+      instead: click it, and the page says which footprint it is and where.
+
+      Not part of the table. Safe to delete once the place is set.
+    -->
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <style>
+        html, body { margin: 0; height: 100%; background: #0b0f14; color: #e8eef6;
+                     font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+        #map { position: absolute; inset: 0; }
+        #readout {
+            position: absolute; left: 16px; top: 16px; z-index: 5; width: 360px;
+            max-width: calc(100% - 32px); background: rgba(10, 14, 20, 0.92);
+            border: 1px solid #2b3648; border-radius: 12px; padding: 14px 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+        }
+        #readout h1 { font-size: 15px; margin: 0 0 6px; letter-spacing: 0.02em; }
+        #readout p { font-size: 12.5px; line-height: 1.45; opacity: 0.8; margin: 0 0 10px; }
+        #picked { font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+        #picked b { color: #eaff00; font-weight: 650; }
+        .hint { font-size: 12px; opacity: 0.6; }
+        button { margin-top: 10px; font: inherit; font-size: 12.5px; padding: 6px 10px;
+                 border-radius: 8px; border: 1px solid #3a475c;
+                 background: #16202c; color: #e8eef6; cursor: pointer; }
+        button:hover { background: #1e2a38; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="readout">
+        <h1>Click the building you mean</h1>
+        <p>The campus footprints are drawn on top of the map. Click one and this
+           box gives its position, which is what I need to place the grid.</p>
+        <div id="picked" class="hint">Nothing picked yet.</div>
+        <button id="copy" hidden>Copy</button>
+    </div>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            center: [11.9778, 57.6884],
+            zoom: 15.2
+        });
+        map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+        // Point in ring, so a click answers with the footprint under it rather
+        // than the nearest centroid - the buildings here are long and a nearest
+        // centroid picks its neighbour across a courtyard.
+        function inside(point, ring) {
+            let hit = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0], yi = ring[i][1];
+                const xj = ring[j][0], yj = ring[j][1];
+                if (((yi > point[1]) !== (yj > point[1])) &&
+                    (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi)) hit = !hit;
+            }
+            return hit;
+        }
+
+        function rings(geometry) {
+            if (!geometry) return [];
+            if (geometry.type === 'Polygon') return [geometry.coordinates[0]];
+            if (geometry.type === 'MultiPolygon') {
+                return geometry.coordinates.map(function (part) { return part[0]; });
+            }
+            return [];
+        }
+
+        // The point furthest from any wall: where an icon can stand and still
+        // read as being in the building.
+        function interiorPoint(ring) {
+            const xs = ring.map(function (p) { return p[0]; });
+            const ys = ring.map(function (p) { return p[1]; });
+            const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+            const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+            let best = null;
+            for (let i = 0; i <= 60; i += 1) {
+                for (let j = 0; j <= 60; j += 1) {
+                    const p = [x0 + (x1 - x0) * i / 60, y0 + (y1 - y0) * j / 60];
+                    if (!inside(p, ring)) continue;
+                    let near = Infinity;
+                    for (let k = 0, l = ring.length - 1; k < ring.length; l = k++) {
+                        const A = ring[k], B = ring[l];
+                        const dx = (B[0] - A[0]) * 0.5351, dy = B[1] - A[1];
+                        const px = (p[0] - A[0]) * 0.5351, py = p[1] - A[1];
+                        const t = Math.max(0, Math.min(1,
+                            (px * dx + py * dy) / (dx * dx + dy * dy || 1e-12)));
+                        near = Math.min(near, Math.hypot(px - t * dx, py - t * dy));
+                    }
+                    if (!best || near > best.clear) best = { point: p, clear: near };
+                }
+            }
+            return best;
+        }
+
+        let picked = null;
+
+        map.on('load', async function () {
+            const [studio, table] = await Promise.all([
+                fetch('media/building-footprints.geojson').then(function (r) { return r.json(); }),
+                fetch('media/ecom/ecom-buildings.geojson').then(function (r) { return r.json(); })
+            ]);
+
+            map.addSource('studio', { type: 'geojson', data: studio });
+            map.addLayer({ id: 'studio-fill', type: 'fill', source: 'studio',
+                paint: { 'fill-color': '#4b5c72', 'fill-opacity': 0.45 } });
+            map.addLayer({ id: 'studio-line', type: 'line', source: 'studio',
+                paint: { 'line-color': '#8fa5c0', 'line-width': 0.8, 'line-opacity': 0.8 } });
+
+            // The 43 the campus data knows, so it is clear which are already named.
+            map.addSource('named', { type: 'geojson', data: table });
+            map.addLayer({ id: 'named-fill', type: 'fill', source: 'named',
+                paint: { 'fill-color': '#ff00a6', 'fill-opacity': 0.28 } });
+            map.addLayer({ id: 'named-label', type: 'symbol', source: 'named',
+                layout: { 'text-field': ['coalesce', ['get', 'rhino_layer'], ['get', 'id']],
+                          'text-size': 11 },
+                paint: { 'text-color': '#ffd7f2', 'text-halo-color': '#0b0f14',
+                         'text-halo-width': 1.2 } });
+
+            map.addSource('pick', { type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({ id: 'pick-fill', type: 'fill', source: 'pick',
+                paint: { 'fill-color': '#eaff00', 'fill-opacity': 0.5 } });
+            map.addLayer({ id: 'pick-dot', type: 'circle', source: 'pick',
+                filter: ['==', ['geometry-type'], 'Point'],
+                paint: { 'circle-color': '#eaff00', 'circle-radius': 6,
+                         'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 2 } });
+
+            map.on('click', function (event) {
+                const at = [event.lngLat.lng, event.lngLat.lat];
+                let hit = null;
+                [table, studio].forEach(function (set) {
+                    if (hit) return;
+                    set.features.forEach(function (feature) {
+                        if (hit) return;
+                        rings(feature.geometry).forEach(function (ring) {
+                            if (!hit && inside(at, ring)) hit = { feature: feature, ring: ring, set: set };
+                        });
+                    });
+                });
+
+                const marks = [];
+                let lines = [];
+                if (hit) {
+                    const props = hit.feature.properties || {};
+                    const spot = interiorPoint(hit.ring) || { point: at, clear: 0 };
+                    picked = { lon: spot.point[0], lat: spot.point[1],
+                               name: props.byggnadsnamn1 || props.rhino_layer || props.id || '(unnamed)',
+                               id: props.objektidentitet || props.id || '',
+                               type: props.objekttyp || props.andamal1 || 'campus building' };
+                    marks.push({ type: 'Feature', geometry: hit.feature.geometry, properties: {} });
+                    marks.push({ type: 'Feature', properties: {},
+                                 geometry: { type: 'Point', coordinates: spot.point } });
+                    // Both points, because they answer different questions:
+                    // "which building is this" wants the middle of it, and
+                    // "put it exactly here" wants the spot under the finger.
+                    picked.clickedLon = at[0];
+                    picked.clickedLat = at[1];
+                    marks.push({ type: 'Feature', properties: {},
+                                 geometry: { type: 'Point', coordinates: at } });
+                    lines = [
+                        '<b>' + picked.name + '</b>',
+                        picked.type,
+                        'where you clicked: lon ' + at[0].toFixed(6) +
+                            ' &middot; lat ' + at[1].toFixed(6),
+                        'middle of it: lon ' + picked.lon.toFixed(6) +
+                            ' &middot; lat ' + picked.lat.toFixed(6),
+                        spot.clear ? ('clear of its walls by ' + (spot.clear * 111320).toFixed(0) + ' m') : '',
+                        picked.id ? ('<span class="hint">' + picked.id + '</span>') : ''
+                    ];
+                } else {
+                    picked = { lon: at[0], lat: at[1], name: '(open ground)', id: '', type: '' };
+                    marks.push({ type: 'Feature', properties: {},
+                                 geometry: { type: 'Point', coordinates: at } });
+                    lines = ['<b>No footprint here</b>',
+                             'lon ' + at[0].toFixed(6) + ' &middot; lat ' + at[1].toFixed(6)];
+                }
+
+                map.getSource('pick').setData({ type: 'FeatureCollection', features: marks });
+                const box = document.getElementById('picked');
+                box.className = '';
+                box.innerHTML = lines.filter(Boolean).join('<br>');
+                document.getElementById('copy').hidden = false;
+            });
+        });
+
+        document.getElementById('copy').addEventListener('click', function () {
+            if (!picked) return;
+            const lon = picked.clickedLon === undefined ? picked.lon : picked.clickedLon;
+            const lat = picked.clickedLat === undefined ? picked.lat : picked.clickedLat;
+            const text = picked.name + '  lon ' + lon.toFixed(6) +
+                         '  lat ' + lat.toFixed(6) + (picked.id ? '  ' + picked.id : '');
+            navigator.clipboard.writeText(text).then(function () {
+                const button = document.getElementById('copy');
+                button.textContent = 'Copied';
+                setTimeout(function () { button.textContent = 'Copy'; }, 1500);
+            });
+        });
+    </script>
+</body>
+</html>

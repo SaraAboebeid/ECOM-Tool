@@ -105,6 +105,24 @@
     // Parked cars stand beside the charger, not on top of its marker.
     const BAY_OFFSET_M = 7;
 
+    // How far a charger has to move before its car's roads are found again.
+    // Above the noise in a re-exported coordinate, below the length of a
+    // parking bay.
+    const MOVED_M = 3;
+
+    // Choosing the road a charger is served by: how far out to look for one,
+    // and how much road is enough to both drive in on and leave by. A charger
+    // stands in a building now, so the nearest line can be a service way or a
+    // footpath that leads nowhere.
+    const SNAP_SEARCH_M = 140;
+    const ROAD_ENOUGH_M = 500;      // road to come in on; more than this is no better
+    const ROAD_LEAST_M = 150;       // road to leave by, below which it counts against
+    // What a degree off the arrival corner is worth against a metre of road.
+    const CORNER_WEIGHT_M = 4;
+    // How far back along a road to look for where a car will appear. About the
+    // approach the table has room for.
+    const APPROACH_LOOK_M = 250;
+
     const palette = (typeof window !== 'undefined' && window.ECOM_PALETTE) || {};
     const CAR_COLOR = palette.charge_point || '#00ff5e';
 
@@ -392,48 +410,116 @@
      * junction each half ends at.
      */
     function routeFor(position, lines) {
-        let best = null;
+        const candidates = [];
         lines.forEach(function (line) {
+            let near = null;
             line.forEach(function (vertex, index) {
                 const gap = distance(position, vertex);
-                if (!best || gap < best.gap) best = { line: line, index: index, gap: gap };
+                if (!near || gap < near.gap) near = { line: line, index: index, gap: gap };
             });
+            if (near && near.gap <= SNAP_SEARCH_M) candidates.push(near);
         });
-        if (!best) return null;
+        if (!candidates.length) {
+            // Nothing within reach: fall back to the nearest vertex anywhere,
+            // which is what this did before there was anything to choose from.
+            lines.forEach(function (line) {
+                line.forEach(function (vertex, index) {
+                    const gap = distance(position, vertex);
+                    if (!candidates[0] || gap < candidates[0].gap) {
+                        candidates[0] = { line: line, index: index, gap: gap };
+                    }
+                });
+            });
+        }
+        if (!candidates.length) return null;
+        candidates.sort(function (a, b) { return a.gap - b.gap; });
 
-        const walk = function (step) {
-            const path = [];
-            let i = best.index;
-            while (i >= 0 && i < best.line.length) {
-                path.push(best.line[i]);
-                i += step;
-            }
-            return path;                       // ordered from the bay outwards
+        const routeAt = function (near) {
+            const walk = function (step) {
+                const path = [];
+                let i = near.index;
+                while (i >= 0 && i < near.line.length) {
+                    path.push(near.line[i]);
+                    i += step;
+                }
+                return path;                   // ordered from the bay outwards
+            };
+
+            const half = function (part) {
+                if (part.length < 2) return null;
+                return { part: part,
+                         node: graph ? graph.locate(part[part.length - 1]) : -1 };
+            };
+
+            const back = half(walk(-1));
+            const forward = half(walk(1));
+            // One way in and the other way out, so a car does not arrive and
+            // leave along the same kerb. A charger on a dead end uses the one
+            // it has.
+            const entry = back || forward;
+            const exit = forward || back;
+
+            return {
+                entry: entry,
+                exit: exit,
+                ownEdge: graph ? graph.edgeOf(near.line) : -1,
+                ownLine: near.line,
+                position: position,
+                // The bay sits beside the road, offset across the direction of
+                // travel so a parked car does not cover the charger's own
+                // marker.
+                bay: offsetBay(position, entry ? entry.part : [position])
+            };
         };
 
-        const half = function (part) {
-            if (part.length < 2) return null;
-            return { part: part,
-                     node: graph ? graph.locate(part[part.length - 1]) : -1 };
-        };
-
-        const back = half(walk(-1));
-        const forward = half(walk(1));
-        // One way in and the other way out, so a car does not arrive and leave
-        // along the same kerb. A charger on a dead end uses the one it has.
-        const entry = back || forward;
-        const exit = forward || back;
-
-        return {
-            entry: entry,
-            exit: exit,
-            ownEdge: graph ? graph.edgeOf(best.line) : -1,
-            ownLine: best.line,
-            position: position,
-            // The bay sits beside the road, offset across the direction of
-            // travel so a parked car does not cover the charger's own marker.
-            bay: offsetBay(position, entry ? entry.part : [position])
-        };
+        // The nearest line is not always the one to drive on. A charger inside
+        // the P-hus is nearest a 126 m service way that joins nothing, and a
+        // car given that one drove its 126 m and then covered the remaining
+        // half kilometre in a straight line across the campus. So the nearest
+        // road that actually leads off the table wins, and only if none does
+        // is the nearest line used after all.
+        //
+        // Both ways are measured, not their total: a car comes in by one and
+        // leaves by the other, and a road that is long one way and a stub the
+        // other strands it at the end of the block.
+        //
+        // Among the roads that will do, the one whose far end lies nearest the
+        // top right of the table wins, because that is the corner cars arrive
+        // from and the room learns to look there. Reach decides which roads are
+        // candidates at all; the corner decides between them.
+        // Three things matter and none of them is decisive on its own, so they
+        // are weighed rather than applied as thresholds: how much road there is
+        // to drive in on, whether that road runs towards the corner of the
+        // table cars arrive from, and how far the charger is from it. A cliff
+        // in any one of them picked a different road for each table window -
+        // in one view a 900 m way out with a 182 m way in, so the car appeared
+        // mid-table, on the wrong side.
+        const aim = screenTopRight();
+        let best = null;
+        for (let i = 0; i < candidates.length && i < 16; i += 1) {
+            const route = routeAt(candidates[i]);
+            const ways = [roadFrom(route, 'entry'), roadFrom(route, 'exit')];
+            // Measured where the car will actually come into view, not at the
+            // far end of the road: the approach is capped at a few hundred
+            // metres, and a road that ends up at the right corner can spend its
+            // first stretch curling the other way - which is the half the room
+            // sees.
+            const angles = ways.map(function (way) {
+                const seen = alongPath(way, Math.min(pathLength(way), APPROACH_LOOK_M));
+                return angleBetween(bearing(position, seen.point), aim);
+            });
+            // The car comes in by whichever way runs towards that corner, and
+            // leaves by the other.
+            const inBy = angles[0] <= angles[1] ? 0 : 1;
+            const comingIn = Math.min(pathLength(ways[inBy]), ROAD_ENOUGH_M);
+            const goingOut = pathLength(ways[1 - inBy]);
+            const score = comingIn
+                - CORNER_WEIGHT_M * angles[inBy]
+                - (goingOut < ROAD_LEAST_M ? ROAD_LEAST_M - goingOut : 0)
+                - candidates[i].gap;
+            if (!best || score > best.score) best = { route: route, score: score };
+        }
+        return best ? best.route : routeAt(candidates[0]);
     }
 
     /**
@@ -563,7 +649,7 @@
         let chain = null;
         let chainScore = Infinity;
 
-        [route.entry, route.exit].forEach(function (half) {
+        [route.entry, route.exit].forEach(function (half, index) {
             if (!half) return;
             // The searched way out, not the greedy one the departure uses.
             // Carrying straight on at junctions is right for leaving - it is
@@ -579,17 +665,30 @@
                 }
             }
 
-            // Length matters more than aim. The table shows an hour every
-            // 1.1 s and the car is only plugged in for thirteen of them - about
-            // fourteen seconds - so an approach of much over half a kilometre
-            // uses the whole stay and there is never a car standing at the
-            // charger. Four metres of road cost a degree of aim.
-            const score = angleBetween(
-                bearing(route.bay.point, path[path.length - 1]), aim) +
-                pathLength(path) / 4;
+            // Aimed by where the car will be seen, not by where the road ends.
+            // The approach is cut to the last stretch before the charger, so a
+            // road that ends up at the right corner but leaves the car park the
+            // other way brings the car in from the wrong side of the room.
+            const length = pathLength(path);
+            const ceiling = MAX_APPROACH_PX * metresPerPixel();
+            const seen = alongPath(path, Math.min(length, ceiling));
+
+            // Length still matters. The table shows an hour every 1.1 s and the
+            // car is only plugged in for thirteen of them - about fourteen
+            // seconds - so an approach of much over half a kilometre uses the
+            // whole stay and there is never a car standing at the charger. Four
+            // metres of road cost a degree of aim. And a road too short to
+            // reach the edge of the table leaves the car appearing in the
+            // middle of the scene, which costs the same way.
+            const score = angleBetween(bearing(route.bay.point, seen.point), aim) +
+                Math.min(length, ceiling) / 4 +
+                Math.max(0, ceiling - length) / 4;
             if (score < chainScore) {
                 chainScore = score;
                 chain = path;
+                // Remembered so the departure can take the other half and the
+                // car drives through the bay rather than backing out of it.
+                route.cameBy = index === 0 ? 'entry' : 'exit';
             }
         });
 
@@ -958,8 +1057,12 @@
         vehicle.path = state === 'arriving'
             ? entryPath(vehicle.route)
             // Out of the bay, not out of the charger: it leaves from where it
-            // was actually standing.
-            : [vehicle.route.bay.point].concat(roadFrom(vehicle.route, 'exit'));
+            // was actually standing - and by the other half of the road from
+            // the one it came in on, so it drives through rather than reversing
+            // back out the way it arrived.
+            : [vehicle.route.bay.point].concat(
+                roadFrom(vehicle.route,
+                         vehicle.route.cameBy === 'exit' ? 'entry' : 'exit'));
         vehicle.pathLength = pathLength(vehicle.path);
         vehicle.covered = 0;
         vehicle.steppedAt = performance.now();
@@ -984,13 +1087,29 @@
 
         (points || []).forEach(function (point) {
             let vehicle = vehicles.get(point.id);
-            if (!vehicle) {
+            // A charger that has moved - dragged along its building on the
+            // panel, or moved in the definition - needs its roads found again.
+            // Kept by id alone, a car went on driving to where the charger used
+            // to be and parked in the street it had left.
+            const moved = vehicle &&
+                distance(vehicle.route.position, [point.lon, point.lat]) > MOVED_M;
+            if (!vehicle || moved) {
                 const route = routeFor([point.lon, point.lat], streets);
                 if (!route) return;
-                vehicle = { id: point.id, name: point.name, route: route,
-                            state: 'away', at: null, opacity: 1, charging: false,
-                            wants: 'gone' };
-                vehicles.set(point.id, vehicle);
+                if (moved) {
+                    // Off the table and back in by the new road, rather than
+                    // sliding across the campus from the old bay to the new one.
+                    vehicle.route = route;
+                    vehicle.state = 'away';
+                    vehicle.at = null;
+                    vehicle.path = null;
+                    vehicle.pathLength = 0;
+                } else {
+                    vehicle = { id: point.id, name: point.name, route: route,
+                                state: 'away', at: null, opacity: 1, charging: false,
+                                wants: 'gone' };
+                    vehicles.set(point.id, vehicle);
+                }
             }
             vehicle.charging = !!point.charging;
 

@@ -97,14 +97,19 @@ PV_OVERRIDES = {
     },
 }
 
-# Where the campus meets the grid: on Aschebergsgatan, by the substation. The
-# Grasshopper model has no geographic position for it - only a spot on its own
-# canvas - so this is the one place the coordinate lives, and every rebuild of
-# the definition carries it. Chosen as the point on the street, within sight
-# of the substation, furthest from any Lantmäteriet building (18 m): the tie
-# is drawn with a glow several times its own size, and on the projection table
-# a marker that spills onto a roof reads as belonging to that building.
-GRID_SUBSTATION = {"lat": 57.690634, "lon": 11.973668}
+# Where the campus meets the grid: Kraftcentralen, the campus power central,
+# which is the Rhino layer "lokal kontor" (id "lokal-kontor"). The Grasshopper
+# model has no geographic position for the tie - only a spot on its own canvas
+# - so this is the one place the coordinate lives, and every rebuild of the
+# definition carries it. The point is the one furthest from the building's own
+# walls rather than its centroid: the tie is drawn with a glow several times
+# its own size, and on the projection table a marker that spills off the roof
+# reads as belonging to the building next door.
+#
+# The building is not named in any of the data - neither the 43 Rhino layers
+# nor the few named Lantmäteriet footprints call it Kraftcentralen - so it was
+# pointed at on the table instead (pick-place.html).
+GRID_SUBSTATION = {"lat": 57.689299, "lon": 11.977454}
 
 # Which building each battery stands in. graph.json has no room for it - a
 # battery there is a node on a canvas, not a thing in a building - so this is
@@ -119,13 +124,19 @@ GRID_SUBSTATION = {"lat": 57.690634, "lon": 11.973668}
 # bess_capacity 50 and bess_power 12.5 where every other building carries zero.
 BATTERY_HOSTS = {"Battery-01": "AWL"}
 
-# Where each charge point stands on the street. Same story as the substation
-# and the battery: graph.json only places a charger on its own canvas, so the
-# real position was set by hand in the generated file - and the next rebuild
-# threw it away. Found when AWL's demand was imported and the definition
+# Where each charge point stands. Same story as the substation and the
+# battery: graph.json only places a charger on its own canvas, so the real
+# position was set by hand in the generated file - and the next rebuild threw
+# it away. Found when AWL's demand was imported and the definition
 # regenerated: the charger fell back to the ring of shared assets, and the car
 # that parks at it had nowhere on the street to drive to.
-CHARGE_POINT_POSITIONS = {"CP": {"lat": 57.688039, "lon": 11.980541}}
+#
+# CP stands inside the P-hus, the campus parking house, which is where cars on
+# this campus are actually charged. The point is the one furthest from any of
+# its walls - 17 m clear - rather than the centroid, so the icon reads as being
+# in the building at table scale. Footprint: table_footprints.geojson, id
+# "p-hus".
+CHARGE_POINT_POSITIONS = {"CP": {"lat": 57.686356, "lon": 11.978857}}
 
 # Coordinates are drawn in a ~1200 x 1200 image space with y increasing
 # downward; the graph canvas centres on the origin with y increasing upward.

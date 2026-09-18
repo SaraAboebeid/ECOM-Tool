@@ -256,6 +256,46 @@
             if (host) props.iconRotate = alongBuilding(host);
         });
 
+        // The grid tie stands in Kraftcentralen, and it lies along it for the
+        // same reason the battery lies along AWL: a pylon drawn upright on a
+        // building that runs at an angle across the table reads as something
+        // dropped on the roof rather than something inside. Which building it
+        // is comes from the footprints - it is placed by coordinate, not
+        // attached to a host - so the one it stands in is the one that contains
+        // it.
+        // Across the building rather than along it: the pylon is a tall thing
+        // and laid along Kraftcentralen's long wall it looked knocked over. The
+        // cross axis stands it up on the building instead.
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            if (props.kind !== 'grid') return;
+            const host = buildingUnder(feature.geometry.coordinates);
+            if (!host) return;
+            let turn = alongBuilding(host) + 90;
+            if (turn > 90) turn -= 180;
+            props.iconRotate = turn;
+        });
+
+        // Assets standing close together are drawn smaller. Chargers live in
+        // the car park now, and three of them fit in seventy metres - closer
+        // than the markers are wide, so they ran into one another.
+        const CROWD_M = 55;
+        nodeData.features.forEach(function (feature) {
+            const props = feature.properties;
+            props.crowded = 0;
+            if (props.kind === 'building' || props.kind === 'pv') return;
+            const here = feature.geometry.coordinates;
+            nodeData.features.forEach(function (other) {
+                if (other === feature || props.crowded === 1) return;
+                const kind = other.properties.kind;
+                if (kind === 'building' || kind === 'pv') return;
+                const there = other.geometry.coordinates;
+                const dx = (there[0] - here[0]) * 0.5351 * 111320;
+                const dy = (there[1] - here[1]) * 111320;
+                if (Math.hypot(dx, dy) < CROWD_M) props.crowded = 1;
+            });
+        });
+
         // Where each building sits across the table, 0 at the left edge and 1
         // at the right, in screen terms: the map is turned about 93 degrees, so
         // "across the table" is not east-west.
@@ -1837,9 +1877,14 @@
                     // and the 75 m glow under it, and those stay off for a
                     // hosted battery. At a badge's size the introduction's
                     // battery step had nothing on the table to point at.
+                    // Crowded assets are drawn smaller. A parking house is
+                    // seventy metres long and three chargers in it stand
+                    // twenty-odd metres apart, which at table scale is closer
+                    // than the markers are wide: they merged into one blur.
                     'icon-size': [
                         'case',
                         ['==', ['get', 'kind'], 'building'], 0.62,
+                        ['==', ['get', 'crowded'], 1], 0.62,
                         1
                     ],
                     // Zero for everything but a battery built into a building,
@@ -1854,8 +1899,18 @@
                     // over thirty-two coloured footprints is a page of text
                     // where the point is the shapes - and the footprints say
                     // which building they are by being that building.
+                    //
+                    // Nor is the battery: it is a building, lit and outlined
+                    // and filling with charge, and a name floating over it
+                    // labelled the building rather than the battery. Nor the
+                    // grid tie, which stands in Kraftcentralen and is the one
+                    // pylon on the table - the word under it said nothing the
+                    // icon had not already said.
                     'text-field': [
-                        'case', ['==', ['get', 'kind'], 'building'], '',
+                        'case',
+                        ['any', ['==', ['get', 'kind'], 'building'],
+                                ['==', ['get', 'kind'], 'battery'],
+                                ['==', ['get', 'kind'], 'grid']], '',
                         ['get', 'name']
                     ],
                     'text-font': ['Open Sans Regular'],
@@ -2231,6 +2286,32 @@
      * 1,286 kW in a single hour, and on a linear scale everything but the
      * three biggest buildings would sit at the dark end all day.
      */
+    /** The drawn building a point falls inside, if any. */
+    function buildingUnder(point) {
+        if (!layerData || !layerData.features) return null;
+        const inRing = function (ring) {
+            let hit = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0], yi = ring[i][1];
+                const xj = ring[j][0], yj = ring[j][1];
+                if (((yi > point[1]) !== (yj > point[1])) &&
+                    (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi)) hit = !hit;
+            }
+            return hit;
+        };
+        let found = null;
+        layerData.features.forEach(function (feature) {
+            if (found) return;
+            const geometry = feature.geometry || {};
+            const parts = geometry.type === 'Polygon' ? [geometry.coordinates]
+                : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+            parts.forEach(function (part) {
+                if (!found && part && part[0] && inRing(part[0])) found = feature;
+            });
+        });
+        return found;
+    }
+
     /**
      * How far to turn an upright marker so it lies along a building, in degrees
      * clockwise on the screen.
