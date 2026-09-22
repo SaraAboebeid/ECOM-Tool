@@ -15,6 +15,9 @@
 
 !/.gitignore
 !/README.md
+# How to run the table on a machine that is not this one. It spans the backend
+# and MR-Table both, so it sits at the root rather than inside either.
+!/RUNNING-THE-TABLE.md
 
 !/Dashboard/
 !/ECOM Toolkit/
