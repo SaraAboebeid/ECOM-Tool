@@ -333,6 +333,9 @@
             // polygon, and neither can reach inside the nested `ecom` block.
             feature.properties.has_pv = (ecom && ecom.pv_kw > 0) ? 1 : 0;
             feature.properties.owner = (ecom && ecom.owner) || '';
+            // Which side of the outline is the roof, so the solar halo can be
+            // pushed onto it rather than straddling the wall.
+            feature.properties.inward = inwardSide(feature);
             (ecom && ecom.demand_hourly ? ecom.demand_hourly : []).forEach(
                 function (value) {
                     if (value > demandCeiling) demandCeiling = value;
@@ -1831,8 +1834,21 @@
                     'line-color': KIND_COLORS.pv,
                     // Blurred and wide: a glow around the footprint, not a
                     // second outline competing with the pink one.
-                    'line-blur': 3,
-                    'line-width': ['+', 1.5, ['*', 9, ['get', 'solarNow']]],
+                    'line-blur': 2.5,
+                    'line-width': ['+', 1.5, ['*', 7, ['get', 'solarNow']]],
+                    // Pushed onto the roof rather than centred on the wall.
+                    // Centred, half of a ten-pixel glow and its blur lay on the
+                    // ground outside the building, and on the table a roof lit
+                    // up as a smudge around its own edge.
+                    //
+                    // About half the width, towards whichever side the inside
+                    // is. Not the full half plus the blur: an offset line
+                    // overshoots at a sharp corner, and MC2's notches grew
+                    // yellow spikes. This keeps the glow on the roof and the
+                    // corners honest, at the cost of a little softness over
+                    // the wall itself.
+                    'line-offset': ['*', ['coalesce', ['get', 'inward'], -1],
+                        ['+', 1.75, ['*', 3, ['get', 'solarNow']]]],
                     'line-opacity': ['*', 0.85, ['get', 'solarNow']]
                 }
             });
@@ -2286,6 +2302,28 @@
      * 1,286 kW in a single hour, and on a linear scale everything but the
      * three biggest buildings would sit at the dark end all day.
      */
+    /**
+     * Which way is into the building, as a line-offset sign.
+     *
+     * MapLibre offsets a line to the right of the way it is drawn, so which
+     * sign points inwards depends on the winding of the ring - and these
+     * footprints come from Lantmäteriet by way of two scripts, with no promise
+     * about that. Read off the signed area instead: a ring wound clockwise on
+     * screen has its inside to the left.
+     */
+    function inwardSide(feature) {
+        const geometry = feature.geometry || {};
+        const parts = geometry.type === 'Polygon' ? [geometry.coordinates]
+            : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+        const ring = (parts[0] || [])[0];
+        if (!ring || ring.length < 4) return -1;
+        let sum = 0;
+        for (let i = 0; i < ring.length - 1; i += 1) {
+            sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+        }
+        return sum > 0 ? -1 : 1;
+    }
+
     /** The drawn building a point falls inside, if any. */
     function buildingUnder(point) {
         if (!layerData || !layerData.features) return null;
