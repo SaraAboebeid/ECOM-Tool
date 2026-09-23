@@ -2859,7 +2859,7 @@
     // keyboard, so a static hour would just look broken. The ECOM dashboard can
     // still take over - a timeline message stops the clock, because two things
     // driving the hour at once reads as a stutter.
-    const HOUR_MS = 1100;
+    const HOUR_MS = 10000;
 
     let clockTimer = null;
     let hourCount = 24;

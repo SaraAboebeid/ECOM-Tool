@@ -114,6 +114,36 @@
     //
     // The clock is held still until the last step. Time moving and a new
     // entity appearing at once is where an audience loses the thread.
+    /**
+     * The hour at which one colour of line carries the most.
+     *
+     * A step that introduces a colour has to be shown at an hour when that
+     * colour exists. Typed in by hand it goes stale: the red step was set to
+     * seven in the evening, which reads right - a battery covering the evening
+     * - and in this community the battery discharges at midnight and nowhere
+     * else, so the step that introduces red had no red on it at all.
+     *
+     * Read off the dispatched layer instead, so it follows the data: resize
+     * the battery or put panels on every roof and the step moves with it.
+     */
+    function busiestHour(kind, fallback) {
+        const flows = state.layer && state.layer.flows && state.layer.flows.features;
+        if (!flows) return fallback;
+        const total = [];
+        flows.forEach(function (feature) {
+            if (feature.properties.kind !== kind) return;
+            (feature.properties.flow_hourly || []).forEach(function (value, hour) {
+                total[hour] = (total[hour] || 0) + (value || 0);
+            });
+        });
+        let best = -1;
+        let most = 0;
+        total.forEach(function (value, hour) {
+            if (value > most) { most = value; best = hour; }
+        });
+        return best >= 0 ? best : fallback;
+    }
+
     const STORY = [
         {
             key: 'buildings',
@@ -154,9 +184,9 @@
         {
             key: 'grid',
             title: 'The grid',
-            line: 'The connection to everything outside the campus: a ' +
-                  'substation on Aschebergsgatan. Today every building buys ' +
-                  'from it on its own account.',
+            line: 'The connection to everything outside the campus, at ' +
+                  'Kraftcentralen. Today every building buys from it on ' +
+                  'its own account.',
             figure: 'Where the electricity comes from today',
             kinds: ['building', 'pv', 'grid'],
             pairs: [],
@@ -177,13 +207,70 @@
         {
             key: 'charging',
             title: 'The charge point',
-            line: 'A charger on Gibraltarvallsvagen, and the car that uses it. ' +
-                  'It arrives in the evening and leaves in the morning.',
+            line: 'A charger in the P-hus, where the cars on this campus ' +
+                  'park. It draws in the evening and overnight, when the ' +
+                  'roofs have nothing left to give.',
             figure: 'A new load, on a schedule',
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
             pairs: [],
             hour: 20,
             uniform: true
+        },
+        {
+            key: 'lines-grid',
+            title: 'Teal: bought from the grid',
+            // The lines have a grammar and nobody is told it. Three steps, one
+            // colour each and only that colour - the previous one is taken
+            // away before the next arrives, because two colours on the table
+            // at once is a comparison, and this is a vocabulary.
+            //
+            // Teal first because it is the whole picture today: at this hour
+            // every building draws from Kraftcentralen and nothing else.
+            line: 'A teal line is electricity bought from outside. At this ' +
+                  'hour it is every line on the table - the campus as it is ' +
+                  'now, each building on its own account.',
+            figure: 'Teal - from the grid',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['grid>building', 'grid>charge_point'],
+            hour: 'grid',
+            fallbackHour: 20,
+            flows: 'still',
+            uniform: false
+        },
+        {
+            key: 'lines-sharing',
+            title: 'Pink: between members',
+            // Midday, because this is the one colour that needs sunshine to
+            // exist at all: at nineteen hundred there is nothing to share.
+            line: 'Pink runs between members: a roof with more than it needs ' +
+                  'supplying a neighbour, or filling the battery, or charging ' +
+                  'the car. The yellow roofs are where it comes from. This is ' +
+                  'what a community adds - the teal lines were the campus ' +
+                  'without one.',
+            figure: 'Pink - shared inside the community',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['building>building', 'building>battery',
+                    'building>charge_point', 'building>grid'],
+            hour: 'building',
+            fallbackHour: 12,
+            flows: 'still',
+            uniform: false
+        },
+        {
+            key: 'lines-battery',
+            title: 'Red: out of the battery',
+            line: 'Red is the battery giving back what the roofs made today. ' +
+                  'A few kilowatts against the grid\'s thousands, which is why ' +
+                  'the line is drawn heavier than its share - it is small, and ' +
+                  'it is the one thing on the table that moves energy through ' +
+                  'time rather than across the campus.',
+            figure: 'Red - out of the store',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['battery>building'],
+            hour: 'battery',
+            fallbackHour: 19,
+            flows: 'still',
+            uniform: false
         },
         {
             key: 'community',
@@ -1091,8 +1178,10 @@
 
         // A held hour for every step but the last, so only one thing is moving
         // at a time. The last hands the clock back and lets the day run.
-        if (typeof step.hour === 'number') {
-            channel.postMessage({ type: 'ecom_hour', hour: step.hour });
+        const hour = typeof step.hour === 'string'
+            ? busiestHour(step.hour, step.fallbackHour) : step.hour;
+        if (typeof hour === 'number') {
+            channel.postMessage({ type: 'ecom_hour', hour: hour });
         } else {
             channel.postMessage({ type: 'ecom_release' });
         }

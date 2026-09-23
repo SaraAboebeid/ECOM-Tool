@@ -236,7 +236,13 @@
     <script src="animations/ecom-energy.js"></script>
 <script src="animations/ecom-kpi-bars.js"></script>
     <script src="animations/ecom-sound.js"></script>
+    <!-- The cars are off. One per charge point, arriving and parking on the
+         hours its schedule says it is plugged in. Restore this line to bring
+         them back; nothing else depends on them - ecom-energy.js only
+         broadcasts the hour and the chargers, and with no listener there are
+         simply no cars.
     <script src="animations/ecom-vehicles.js"></script>
+    -->
     
     <!-- Auto-fullscreen when launched from launcher -->
     <script>
