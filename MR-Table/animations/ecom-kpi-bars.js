@@ -91,6 +91,16 @@
         ]
     };
 
+    // What the lines mean. The introduction teaches this one colour at a
+    // time; the key is for everyone who walks up to the table afterwards,
+    // which is most of the room.
+    const KEY = [
+        { label: 'From the grid', colour: COLOURS.grid },
+        { label: 'Between members', colour: COLOURS.building },
+        { label: 'From the battery', colour: '#fa3600' },
+        { label: 'Solar on the roof', colour: COLOURS.pv }
+    ];
+
     // ------------------------------------------------------------------ DOM
 
     const style = document.createElement('style');
@@ -122,7 +132,12 @@
         '.ecom-kpi-chip{font-size:13px;font-weight:650;padding:3px 8px;border-radius:10px;',
         'white-space:nowrap;opacity:0;transition:opacity 400ms ease;color:#081014;',
         'font-variant-numeric:tabular-nums}',
-        '.ecom-kpi-chip.is-on{opacity:1}'
+        '.ecom-kpi-chip.is-on{opacity:1}',
+        '.ecom-kpi-key{display:flex;align-items:center;gap:14px;padding:0 16px 0 4px;',
+        'border-right:1px solid rgba(255,255,255,0.07);flex:none}',
+        '.ecom-kpi-key-item{display:flex;align-items:center;gap:6px;font-size:11px;',
+        'letter-spacing:0.04em;opacity:0.82;white-space:nowrap}',
+        '.ecom-kpi-key-line{width:18px;height:3px;border-radius:2px;flex:none}'
     ].join('');
     document.head.appendChild(style);
 
@@ -133,6 +148,16 @@
         const bar = document.createElement('div');
         bar.className = 'ecom-kpi-bar ecom-kpi-' + position +
             (position === 'top' && FACE_FAR_SIDE ? ' faces-far' : '');
+        if (position === 'bottom') {
+            const key = document.createElement('div');
+            key.className = 'ecom-kpi-key';
+            key.innerHTML = KEY.map(function (item) {
+                return '<span class="ecom-kpi-key-item">' +
+                    '<span class="ecom-kpi-key-line" style="background:' +
+                    item.colour + '"></span>' + item.label + '</span>';
+            }).join('');
+            bar.appendChild(key);
+        }
         BARS[position].forEach(function (spec) {
             const cell = document.createElement('div');
             cell.className = 'ecom-kpi-cell';

@@ -50,6 +50,11 @@ JOIN_M = 20.0
 # no other way through.
 BLOCKED_EDGE_PENALTY_M = 2000.0
 
+# How many junctions to try at each end before giving up on the streets.
+# Six covers a node whose closest joins are all on the same disconnected
+# stub, without turning a failed route into a search of the whole campus.
+JOIN_TRIES = 6
+
 # Further than this from any street and a node is not on the network at all -
 # the grid tie, say, before it was given a real position. Those fall back to
 # the elbow rather than being dragged to a road they are nowhere near.
@@ -173,7 +178,7 @@ def _street_graph():
             "cell": cell}
 
 
-def _nearest_street_node(graph, point, obstacles=()):
+def _nearest_street_node(graph, point, obstacles=(), want_all=False):
     """Where to join the network from a point.
 
     The nearest node is not always the right one. A building's centre is
@@ -183,6 +188,13 @@ def _nearest_street_node(graph, point, obstacles=()):
     are taken in order of distance and the first with a clear stub wins; if
     none is clear, the closest is used, because a line that has to cross
     something is still better than no line.
+
+    With want_all the whole ranked list comes back instead of the winner. The
+    nearest junction is not always one you can get anywhere from: the battery
+    in AWL joins a service drive seventeen metres away that connects to nothing
+    else, so the search for a route failed and its lines fell back to a
+    diagonal across the campus - which on the table crossed three buildings and
+    looked nothing like the lines around it.
     """
     lon_scale = 111320.0 * math.cos(math.radians(point[1]))
     cell = graph["cell"]
@@ -208,12 +220,13 @@ def _nearest_street_node(graph, point, obstacles=()):
         return None
     candidates.sort()
 
+    ranked = [index for _, index in candidates]
     if obstacles:
-        for _, index in candidates[:12]:
-            stub = [list(point), list(graph["points"][index])]
-            if _route_hits(stub, obstacles) == 0:
-                return index
-    return candidates[0][1]
+        clear = [index for index in ranked[:12]
+                 if _route_hits([list(point), list(graph["points"][index])],
+                                obstacles) == 0]
+        ranked = clear + [index for index in ranked if index not in clear]
+    return ranked if want_all else ranked[0]
 
 
 def street_route(a, b, obstacles=()):
@@ -227,11 +240,26 @@ def street_route(a, b, obstacles=()):
     if not graph or not graph["points"]:
         return None
 
-    start = _nearest_street_node(graph, a, obstacles)
-    goal = _nearest_street_node(graph, b, obstacles)
-    if start is None or goal is None or start == goal:
+    starts = _nearest_street_node(graph, a, obstacles, want_all=True) or []
+    goals = _nearest_street_node(graph, b, obstacles, want_all=True) or []
+    if not starts or not goals:
         return None
 
+    # A junction on a stub that joins nothing is no use however close it is,
+    # so the nearest pair that can actually reach each other wins. The usual
+    # case still takes the first pair and stops.
+    for start in starts[:JOIN_TRIES]:
+        for goal in goals[:JOIN_TRIES]:
+            if start == goal:
+                continue
+            route = _walk(graph, a, b, start, goal)
+            if route is not None:
+                return route
+    return None
+
+
+def _walk(graph, a, b, start, goal):
+    """The shortest way between two junctions, joined to a and b at the ends."""
     adjacency = graph["adjacency"]
     seen = {start: 0.0}
     previous: dict = {}

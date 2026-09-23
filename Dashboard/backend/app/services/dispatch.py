@@ -47,9 +47,10 @@ def run_dispatch(
 
     # The toolkit prints a per-hour flow summary; at 8760 hours that is tens of
     # thousands of lines into the server log.
-    sink = io.StringIO()
-    ctx = contextlib.redirect_stdout(sink) if capture_log else contextlib.nullcontext()
-    with ctx:
+    # Per thread, so a dispatch and a long optimisation can be noisy at the
+    # same time without either stealing the other's stdout. See quiet.py.
+    from app.services import quiet
+    with quiet.capture(capture_log):
         dispatcher = ECOMDispatcher(
             community=built.community,
             dispatch_mode=spec.dispatch_mode,

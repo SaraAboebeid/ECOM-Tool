@@ -50,8 +50,17 @@
 **/*.local
 **/*.log
 
-# Fetched at runtime and reproducible; some of it is large.
+# Fetched at runtime and reproducible; some of it is large. The Gurobi licence
+# written from .env lands in cache/gurobi/ and is covered by this too.
 Dashboard/backend/cache/
+
+# Machine settings and secrets: which solver this machine uses, and the Gurobi
+# licence that makes it legal. The example beside it IS committed, and carries
+# no licence - see Dashboard/backend/.env.example.
+**/.env
+**/.env.local
+!**/.env.example
+**/gurobi.lic
 
 # Editor and OS
 # Personal editor state stays out; how to run this project does not. The Live

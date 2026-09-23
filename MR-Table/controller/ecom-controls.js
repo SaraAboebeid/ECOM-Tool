@@ -341,7 +341,9 @@
         busy: false,
         dirty: false,
         autoApply: true,
-        optimizer: null        // last optimizer run, or an in-flight job
+        optimizer: null,       // last optimizer run, or an in-flight job
+        optimizerSpan: 'day',  // how much of the year to solve
+        optimizerStartedAt: 0  // when the run began, for the clock while it waits
     };
 
     // ------------------------------------------------------------------ api
@@ -1616,6 +1618,55 @@
 
     // ------------------------------------------------------------ optimizer
 
+    // How much of the year to optimise, and what that costs in waiting.
+    //
+    // Measured on this campus with Gurobi: about 2.4 s a day for 38 buildings,
+    // near enough linear, so the estimates below are honest rather than
+    // hopeful. The dispatch the table animates is unaffected either way - the
+    // optimizer returns costs, not flows.
+    //
+    // A year is the calendar year, because the analysis period cannot wrap it:
+    // "a year from today" would end before it started. A month and a week run
+    // from the day the table is on, and slide back from the end of December if
+    // they would overrun it.
+    const OPTIMIZER_SPANS = [
+        { key: 'day', label: 'A day', days: 1 },
+        { key: 'week', label: 'A week', days: 7 },
+        { key: 'month', label: 'A month', days: 30 },
+        { key: 'year', label: 'A year', days: DAYS_PER_YEAR }
+    ];
+    const SECONDS_PER_DAY_SOLVED = 2.4;
+
+    function currentSpan() {
+        return OPTIMIZER_SPANS.find(function (option) {
+            return option.key === state.optimizerSpan;
+        }) || OPTIMIZER_SPANS[0];
+    }
+
+    /** "about 12 minutes", for a number of days. */
+    function optimizerEstimate(days) {
+        const seconds = Math.round(days * SECONDS_PER_DAY_SOLVED);
+        if (seconds < 90) return 'about ' + seconds + ' s';
+        const minutes = Math.round(seconds / 60);
+        return 'about ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
+    }
+
+    /** The period to optimise over, as the backend wants it. */
+    function optimizerPeriod(days) {
+        if (days >= DAYS_PER_YEAR) {
+            return { start_month: 1, start_day: 1, start_hour: 0,
+                     end_month: 12, end_day: 31, end_hour: 23 };
+        }
+        // From the day the table is on, pulled back if it would run past the
+        // end of December - the period is not allowed to wrap the new year.
+        const wanted = dayOfYear(state.startMonth, state.startDay);
+        const first = Math.min(wanted, DAYS_PER_YEAR - days + 1);
+        const from = fromDayOfYear(first);
+        const to = fromDayOfYear(first + days - 1);
+        return { start_month: from.month, start_day: from.day, start_hour: 0,
+                 end_month: to.month, end_day: to.day, end_hour: 23 };
+    }
+
     let pollTimer = null;
 
     async function runOptimizer() {
@@ -1625,16 +1676,21 @@
         render();
 
         try {
+            const span = OPTIMIZER_SPANS.find(function (option) {
+                return option.key === state.optimizerSpan;
+            }) || OPTIMIZER_SPANS[0];
+            // The community as the panel has it, over the span being asked
+            // for. The table's own period is left alone: it is showing a day,
+            // and optimising a year should not move it off that day.
+            const spec = clone(buildSpec());
+            spec.analysis_period = optimizerPeriod(span.days);
             const job = await postJson('/api/optimize', {
-                community: buildSpec(),
-                // One day. The MILP is roughly 0.25 s per building-day, so a
-                // 36-building campus is already a couple of minutes - long
-                // enough that anything more would not finish while someone is
-                // standing at the table.
-                days: 1,
+                community: spec,
+                days: span.days,
                 parameters: Object.keys(state.paramValues).length
                     ? state.paramValues : null
             });
+            state.optimizerStartedAt = Date.now();
             state.optimizer = job;
             render();
             poll(job.id);
@@ -2520,8 +2576,15 @@
             readout = '<p class="ecom-ctl-empty ecom-ctl-error">' +
                       esc(job.error || 'the optimizer failed') + '</p>';
         } else if (job) {
-            readout = '<p class="ecom-ctl-empty">Solving… ' +
-                      Math.round((job.progress || 0) * 100) + '%</p>';
+            // Elapsed rather than a percentage: the rolling horizon reports
+            // progress in steps that are not evenly spaced, and a bar that
+            // sticks at 4% for a minute reads as a hang. A clock that keeps
+            // counting says the same thing and cannot be wrong.
+            const waiting = state.optimizerStartedAt
+                ? Math.round((Date.now() - state.optimizerStartedAt) / 1000) : 0;
+            readout = '<p class="ecom-ctl-empty">Solving ' +
+                      currentSpan().label.toLowerCase() + '… ' + waiting + ' s of ' +
+                      optimizerEstimate(currentSpan().days) + '</p>';
         }
 
         return group('optimizer', 'Optimizer',
@@ -2529,10 +2592,20 @@
             '<span class="ecom-ctl-hint">These drive the MILP optimizer, not the ' +
             'dispatch the table animates - a run is minutes, and it returns costs ' +
             'rather than a new set of flows. Changing one leaves the table as it is.</span>' +
+            '<div class="ecom-ctl-span">' +
+                OPTIMIZER_SPANS.map(function (option) {
+                    return '<button type="button" class="ecom-ctl-chip' +
+                        (option.key === state.optimizerSpan ? ' is-on' : '') +
+                        '" data-optimizer-span="' + option.key + '">' +
+                        option.label + '</button>';
+                }).join('') +
+                '<span class="ecom-ctl-hint">' +
+                    optimizerEstimate(currentSpan().days) + '</span>' +
+            '</div>' +
             '<div class="ecom-ctl-actions">' +
                 '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
                     ' data-action="optimize"' + (job && job.status === 'running' ? ' disabled' : '') + '>' +
-                    'Run one day</button>' +
+                    'Run ' + currentSpan().label.toLowerCase() + '</button>' +
                 (changed ? '<button type="button" class="ecom-ctl-btn" data-action="params-reset">' +
                     'Reset constants</button>' : '') +
             '</div>' +
@@ -2818,7 +2891,8 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step'
+        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step',
+        'data-optimizer-span'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
         return '[' + name + ']';
@@ -2868,6 +2942,12 @@
             return;
         }
         if (action === 'optimize') { runOptimizer(); return; }
+        const span = el.getAttribute('data-optimizer-span');
+        if (span) {
+            state.optimizerSpan = span;
+            render();
+            return;
+        }
         if (action === 'params-reset') {
             state.paramValues = {};
             render();

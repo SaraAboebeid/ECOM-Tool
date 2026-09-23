@@ -207,6 +207,17 @@
 
 .ecom-ctl-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
+/* How much of the year to optimise, with what the wait will be beside it. */
+.ecom-ctl-span {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.5rem 0 0.2rem;
+}
+
+.ecom-ctl-span .ecom-ctl-hint { margin-left: 0.3rem; }
+
 /* Off, hover and on sat within a few percent of each other. Wider apart now:
    off recedes, on comes forward, hover sits between so a finger gets feedback
    before it commits. */

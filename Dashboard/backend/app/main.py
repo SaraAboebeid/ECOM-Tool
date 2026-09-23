@@ -19,6 +19,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app import settings
+
+# Before anything that reads the environment: the solver choice and the Gurobi
+# licence live in a git-ignored .env beside this package.
+SETTINGS = settings.apply()
+
 from app.builders.community import CommunityBuildError, build_community
 from app.schemas.community import CommunitySpec
 from app.services.dispatch import run_dispatch
@@ -29,6 +35,7 @@ from app.services.optimize import run_optimization, solver_status
 from app.services.sweep import run_sweep
 from app.schemas.optimizer_params import OptimizerParameters, describe_parameters
 from app.services.pvgis_cache import PVGISCache, PVGISUnavailable
+from app.services import optimize_process, quiet
 
 CACHE_ROOT = Path(__file__).resolve().parents[1] / "cache"
 
@@ -41,6 +48,9 @@ async def lifespan(_: FastAPI):
     # Must be installed before any PVPlant is constructed, or the toolkit makes
     # a live PVGIS request per plant.
     pvgis.install_provider()
+    # And before any solve: it replaces sys.stdout once, so that capturing a
+    # library's chatter on one thread cannot disturb another's. See quiet.py.
+    quiet.install()
     yield
 
 
@@ -275,18 +285,22 @@ def start_optimization(request: OptimizeRequest) -> dict:
     spec = request.community
 
     def work(report):
-        return run_optimization(
-            spec,
-            days=request.days,
-            horizon_hours=request.horizon_hours,
-            store_hours=request.store_hours,
-            aging=request.aging,
-            v2g=request.v2g,
-            temperature_c=request.temperature_c,
-            nordpool=nordpool,
-            parameters=request.parameters,
-            progress=report,
-        )
+        days = request.days or max(1, spec.analysis_period.n_hours // 24)
+        report(f"optimising {len(spec.buildings)} buildings over {days} day(s)")
+        # In a process of its own: Pyomo owns sys.stdout during a solve, and a
+        # year is hundreds of them. See services/optimize_process.py.
+        return optimize_process.run({
+            "spec": spec.model_dump(mode="json"),
+            "days": request.days,
+            "horizon_hours": request.horizon_hours,
+            "store_hours": request.store_hours,
+            "aging": request.aging,
+            "v2g": request.v2g,
+            "temperature_c": request.temperature_c,
+            "parameters": (request.parameters.model_dump(mode="json")
+                           if request.parameters else None),
+            "cache_root": str(CACHE_ROOT),
+        })
 
     job = runner.submit("optimize", work, meta={
         "community": spec.name,

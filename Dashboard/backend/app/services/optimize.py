@@ -23,14 +23,17 @@ import contextlib
 import io
 import math
 import sys
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
 import pandas as pd
 
+from app import settings
 from app import toolkit  # noqa: F401  - puts ECOMToolkit on sys.path
 from app.builders.community import build_community
 from app.schemas.community import CommunitySpec
+from app.services import quiet
 from app.services.nordpool import NordPoolClient
 from app.schemas.optimizer_params import OptimizerParameters
 
@@ -44,6 +47,22 @@ HOURS_PER_YEAR = 8760
 DEFAULT_TEMPERATURE_C = 18.0
 
 
+# One run at a time.
+#
+# The job runner has two workers, and a run captures the toolkit's chatter by
+# redirecting stdout for its whole duration - a process-wide change. Two runs
+# at once therefore redirect it twice, and Pyomo, which checks that the stream
+# it is writing to is still the one it was handed, stops with "Captured output
+# does not match sys.stdout". That is what a year-long run did when a week was
+# started beside it: it died after nearly four minutes of work.
+#
+# Serialised rather than made thread-safe: these runs are CPU-bound and take
+# minutes, so running two at once would halve the speed of each anyway. The
+# second simply waits.
+_RUN_LOCK = threading.Lock()
+
+
+
 class OptimizerUnavailable(RuntimeError):
     """The optimizer or its solver could not be loaded."""
 
@@ -53,6 +72,11 @@ def _import_lec():
         sys.path.insert(0, str(LEC_OPT_ROOT))
     try:
         import functions1
+        # Which solver, from .env rather than from the toolkit's own constant:
+        # the toolkit ships HiGHS because it needs no licence, and a machine
+        # with a Gurobi licence should not have to edit a vendored file to use
+        # it. See app/settings.py.
+        functions1.SOLVER_NAME = settings.solver_name()
         return functions1
     except ImportError as err:
         raise OptimizerUnavailable(
@@ -75,12 +99,47 @@ def solver_status() -> dict:
         available = bool(pyo.SolverFactory(name).available(exception_flag=False))
     except Exception as err:
         return {"available": False, "solver": name, "detail": str(err)}
+
+    # Installed is not the same as licensed. gurobipy imports and builds a
+    # model perfectly well on the licence that ships with the pip package, and
+    # then refuses anything past two thousand variables - which is every real
+    # community here. Better to say so on this endpoint than to fail a run.
+    licence = None
+    if "gurobi" in name and available:
+        licence = _gurobi_licence_note()
+
     return {
-        "available": available,
+        "available": available and licence is None,
         "solver": name,
         "time_limit_s": functions1.SOLVER_TIME_LIMIT,
-        "detail": None if available else f"solver {name!r} is not installed or licensed",
+        "licence": licence,
+        "detail": licence
+        or (None if available else f"solver {name!r} is not installed or licensed"),
     }
+
+
+def _gurobi_licence_note() -> str | None:
+    """None when Gurobi can solve something of our size, else what is wrong."""
+    missing = settings.gurobi_licence_state()
+    if missing:
+        return missing
+
+    try:
+        import gurobipy as gp
+    except ImportError as err:
+        return f"gurobipy is not installed: {err}"
+
+    try:
+        model = gp.Model("licence check")
+        model.Params.OutputFlag = 0
+        # Past the size-limited licence's 2,000 variables, and trivial to solve.
+        model.addVars(2500, vtype=gp.GRB.BINARY)
+        model.optimize()
+    except gp.GurobiError as err:
+        return (f"Gurobi is installed but its licence will not take a model this "
+                f"size: {err}. Put a licence in Dashboard/backend/.env - see "
+                f"app/settings.py - or set ECOM_SOLVER=appsi_highs.")
+    return None
 
 
 # --------------------------------------------------------------- inputs
@@ -399,6 +458,19 @@ def run_optimization(
                                     temperature_c=temperature_c, nordpool=nordpool)
 
     n_days = days if days else max(1, spec.analysis_period.n_hours // 24)
+
+    # The inputs are sliced to the community's own period, so asking for more
+    # days than it holds walks off the end of the series - which surfaced as a
+    # bare "IndexError: single positional indexer is out-of-bounds" from deep
+    # inside pandas. Say what is actually wrong instead.
+    available = max(1, spec.analysis_period.n_hours // 24)
+    if n_days > available:
+        raise ValueError(
+            f"asked for {n_days} days, but this community's analysis period "
+            f"covers {available} ({spec.analysis_period.label}). Widen the "
+            f"period to at least {n_days} days and run it again."
+        )
+
     if progress:
         progress(f"optimising {len(inputs['building_data'])} buildings over {n_days} day(s)")
 
@@ -417,8 +489,8 @@ def run_optimization(
         base = parameters if parameters is not None else OptimizerParameters()
         effective = base.model_copy(update={"battery_efficiency": one_way})
 
-    sink = io.StringIO()
-    with contextlib.redirect_stdout(sink), _applied_parameters(functions1, effective):
+    with _RUN_LOCK, quiet.capture() as sink, \
+            _applied_parameters(functions1, effective):
         frame = functions1.optimization_function_lec(
             charging_point_data=inputs["charging_point_data"],
             building_data=inputs["building_data"],
