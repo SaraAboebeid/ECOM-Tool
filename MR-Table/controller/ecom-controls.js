@@ -1651,6 +1651,21 @@
         return 'about ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
     }
 
+    /** "1 - 7 June", or "the whole year", for a period. */
+    function periodLabel(period) {
+        if (period.start_month === 1 && period.start_day === 1 &&
+            period.end_month === 12 && period.end_day === 31) {
+            return 'the whole year';
+        }
+        const from = period.start_day + ' ' + MONTH_NAMES[period.start_month - 1];
+        const to = period.end_day + ' ' + MONTH_NAMES[period.end_month - 1];
+        if (period.start_month === period.end_month) {
+            if (period.start_day === period.end_day) return to;
+            return period.start_day + ' - ' + to;
+        }
+        return from + ' - ' + to;
+    }
+
     /** The period to optimise over, as the backend wants it. */
     function optimizerPeriod(days) {
         if (days >= DAYS_PER_YEAR) {
@@ -2590,8 +2605,11 @@
         return group('optimizer', 'Optimizer',
             changed ? changed + ' changed' : state.params.length + ' constants',
             '<span class="ecom-ctl-hint">These drive the MILP optimizer, not the ' +
-            'dispatch the table animates - a run is minutes, and it returns costs ' +
-            'rather than a new set of flows. Changing one leaves the table as it is.</span>' +
+            'dispatch the table animates - it returns costs rather than a new ' +
+            'set of flows, and changing one leaves the table as it is. A run ' +
+            'starts on the date chosen above, in Day, and covers the span ' +
+            'picked here; a year is the calendar year, because a period cannot ' +
+            'wrap the new year.</span>' +
             '<div class="ecom-ctl-span">' +
                 OPTIMIZER_SPANS.map(function (option) {
                     return '<button type="button" class="ecom-ctl-chip' +
@@ -2600,7 +2618,8 @@
                         option.label + '</button>';
                 }).join('') +
                 '<span class="ecom-ctl-hint">' +
-                    optimizerEstimate(currentSpan().days) + '</span>' +
+                    esc(periodLabel(optimizerPeriod(currentSpan().days))) +
+                    ' &middot; ' + optimizerEstimate(currentSpan().days) + '</span>' +
             '</div>' +
             '<div class="ecom-ctl-actions">' +
                 '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +

@@ -297,6 +297,69 @@ def _walk(graph, a, b, start, goal):
     return trimmed if len(trimmed) > 2 else None
 
 
+def _segment_crossing(p1, p2, ring):
+    """Where the segment p1->p2 first meets the ring, coming from p1."""
+    best = None
+    for i in range(len(ring) - 1):
+        q1, q2 = ring[i], ring[i + 1]
+        d1 = _side(p1, p2, q1)
+        d2 = _side(p1, p2, q2)
+        d3 = _side(q1, q2, p1)
+        d4 = _side(q1, q2, p2)
+        if not ((d1 > 0) != (d2 > 0) and (d3 > 0) != (d4 > 0)):
+            continue
+        # Where along p1->p2 the crossing falls, as a fraction.
+        denominator = ((p2[0] - p1[0]) * (q2[1] - q1[1]) -
+                       (p2[1] - p1[1]) * (q2[0] - q1[0]))
+        if abs(denominator) < 1e-15:
+            continue
+        t = (((q1[0] - p1[0]) * (q2[1] - q1[1]) -
+              (q1[1] - p1[1]) * (q2[0] - q1[0])) / denominator)
+        if not 0.0 <= t <= 1.0:
+            continue
+        if best is None or t < best:
+            best = t
+    if best is None:
+        return None
+    return [p1[0] + (p2[0] - p1[0]) * best, p1[1] + (p2[1] - p1[1]) * best]
+
+
+def _trim_to_wall(route, rings):
+    """Stop the route where it first enters the building at its far end.
+
+    Every node sits at the middle of whatever it belongs to, so a line drawn to
+    a building runs from the street, through the wall, and on to the centroid -
+    across the roof of a hall a hundred metres wide. On the table that reads as
+    a cable laid over the building rather than a supply arriving at it.
+
+    Cut at the wall instead, keeping a couple of metres inside so the end is
+    plainly attached rather than merely touching. The route is walked from the
+    outside in, so a building the line has already passed through on its way -
+    an L-shaped block, say - does not end it early.
+    """
+    if not rings or len(route) < 2:
+        return route
+    for index in range(len(route) - 1):
+        p1, p2 = route[index], route[index + 1]
+        crossing = None
+        for ring in rings:
+            hit = _segment_crossing(p1, p2, ring)
+            if hit is not None and (crossing is None or
+                                    _metres(p1, hit) < _metres(p1, crossing)):
+                crossing = hit
+        if crossing is None:
+            continue
+        # A step past the wall, along the same heading, so the line ends inside
+        # the outline rather than balanced on it.
+        span = _metres(p1, p2)
+        if span > 0:
+            step = min(3.0 / span, 1.0)
+            crossing = [crossing[0] + (p2[0] - crossing[0]) * step,
+                        crossing[1] + (p2[1] - crossing[1]) * step]
+        return route[:index + 1] + [crossing]
+    return route
+
+
 def _rings_of(feature) -> list:
     """Every closed ring of a footprint, however it is nested."""
     geometry = feature.get("geometry") or {}
@@ -857,6 +920,17 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
         route = street_route(a, b, obstacles)
         if route is None:
             route = elbow(a, b, f"{source}->{target}", obstacles)
+
+        # Each end stops at its own building's wall rather than at the centroid
+        # inside it. Assets standing in a building - the battery in AWL - keep
+        # their full run: the line belongs to the thing in the building, not to
+        # the building, so it starts where that thing is.
+        if not host_of.get(target):
+            route = _trim_to_wall(route, rings_by_id.get(canonical(target), []))
+        if not host_of.get(source):
+            route = list(reversed(
+                _trim_to_wall(list(reversed(route)),
+                              rings_by_id.get(canonical(source), []))))
 
         flow_features.append({
             "type": "Feature",
