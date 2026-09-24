@@ -2145,7 +2145,12 @@
     // rather than nameplate capacity - the arrays never reach nameplate, so
     // scaling to it leaves every halo invisible even at midday.
     function setHour(hour) {
+        const moved = currentHour !== hour;
         currentHour = hour;
+        // Said once, here, rather than only where the table's own clock ticks:
+        // the controller's scrubber and the introduction's held hours move it
+        // too, and anything drawing a clock needs to hear about all three.
+        if (moved && isActive) announceHour();
         if (!isActive || !layerData) return;
 
         const source = map.getSource(NODES_SOURCE_ID);
@@ -3027,10 +3032,20 @@
         if (clockTimer !== null || externalControl) return;
         clockTimer = setInterval(function () {
             setHour((currentHour + 1) % hourCount);
-            ecomChannel.postMessage({
-                type: 'ecom_clock', hour: currentHour, hours: hourCount
-            });
         }, HOUR_MS);
+    }
+
+    function announceHour() {
+        // With the dates, so a clock drawn beside the table can say which day
+        // it is on. The committed export carries them in ecom_meta and a live
+        // dispatch in layer.meta; the opening picture only ever had the first,
+        // which is why the strip came up with an empty date on it.
+        const period = layerPeriod ||
+            (layerData && layerData.ecom_meta && layerData.ecom_meta.period) || '';
+        ecomChannel.postMessage({
+            type: 'ecom_clock', hour: currentHour, hours: hourCount,
+            period: period
+        });
     }
 
     function stopClock() {
@@ -3096,6 +3111,7 @@
     // them alongside the layer; the committed export keeps them in its meta.
     let layerKpis = null;
     let layerHours = null;
+    let layerPeriod = null;
 
     function announceKpis() {
         const kpis = layerKpis ||
@@ -3138,6 +3154,7 @@
         if (!layer || !layer.buildings || !layer.nodes || !layer.flows) return;
         layerKpis = layer.kpis || null;
         layerHours = (layer.meta && layer.meta.hours) || null;
+        layerPeriod = (layer.meta && layer.meta.period) || null;
 
         layerData = layer.buildings;
         nodeData = layer.nodes;
@@ -3198,6 +3215,7 @@
 
         ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });
         announceKpis();
+        announceHour();
         syncSolarMode();
 
         // Sent after the sources are written, not before: this is the
@@ -3426,6 +3444,7 @@
             summary: buildSummary()
         });
         announceKpis();
+        announceHour();
         syncSolarMode();
     }
 
