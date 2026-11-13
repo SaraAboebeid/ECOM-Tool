@@ -6,9 +6,22 @@ except ImportError:
 class Battery:
     """A Battery object for Grasshopper use (ECOM4Future)."""
 
-    def __init__(self, name, capacity, point, cost, embodied_co2, efficiency, lifespan, degradation, initial_soc=None):
+    def __init__(self, name, capacity, point, cost, embodied_co2, efficiency, lifespan, degradation, initial_soc=None, max_power=None):
         self.name = str(name)
         self.capacity = float(capacity)  # kWh (initial capacity)
+
+        # kW the battery can charge or discharge in one hour. Capacity says how
+        # big the tank is; this says how wide the tap is, and they are not the
+        # same number - a storage battery on this campus is rated at a quarter
+        # of its capacity, so it needs four hours to fill or empty.
+        #
+        # Defaults to capacity, i.e. 1C, which is what the dispatcher did before
+        # this existed: an unstated assumption, kept as the default so that no
+        # caller that omits it changes behaviour.
+        if max_power is None:
+            self.max_power = self.capacity
+        else:
+            self.max_power = max(float(max_power), 0.0)
         self.point = point if (rg and isinstance(point, rg.Point3d)) else None
         self.cost_per_kwh = float(cost)  # SEK/kWh
         self.embodied_co2_per_kwh = float(embodied_co2)  # kgCO2e/kWh

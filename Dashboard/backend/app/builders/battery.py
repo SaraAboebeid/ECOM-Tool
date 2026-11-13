@@ -23,6 +23,7 @@ def build_battery(spec: BatterySpec) -> Battery:
             lifespan=spec.lifespan,
             degradation=spec.degradation,
             initial_soc=spec.initial_soc_kwh,  # toolkit wants kWh, not a fraction
+            max_power=spec.power_kw,           # capacity x C-rate, kW
         )
     except Exception as err:
         raise BatteryBuildError(f"battery {spec.name!r}: {err}") from err

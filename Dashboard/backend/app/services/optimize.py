@@ -242,7 +242,10 @@ def build_optimizer_inputs(
     # already guarded with `if building.bess_capacity == 0`, so the real
     # buildings are unaffected.
     total_battery = sum(b.capacity for b in spec.batteries)
-    total_power = sum(b.capacity for b in spec.batteries)  # 1C unless specified
+    # Was `sum(b.capacity ...)` - an unstated 1C, which let a 54 kWh battery
+    # answer a 54 kW peak. The spec now carries the rate, defaulting to the
+    # 0.25C the campus workbook applies to every battery on site.
+    total_power = sum(b.power_kw for b in spec.batteries)
 
     if total_battery > 0:
         notes.append(
@@ -250,6 +253,15 @@ def build_optimizer_inputs(
             f"asset on the node {COMMUNITY_STORAGE_NODE!r}, not attached to any "
             f"member building."
         )
+
+        rates = {b.c_rate for b in spec.batteries}
+        if len(rates) == 1:
+            rate = next(iter(rates))
+            notes.append(
+                f"Storage is rated {total_power:,.1f} kW, which is {rate:g}C - "
+                f"{1 / rate:.0f} hours to fill or empty. The campus workbook "
+                f"assumes this rate for every battery on site."
+            )
 
         # LEC-Opt applies its efficiency on charge and divides by it on
         # discharge, so the constant is one-way and the round-trip figure is its

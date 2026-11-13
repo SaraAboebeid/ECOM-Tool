@@ -2448,8 +2448,34 @@
                     ? bat.initial_soc_fraction : 0.5) * 100),
                 min: 0, max: 100, step: 5, unit: '%',
                 hint: 'A fraction of capacity, so it holds as the battery resizes.'
+            }) +
+            // How fast it can run, not how much it holds. Shown in kW as well
+            // as in C, because the rate is the number people argue about and
+            // the kW is the number they recognise.
+            slider({
+                name: 'battery_crate', label: 'Charge rate',
+                value: cRate(bat), min: 0.05, max: 2, step: 0.05, unit: 'C',
+                format: function (v) {
+                    return Number(v).toFixed(2) + 'C';
+                },
+                hint: rateHint(bat.capacity, cRate(bat))
             })
         );
+    }
+
+    /** The battery's C-rate, defaulting to what the campus workbook assumes. */
+    function cRate(bat) {
+        return bat && bat.c_rate != null ? bat.c_rate : 0.25;
+    }
+
+    /** The same rate said twice: as power, and as time to empty. */
+    function rateHint(capacity, rate) {
+        const kw = capacity * rate;
+        const hours = 1 / rate;
+        return kw.toFixed(1) + ' kW - ' +
+            (hours >= 10 ? hours.toFixed(0) : hours.toFixed(1)) +
+            ' h to fill or empty. The campus workbook rates every battery ' +
+            'on site at 0.25C.';
     }
 
     function gridGroup() {
@@ -2962,6 +2988,11 @@
             case 'battery_soc':
                 w.batteries[0].initial_soc_fraction = value / 100;
                 set(value + ' %');
+                markDirty();
+                break;
+            case 'battery_crate':
+                w.batteries[0].c_rate = value;
+                set(value.toFixed(2) + 'C');
                 markDirty();
                 break;
             case 'buy_price':

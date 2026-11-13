@@ -34,6 +34,22 @@ class BatterySpec(BaseModel):
     efficiency: Annotated[float, Field(gt=0, le=100)] = Field(
         90.0, description="Round-trip efficiency, percent."
     )
+
+    # How wide the tap is, as a multiple of how big the tank is. Held as a rate
+    # rather than an absolute kW so that it survives a capacity change the way
+    # initial_soc_fraction does: move the slider and the battery stays the same
+    # kind of battery, rather than silently becoming a 1C one.
+    #
+    # 0.25 is the campus convention, not a guess. Every battery sheet in
+    # Data/energy_data/Chalmers_campus_data_1.xlsx writes bess_power as
+    # capacity/4 - one of them, Jattestensgatan 3, still has the literal
+    # formula `=15/4` in the cell. AWL reads 50 kWh against 12.5 kW.
+    c_rate: Annotated[float, Field(gt=0, le=4)] = Field(
+        0.25,
+        description="Charge and discharge power as a multiple of capacity. "
+        "0.25 means four hours to fill or empty, which is what the campus "
+        "workbook assumes for every battery on site.",
+    )
     lifespan: Annotated[float, Field(gt=0)] = Field(15.0, description="Years")
     degradation: Annotated[float, Field(ge=0, le=100)] = Field(
         2.0, description="Capacity lost per year, percent. Applied linearly by "
@@ -70,6 +86,21 @@ class BatterySpec(BaseModel):
     def initial_soc_kwh(self) -> float:
         """What ECOMToolkit's Battery.initial_soc actually expects."""
         return self.capacity * self.initial_soc_fraction
+
+    @property
+    def power_kw(self) -> float:
+        """Most it can charge or discharge in one hour, kW.
+
+        What LEC-Opt calls bess_max_power, and what the workbook's bess_power
+        column holds.
+        """
+        return self.capacity * self.c_rate
+
+    @property
+    def hours_to_empty(self) -> float:
+        """How long a full battery lasts at full power. The reciprocal of the
+        C-rate, stated plainly because that is how the number is read."""
+        return 1.0 / self.c_rate
 
     @property
     def total_cost(self) -> float:

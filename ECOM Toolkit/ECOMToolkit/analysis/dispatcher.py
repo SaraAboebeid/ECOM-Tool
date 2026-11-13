@@ -881,10 +881,15 @@ class ECOMDispatcher:
                 continue
             available = soc[t]  # kWh available at start of hour
             eff = battery.efficiency / 100.0 if hasattr(battery, "efficiency") else 1.0
+            # How much it may move this hour, however many entities ask. A rate
+            # limit is per hour, not per customer: capping each transfer
+            # separately would let three deficits draw three times the rating.
+            budget = getattr(battery, "max_power", battery.capacity)
             # Discharge to all entities with deficit
             for entity_name, deficit in state["deficit"].items():
-                discharge = min(available, deficit / eff)
+                discharge = min(available, deficit / eff, budget)
                 if discharge > 0:
+                    budget -= discharge
                     self._update_flow(bat_node, entity_name, t, discharge * eff)
                     print(f"[BATTERY DISCHARGE] Hour {t} {bat_node} -> {entity_name}: {discharge * eff:.2f} kWh (SoC before: {available:.2f})")
                     state["deficit"][entity_name] -= discharge * eff
@@ -916,10 +921,15 @@ class ECOMDispatcher:
                 continue
             available_capacity = battery.capacity - soc[t+1]  # kWh available after discharge
             eff = battery.efficiency / 100.0 if hasattr(battery, "efficiency") else 1.0
+            # The same rate limit as on discharge, and a separate budget: the
+            # hour's charging is not reduced by what was discharged earlier in
+            # it, because the dispatcher never does both in one hour.
+            budget = getattr(battery, "max_power", battery.capacity)
             # Charge with surplus from all entities
             for entity_name, surplus in state["surplus"].items():
-                charge = min(available_capacity, surplus * eff)
+                charge = min(available_capacity, surplus * eff, budget)
                 if charge > 0:
+                    budget -= charge
                     self._update_flow(entity_name, bat_node, t, charge / eff)
                     print(f"[BATTERY CHARGE] Hour {t} {entity_name} -> {bat_node}: {charge / eff:.2f} kWh (SoC before: {soc[t+1]:.2f})")
                     state["surplus"][entity_name] -= charge / eff
