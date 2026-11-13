@@ -13,9 +13,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.schemas.community import CommunitySpec
-from app.services.optimize import (OptimizerUnavailable, _availability_blocks,
-                                   build_optimizer_inputs, run_optimization,
-                                   solver_status)
+from app.services.optimize import (COMMUNITY_STORAGE_NODE, OptimizerUnavailable,
+                                   _availability_blocks, build_optimizer_inputs,
+                                   run_optimization, solver_status)
 from app.services.pvgis_cache import HOURS_PER_YEAR, PVGISCache, uninstall_provider
 
 DAILY = [60 + 40 * math.sin(h / 24 * 2 * math.pi) for h in range(24)]
@@ -98,16 +98,50 @@ def test_building_frame_has_required_columns():
         assert column in frame.columns
 
 
-def test_battery_is_attached_to_the_largest_consumer():
-    """LEC-Opt has no community battery, so it must land on a building."""
+def test_battery_sits_on_the_community_node():
+    """LEC-Opt indexes storage by building, so a shared battery still has to
+    live on some building object - but not on a real one.
+
+    It used to be hung on the largest consumer, which made the reported flows
+    and the state-of-charge series read as that member's private asset. A
+    zero-load, zero-PV node carries it instead, so it belongs to the community
+    and to no member.
+    """
     spec = tiny_spec()
     spec.buildings.append(type(spec.buildings[0])(
         name="Small", owner="Akademiska Hus", footprint_area=100.0,
         demand={"annual_kwh": 1000, "shape": DAILY}))
     i = build_optimizer_inputs(spec)
-    assert i["building_data"]["B1"]["bess_capacity"].iloc[0] == 200.0
-    assert i["building_data"]["Small"]["bess_capacity"].iloc[0] == 0.0
-    assert any("attached to" in n for n in i["notes"])
+
+    node = i["building_data"][COMMUNITY_STORAGE_NODE]
+    assert node["bess_capacity"].iloc[0] == 200.0
+    # How big the tank is against how wide the tap is: 200 kWh at the default
+    # 0.25C is 50 kW, not the 200 kW an unstated 1C would have allowed.
+    assert node["bess_power"].iloc[0] == 50.0
+    # It carries storage and nothing else, so it cannot distort the balance.
+    assert node["electricity_load"].iloc[0] == 0.0
+    assert node["pv_production"].iloc[0] == 0.0
+
+    for name in ("B1", "Small"):
+        assert i["building_data"][name]["bess_capacity"].iloc[0] == 0.0
+        assert i["building_data"][name]["bess_power"].iloc[0] == 0.0
+
+    assert any("not attached to any member building" in n for n in i["notes"])
+
+
+def test_battery_power_follows_the_declared_c_rate():
+    """The spec carries the rate, so a faster battery gets a wider tap.
+
+    These are the campus figures: the AWL unit holds 247 kWh and is rated
+    112 kW, which is 0.4534C quoted to the four decimals a C-rate is normally
+    written with - 111.99 kW, and 112 kW to the nearest kilowatt.
+    """
+    spec = tiny_spec(batteries=[{"name": "BAT", "capacity": 247.0,
+                                 "c_rate": 0.4534}])
+    node = build_optimizer_inputs(spec)["building_data"][COMMUNITY_STORAGE_NODE]
+    assert node["bess_capacity"].iloc[0] == 247.0
+    assert node["bess_power"].iloc[0] == pytest.approx(247.0 * 0.4534)
+    assert round(node["bess_power"].iloc[0]) == 112
 
 
 def test_ev_sessions_are_built_from_availability():
