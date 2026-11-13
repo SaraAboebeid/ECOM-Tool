@@ -40,15 +40,18 @@ class BatterySpec(BaseModel):
     # initial_soc_fraction does: move the slider and the battery stays the same
     # kind of battery, rather than silently becoming a 1C one.
     #
-    # 0.25 is the campus convention, not a guess. Every battery sheet in
+    # 0.25 is the workbook convention, not a guess. Every battery sheet in
     # Data/energy_data/Chalmers_campus_data_1.xlsx writes bess_power as
     # capacity/4 - one of them, Jattestensgatan 3, still has the literal
-    # formula `=15/4` in the cell. AWL reads 50 kWh against 12.5 kW.
+    # formula `=15/4` in the cell. It stays the default for a battery that
+    # does not state a rate, but it is not what the installed hardware does:
+    # the AWL unit in data/campus_community.json is 247 kWh against 112 kW,
+    # which is 0.4534C, so it fills or empties in a little over two hours.
     c_rate: Annotated[float, Field(gt=0, le=4)] = Field(
         0.25,
         description="Charge and discharge power as a multiple of capacity. "
         "0.25 means four hours to fill or empty, which is what the campus "
-        "workbook assumes for every battery on site.",
+        "workbook assumes for a battery that does not state its own rate.",
     )
     lifespan: Annotated[float, Field(gt=0)] = Field(15.0, description="Years")
     degradation: Annotated[float, Field(ge=0, le=100)] = Field(

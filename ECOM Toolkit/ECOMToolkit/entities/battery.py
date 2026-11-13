@@ -12,8 +12,8 @@ class Battery:
 
         # kW the battery can charge or discharge in one hour. Capacity says how
         # big the tank is; this says how wide the tap is, and they are not the
-        # same number - a storage battery on this campus is rated at a quarter
-        # of its capacity, so it needs four hours to fill or empty.
+        # same number - the campus unit at AWL holds 247 kWh against 112 kW, so
+        # it takes a little over two hours to fill or empty.
         #
         # Defaults to capacity, i.e. 1C, which is what the dispatcher did before
         # this existed: an unstated assumption, kept as the default so that no

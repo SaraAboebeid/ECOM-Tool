@@ -244,7 +244,7 @@ def build_optimizer_inputs(
     total_battery = sum(b.capacity for b in spec.batteries)
     # Was `sum(b.capacity ...)` - an unstated 1C, which let a 54 kWh battery
     # answer a 54 kW peak. The spec now carries the rate, defaulting to the
-    # 0.25C the campus workbook applies to every battery on site.
+    # 0.25C the campus workbook applies to a battery that states no rate.
     total_power = sum(b.power_kw for b in spec.batteries)
 
     if total_battery > 0:
@@ -259,8 +259,7 @@ def build_optimizer_inputs(
             rate = next(iter(rates))
             notes.append(
                 f"Storage is rated {total_power:,.1f} kW, which is {rate:g}C - "
-                f"{1 / rate:.0f} hours to fill or empty. The campus workbook "
-                f"assumes this rate for every battery on site."
+                f"{1 / rate:.1f} hours to fill or empty."
             )
 
         # LEC-Opt applies its efficiency on charge and divides by it on

@@ -667,11 +667,11 @@
   "batteries": [
     {
       "name": "Battery-01",
-      "capacity": 54.0,
+      "capacity": 247.0,
       "cost_per_kwh": 10.0,
       "embodied_co2_per_kwh": 10.0,
       "efficiency": 90.0,
-      "c_rate": 0.25,
+      "c_rate": 0.4534,
       "lifespan": 10.0,
       "degradation": 2.0,
       "initial_soc_fraction": 0.0926,

@@ -2548,8 +2548,8 @@
         const hours = 1 / rate;
         return kw.toFixed(1) + ' kW - ' +
             (hours >= 10 ? hours.toFixed(0) : hours.toFixed(1)) +
-            ' h to fill or empty. The campus workbook rates every battery ' +
-            'on site at 0.25C.';
+            ' h to fill or empty. The campus unit at AWL holds 247 kWh ' +
+            'against 112 kW.';
     }
 
     function gridGroup() {
