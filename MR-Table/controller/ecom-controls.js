@@ -676,7 +676,7 @@
     }
 
     function chargePoints() {
-        return state.working.charge_points || [];
+        return (state.working || {}).charge_points || [];
     }
 
     /** A charger like the ones already there, on a free stretch of the street. */
@@ -830,7 +830,11 @@
         state.year = year;
     }
 
-    function battery() { return (state.working.batteries || [])[0] || null; }
+    // Tolerates a missing spec: the table can announce its own totals before
+    // the panel's scenario fetch has landed, and renderKpis reads this to fill
+    // the "Settings on this run" column. Without the guard that announcement
+    // threw and the headline tiles it carries never appeared.
+    function battery() { return ((state.working || {}).batteries || [])[0] || null; }
 
     /** How many days the period really covers.
      *
@@ -2101,7 +2105,7 @@
                         (k.avg_grid_price_import === undefined ? 'N/A'
                          : k.avg_grid_price_import.toFixed(2) + ' SEK/kWh')) +
                     row('sell', 'Export price',
-                        (((state.working.grid || {}).selling_price || {}).fixed === undefined
+                        ((((state.working || {}).grid || {}).selling_price || {}).fixed === undefined
                          ? 'N/A'
                          : state.working.grid.selling_price.fixed.toFixed(2) + ' SEK/kWh')) +
                     row('ev_station', 'Charge points',
