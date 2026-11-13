@@ -35,7 +35,7 @@ from app.services.optimize import run_optimization, solver_status
 from app.services.sweep import run_sweep
 from app.schemas.optimizer_params import OptimizerParameters, describe_parameters
 from app.services.pvgis_cache import PVGISCache, PVGISUnavailable
-from app.services import optimize_process, quiet
+from app.services import ehub, optimize_process, quiet
 
 CACHE_ROOT = Path(__file__).resolve().parents[1] / "cache"
 
@@ -204,6 +204,23 @@ class OptimizeRequest(BaseModel):
     parameters: OptimizerParameters | None = Field(
         None, description="Overrides for LEC-Opt's hardcoded constants.")
     temperature_c: float = Field(18.0, description="Ambient temperature for aging.")
+
+
+@app.get("/api/live/battery")
+def live_battery(force: bool = False) -> dict:
+    """What the battery in AWL is doing at this moment.
+
+    Read-only. The gateway accepts setpoints too and this never sends one: the
+    table shows the building, it does not drive it.
+
+    Never fails the caller - a dashboard polling every few seconds should not
+    fill with errors because somebody is off the Chalmers network. "available"
+    says whether there is a reading, and "detail" says why not.
+    """
+    try:
+        return ehub.battery(force=force)
+    except ehub.EHubUnavailable as err:
+        return {"available": False, "detail": str(err)}
 
 
 @app.get("/api/optimize/solver")

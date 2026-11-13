@@ -244,6 +244,78 @@
 .ecom-ctl-dot { width: 10px; height: 10px; border-radius: 3px; }
 .ecom-ctl-chip:not(.is-on) .ecom-ctl-dot { opacity: 0.35; }
 
+/* ------------------------------------------------- the real battery ----
+
+   A reading from the building, not from the model, so it is boxed and labelled
+   rather than mixed in with the sliders above it. The dot pulses while the
+   value is fresh and stops when it is not: a dashboard showing yesterday's
+   number as though it were now is worse than one showing nothing. */
+
+.ecom-ctl-live {
+    border: 1px solid #44525f;
+    border-radius: 8px;
+    background: #2b3238;
+    padding: 0.55rem 0.7rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.ecom-ctl-live-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #dfe8f0;
+}
+
+.ecom-ctl-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00ff5e;
+    box-shadow: 0 0 6px #00ff5e;
+    animation: ecomLivePulse 2s ease-in-out infinite;
+}
+
+.ecom-ctl-live.is-stale .ecom-ctl-live-dot {
+    background: #8b8b8b;
+    box-shadow: none;
+    animation: none;
+}
+
+@keyframes ecomLivePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.ecom-ctl-live-rows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.2rem 0.8rem;
+}
+
+.ecom-ctl-live-rows > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #a8b4bf;
+}
+
+.ecom-ctl-live-rows b {
+    color: #e8eef6;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The projector runs unattended; a reader who cannot see motion still gets
+   the colour. */
+@media (prefers-reduced-motion: reduce) {
+    .ecom-ctl-live-dot { animation: none; }
+}
+
 /* ------------------------------------------------------------ optimizer */
 
 .ecom-ctl-params { display: flex; flex-direction: column; gap: 0.15rem; }

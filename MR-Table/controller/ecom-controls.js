@@ -341,6 +341,7 @@
         busy: false,
         dirty: false,
         autoApply: true,
+        live: null,            // the real battery's last reading
         optimizer: null,       // last optimizer run, or an in-flight job
         optimizerSpan: 'day',  // how much of the year to solve
         optimizerStartedAt: 0  // when the run began, for the clock while it waits
@@ -2349,6 +2350,85 @@
             '<div class="ecom-roofs">' + rows + '</div>');
     }
 
+    // ---------------------------------------------------- the real battery
+    //
+    // AWL's battery is a real one, and the site publishes what it is doing. The
+    // model above is a proposal; this is the building. Shown side by side and
+    // labelled, because the two will not agree - the site runs its own control
+    // and the model does not know about it - and a reader who cannot tell
+    // which is which learns nothing from either.
+    //
+    // Read-only. The same gateway takes setpoints; this panel never sends one.
+    const LIVE_EVERY_MS = 5000;
+
+    let liveTimer = null;
+
+    function watchLive() {
+        if (liveTimer !== null || state.api === null) return;
+        const tick = async function () {
+            try {
+                const reading = await getJson('/api/live/battery');
+                const was = JSON.stringify(state.live);
+                state.live = reading;
+                // Only when something changed: this fires every five seconds,
+                // and re-rendering the panel under a finger moves the slider
+                // it is resting on.
+                if (JSON.stringify(reading) !== was &&
+                    state.openGroup === 'storage') render();
+            } catch (error) {
+                state.live = { available: false, detail: String(error.message || error) };
+            }
+        };
+        tick();
+        liveTimer = setInterval(tick, LIVE_EVERY_MS);
+    }
+
+    /** The live reading, as a line of the Storage group. */
+    function liveBattery() {
+        const live = state.live;
+        if (!live) return '';
+        if (!live.available) {
+            return '<span class="ecom-ctl-hint">No live reading: ' +
+                esc(live.detail || 'the gateway did not answer') + '</span>';
+        }
+
+        const one = function (reading, unit, digits) {
+            if (!reading || reading.value === null || reading.value === undefined) {
+                return '--';
+            }
+            return reading.value.toFixed(digits === undefined ? 1 : digits) + ' ' + unit;
+        };
+        const power = live.power_kw || {};
+        const stale = power.fresh === false;
+        const doing = live.doing === 'charging' ? 'charging'
+            : live.doing === 'discharging' ? 'discharging' : 'idle';
+
+        return '' +
+            '<div class="ecom-ctl-live' + (stale ? ' is-stale' : '') + '">' +
+                '<div class="ecom-ctl-live-head">' +
+                    '<span class="ecom-ctl-live-dot"></span>' +
+                    'The battery right now' +
+                    '<span class="ecom-ctl-note">' +
+                        (stale ? 'last seen ' : '') +
+                        esc(String(power.at || '').slice(11, 16) || 'no time') +
+                    '</span>' +
+                '</div>' +
+                '<div class="ecom-ctl-live-rows">' +
+                    '<div><span>Power</span><b>' + one(power, 'kW') +
+                        ' &middot; ' + doing + '</b></div>' +
+                    '<div><span>Charge</span><b>' +
+                        one(live.soc_percent, '%', 0) + '</b></div>' +
+                    '<div><span>Roof</span><b>' + one(live.solar_kw, 'kW') + '</b></div>' +
+                    '<div><span>Setpoint</span><b>' + one(live.setpoint_kw, 'kW') +
+                        ' &middot; ' +
+                        ((live.command || {}).value ? 'running' : 'stopped') + '</b></div>' +
+                '</div>' +
+                '<span class="ecom-ctl-hint">Positive is discharging, negative is ' +
+                'charging, as the site reads it. Read-only: the table never ' +
+                'sends the battery a command.</span>' +
+            '</div>';
+    }
+
     function storageGroup() {
         const bat = battery();
         if (!bat) {
@@ -2356,6 +2436,7 @@
                 '<p class="ecom-ctl-empty">No battery in this community.</p>');
         }
         return group('storage', 'Storage', Math.round(bat.capacity) + ' kWh',
+            liveBattery() +
             slider({
                 name: 'battery_kwh', label: 'Battery capacity',
                 value: bat.capacity, min: 0, max: 5000, step: 50, unit: 'kWh',
@@ -3112,6 +3193,9 @@
             render();
             return;
         }
+
+        // The real battery, every few seconds, for the Storage group.
+        watchLive();
 
         // The car park the chargers stand in, for the position slider. Not
         // awaited: the panel opens on Members and the group is closed until
