@@ -122,11 +122,16 @@ def _number(entry: dict) -> Optional[float]:
 
 
 def _reading(entry: dict, scale: float = 1.0) -> dict:
-    value = _number(entry)
     stamp = entry.get("Timestamp") or ""
+    # 0001-01-01 is the gateway's way of saying it has never held a value for
+    # this tag, and it sends "0.00" alongside. That zero is not a measurement,
+    # it is the absence of one - and "0.0 kW, idle" is a claim about the
+    # battery that nobody made. Drop the value with the timestamp.
+    never = stamp.startswith("0001-")
+    value = None if never else _number(entry)
     return {
         "value": None if value is None else value * scale,
-        "at": stamp if not stamp.startswith("0001-") else None,
+        "at": None if never else stamp,
         # The gateway's own word for it, kept rather than interpreted.
         "status": entry.get("Status"),
         "fresh": entry.get("Status") == FRESH,

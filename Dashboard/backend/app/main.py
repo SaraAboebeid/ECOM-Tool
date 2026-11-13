@@ -31,6 +31,7 @@ from app.services.dispatch import run_dispatch
 from app.services.nordpool import NordPoolClient, NordPoolUnavailable
 from app.services.jobs import runner
 from app.services.mr_layer import build_layer
+from app.services import peaks
 from app.services.optimize import run_optimization, solver_status
 from app.services.sweep import run_sweep
 from app.schemas.optimizer_params import OptimizerParameters, describe_parameters
@@ -412,6 +413,29 @@ def scenario_years(name: str) -> dict:
         "current": int(sorted(current)[0]) if len(current) == 1 else None,
         "buildings_with_measured_demand": len(per_building),
     }
+
+
+@app.get("/api/scenarios/{name}/peaks")
+def scenario_peaks(name: str) -> dict:
+    """The busiest hour and busiest day of each year, for aiming the table.
+
+    A day picked at random is a mild one. These are the two moments the
+    community actually has to answer for, so they are worth one click rather
+    than a hunt through the date pickers.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise HTTPException(status_code=400, detail="invalid scenario name")
+
+    path = SCENARIO_DIR / f"{name}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no scenario named {name!r}")
+
+    definition = json.loads(path.read_text(encoding="utf-8"))
+    years = scenario_years(name)["years"]
+    # Keyed on the scenario's own mtime: change which buildings are members and
+    # the peaks are recomputed, otherwise the first answer stands.
+    key = (name, path.stat().st_mtime_ns, tuple(years))
+    return peaks.for_scenario(definition, years, key)
 
 # --------------------------------------------------------------- MR table
 

@@ -574,6 +574,65 @@
     line-height: 1.4;
 }
 
+/* Shortcuts to the hardest moments in the measured data. Each chip carries two
+   lines - what it is, and when that falls - because "2022 peak day" alone is
+   not something anyone can check against a calendar. */
+.ecom-peak-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.1rem;
+}
+
+.ecom-peak-row > label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+    margin-right: 0.1rem;
+}
+
+.ecom-peak-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.05rem;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid #3f3f46;
+    border-radius: 7px;
+    background: #27272a;
+    color: #e4e4e7;
+    font: inherit;
+    line-height: 1.15;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.ecom-peak-chip:hover {
+    background: #323238;
+    border-color: #60a5fa;
+}
+
+.ecom-peak-chip:active { transform: translateY(1px); }
+
+.ecom-peak-chip b {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #60a5fa;
+}
+
+.ecom-peak-chip span {
+    font-size: 0.68rem;
+    color: #a1a1aa;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ecom-peak-chip { transition: none; }
+    .ecom-peak-chip:active { transform: none; }
+}
+
 /* Whether a display is actually listening. BroadcastChannel fails silently
    across origins, so without this the panel looks identical when every control
    is going nowhere. */
