@@ -91,6 +91,21 @@ class PVPlantSpec(BaseModel):
     lon: float = DEFAULT_LON
 
     module: PVModuleSpec = Field(default_factory=PVModuleSpec)
+
+    # Which building's roof this plant sits on, by footprint id - "awl", "sb2".
+    #
+    # Only meaningful for a community plant, which is one no building names in
+    # its own pv_plants. An array on a member's roof is already placed by that
+    # relationship; this is for panels the community owns on a roof whose
+    # occupier is not a member, which otherwise has nowhere to be drawn and
+    # ends up out on the ring with the shared assets.
+    host: Optional[Annotated[str, Field(min_length=1)]] = Field(
+        default=None,
+        description='Footprint id of the building whose roof it sits on, e.g. '
+                    '"awl". For community plants; roof arrays are placed by '
+                    'the building that names them.',
+    )
+
     location: Optional[Coordinates] = None
 
     @property

@@ -118,6 +118,19 @@ class ChargePointSpec(BaseModel):
     is_v2g: bool = False
     owner: Owner
 
+    # Which building this charger belongs to, by footprint id - "awl", "sb2".
+    #
+    # Unlike a battery's host, this does not place the marker: a charger stands
+    # outside the building, not in it, so lat/lon below carry the position. It
+    # records whose charger it is, so that a building leaving the community
+    # takes its charger with it rather than leaving one bolted to a wall
+    # nobody is paying for.
+    host: Optional[Annotated[str, Field(min_length=1)]] = Field(
+        default=None,
+        description='Footprint id of the building it serves, e.g. "awl". '
+                    "Community chargers leave this empty.",
+    )
+
     ev: Optional[ElectricVehicleSpec] = Field(
         default=None,
         description="The single vehicle assigned to this charger. See the "

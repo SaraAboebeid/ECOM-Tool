@@ -134,6 +134,17 @@ def serialise_graph(dispatcher: ECOMDispatcher, built: BuiltCommunity,
                         plant.module_count * plant.module.embodied_co2_per_panel),
                     annual_production=_f(_annual_pv(dispatcher, plant.name)),
                 )
+                # Community panels on a named roof. The toolkit plant carries
+                # no host, so it is read back off the spec that built it - a
+                # roof array needs none, because the building that names it
+                # places it already.
+                if "_PV_" not in node_id:
+                    hosted = next(
+                        (p for p in getattr(spec, "pv_plants", [])
+                         if p.name == plant.name and getattr(p, "host", None)),
+                        None)
+                    if hosted is not None:
+                        node["host"] = hosted.host
 
         elif kind == "battery":
             battery = by_name["battery"].get(node_id[len("BAT_"):])

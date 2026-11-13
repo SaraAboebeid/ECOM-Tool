@@ -6,9 +6,19 @@ except ImportError:
 class Battery:
     """A Battery object for Grasshopper use (ECOM4Future)."""
 
-    def __init__(self, name, capacity, point, cost, embodied_co2, efficiency, lifespan, degradation, initial_soc=None, max_power=None):
+    def __init__(self, name, capacity, point, cost, embodied_co2, efficiency, lifespan, degradation, initial_soc=None, max_power=None, host_building=None):
         self.name = str(name)
         self.capacity = float(capacity)  # kWh (initial capacity)
+
+        # The building this battery belongs to, by name, or None for a battery
+        # the whole community shares.
+        #
+        # A hosted battery is wired only to its own building: it takes that
+        # building's surplus before the neighbours see it, and answers that
+        # building's deficit before anyone else's. That is the difference
+        # between a battery in a plant room and a community store, and without
+        # it "add a battery to this building" would just be a marker on a map.
+        self.host_building = str(host_building) if host_building else None
 
         # kW the battery can charge or discharge in one hour. Capacity says how
         # big the tank is; this says how wide the tap is, and they are not the

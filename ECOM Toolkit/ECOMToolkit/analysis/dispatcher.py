@@ -527,21 +527,29 @@ class ECOMDispatcher:
             self.G.add_node(f"PV_{photovoltaic.name}", obj=photovoltaic, type="pv")
             print(f"[GRAPH] Adding community PV node: PV_{photovoltaic.name}")
 
+        member_names = {b.name for b in self.community.building}
         for battery in getattr(self.community, "battery", []):
             self.G.add_node(f"BAT_{battery.name}", obj=battery, type="battery")
-            print(f"[GRAPH] Adding community battery node: BAT_{battery.name}")
-            # Add edges from battery to all buildings and grid (discharge)
-            for building in self.community.building:
-                self.G.add_edge(f"BAT_{battery.name}", building.name, flow=np.zeros(self.n_hours))
-                print(f"[GRAPH] Adding edge: BAT_{battery.name} -> {building.name}")
+
+            # A hosted battery reaches only its own building; a community one
+            # reaches them all. A host that is not a member of the community
+            # cannot be wired to anything, so that battery falls back to being
+            # a community store rather than silently doing nothing.
+            host = self._battery_host(battery)
+            if host is not None:
+                reaches = [host]
+                print(f"[GRAPH] Adding battery node for {host}: BAT_{battery.name}")
+            else:
+                reaches = sorted(member_names)
+                print(f"[GRAPH] Adding community battery node: BAT_{battery.name}")
+
+            for name in reaches:
+                self.G.add_edge(f"BAT_{battery.name}", name, flow=np.zeros(self.n_hours))
+                self.G.add_edge(name, f"BAT_{battery.name}", flow=np.zeros(self.n_hours))
+                print(f"[GRAPH] Adding edges: BAT_{battery.name} <-> {name}")
             self.G.add_edge(f"BAT_{battery.name}", "GRID", flow=np.zeros(self.n_hours))
-            print(f"[GRAPH] Adding edge: BAT_{battery.name} -> GRID")
-            # Add edges from all buildings and grid to battery (charge)
-            for building in self.community.building:
-                self.G.add_edge(building.name, f"BAT_{battery.name}", flow=np.zeros(self.n_hours))
-                print(f"[GRAPH] Adding edge: {building.name} -> BAT_{battery.name}")
             self.G.add_edge("GRID", f"BAT_{battery.name}", flow=np.zeros(self.n_hours))
-            print(f"[GRAPH] Adding edge: GRID -> BAT_{battery.name}")
+            print(f"[GRAPH] Adding edges: BAT_{battery.name} <-> GRID")
 
         for charge_point in getattr(self.community, "charge_point", []):
             self.G.add_node(f"CP_{charge_point.name}", obj=charge_point, type="charge_point")
@@ -871,10 +879,92 @@ class ECOMDispatcher:
         if event_occurred:
             print()
 
+    def _battery_host(self, battery):
+        """The member building this battery belongs to, or None.
+
+        None covers both a community store and a battery whose host is not a
+        member: neither can be served privately, so both are pooled.
+        """
+        host = getattr(battery, "host_building", None)
+        if not host:
+            return None
+        for building in self.community.building:
+            if building.name == host:
+                return building.name
+        return None
+
+    def _own_battery_discharge(self, t, state):
+        """A building's own battery answers its own deficit, before the
+        neighbours are asked.
+
+        Ahead of peer-to-peer on purpose. A battery in a plant room is there to
+        cover that building; having it wait until the community has been round
+        the houses would make it a community store that happens to be drawn in
+        a different place.
+        """
+        for battery in getattr(self.community, "battery", []):
+            host = self._battery_host(battery)
+            if host is None:
+                continue
+            deficit = state["deficit"].get(host, 0.0)
+            if deficit <= 0:
+                continue
+            soc = state["battery_soc"].get(f"BAT_{battery.name}")
+            if soc is None:
+                continue
+            eff = battery.efficiency / 100.0 if hasattr(battery, "efficiency") else 1.0
+            budget = getattr(battery, "max_power", battery.capacity)
+            discharge = min(soc[t], deficit / eff, budget)
+            if discharge <= 0:
+                soc[t + 1] = soc[t]
+                continue
+            self._update_flow(f"BAT_{battery.name}", host, t, discharge * eff)
+            state["deficit"][host] -= discharge * eff
+            soc[t + 1] = soc[t] - discharge
+            print(f"[OWN BATTERY DISCHARGE] Hour {t} BAT_{battery.name} -> {host}: "
+                  f"{discharge * eff:.2f} kWh (SoC before: {soc[t]:.2f})")
+
+    def _own_battery_charge(self, t, state):
+        """A building's own battery takes its own surplus, before it is shared.
+
+        Also ahead of peer-to-peer: the building fills its own store first and
+        shares what is left, which is what makes this battery its own.
+        """
+        for battery in getattr(self.community, "battery", []):
+            host = self._battery_host(battery)
+            if host is None:
+                continue
+            surplus = state["surplus"].get(host, 0.0)
+            soc = state["battery_soc"].get(f"BAT_{battery.name}")
+            if soc is None:
+                continue
+            # _own_battery_discharge may not have run for this battery, so the
+            # hour's starting point is whichever of the two is already set.
+            held = soc[t + 1] if soc[t + 1] else soc[t]
+            if surplus <= 0:
+                soc[t + 1] = held
+                continue
+            eff = battery.efficiency / 100.0 if hasattr(battery, "efficiency") else 1.0
+            budget = getattr(battery, "max_power", battery.capacity)
+            charge = min(battery.capacity - held, surplus * eff, budget)
+            if charge <= 0:
+                soc[t + 1] = held
+                continue
+            self._update_flow(host, f"BAT_{battery.name}", t, charge / eff)
+            state["surplus"][host] -= charge / eff
+            soc[t + 1] = held + charge
+            print(f"[OWN BATTERY CHARGE] Hour {t} {host} -> BAT_{battery.name}: "
+                  f"{charge / eff:.2f} kWh (SoC before: {held:.2f})")
+
     def _dispatch_battery_discharge(self, t, state):
         """Community-level batteries discharge to cover remaining deficits."""
         event_occurred = False
         for battery in getattr(self.community, "battery", []):
+            # Hosted batteries were already offered to their own building, and
+            # their SoC for this hour is settled. Taking them again here would
+            # spend the same kWh twice.
+            if self._battery_host(battery) is not None:
+                continue
             bat_node = f"BAT_{battery.name}"
             soc = state["battery_soc"].get(bat_node, None)
             if soc is None:
@@ -915,6 +1005,10 @@ class ECOMDispatcher:
         """Charge community-level batteries with remaining surplus from all entities."""
         event_occurred = False
         for battery in getattr(self.community, "battery", []):
+            # As above: a hosted battery has already taken what it is going to
+            # take from its own building this hour.
+            if self._battery_host(battery) is not None:
+                continue
             bat_node = f"BAT_{battery.name}"
             soc = state["battery_soc"].get(bat_node, None)
             if soc is None:

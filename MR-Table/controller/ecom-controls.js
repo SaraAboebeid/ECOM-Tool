@@ -328,6 +328,10 @@
         year: DATA_YEAR,
         years: [],            // what the backend says there is data for
         peaks: [],            // busiest hour and day of each of those years
+        // For a building that is not a member: whether the community rents its
+        // roof ('community') or the panels are the building's own and sit
+        // dormant ('own', the default - it changes no numbers).
+        roofOwner: {},
         // Whether a display is actually listening. Without this the panel looks
         // identical whether the table is following along or the two are on
         // different origins and nothing is getting through.
@@ -466,24 +470,185 @@
         return JSON.parse(JSON.stringify(value));
     }
 
+    // --------------------------------------------- what a building owns
+    //
+    // A building's own battery and its own chargers, told apart from the
+    // community's by their host. Community storage has none - that is what
+    // makes it the community's - and a community charger likewise.
+
+    /** Coverage given to a roof added from the Members list. */
+    const ADDED_ROOF_COVERAGE = 40;
+
+    /** Capacity of a battery added from the Members list, kWh. */
+    const ADDED_BATTERY_KWH = 50;
+
+    function ownBattery(name) {
+        return (state.working.batteries || []).find(function (b) {
+            return b.attached && sameBuilding(b.host, name);
+        }) || null;
+    }
+
+    function ownChargers(name) {
+        return (state.working.charge_points || []).filter(function (cp) {
+            return sameBuilding(cp.host, name);
+        });
+    }
+
+    /** Footprint ids and building names are spelled differently; match loosely. */
+    function sameBuilding(a, b) {
+        const fold = function (text) {
+            return String(text == null ? '' : text).toLowerCase()
+                .replace(/[^a-z0-9]/g, '');
+        };
+        return !!a && !!b && fold(a) === fold(b);
+    }
+
+    /** Add or remove one piece of kit on one building.
+     *
+     * A toggle rather than an add button, because the question at the table is
+     * "does this building have solar?" and the answer should be reversible by
+     * pressing the same thing again.
+     */
+    async function toggleKit(kind, name) {
+        if (kind === 'pv') {
+            setRoofCoverage(name,
+                roofCoverage(name) > 0 ? 0 : ADDED_ROOF_COVERAGE);
+            render();
+            markDirty();
+            return;
+        }
+
+        if (kind === 'battery') {
+            const mine = ownBattery(name);
+            state.working.batteries = state.working.batteries || [];
+            if (mine) {
+                state.working.batteries = state.working.batteries
+                    .filter(function (b) { return b !== mine; });
+            } else {
+                state.working.batteries.push({
+                    name: name + ' battery',
+                    capacity: ADDED_BATTERY_KWH,
+                    // The campus rate, same as the community unit.
+                    c_rate: 0.25,
+                    efficiency: 90.0,
+                    initial_soc_fraction: 0.5,
+                    host: name,
+                    // What makes it this building's rather than a community
+                    // battery that happens to stand in it.
+                    attached: true
+                });
+            }
+            render();
+            markDirty();
+            return;
+        }
+
+        if (kind === 'charger') {
+            const mine = ownChargers(name);
+            state.working.charge_points = state.working.charge_points || [];
+            if (mine.length) {
+                const drop = new Set(mine);
+                state.working.charge_points = state.working.charge_points
+                    .filter(function (cp) { return !drop.has(cp); });
+                render();
+                markDirty();
+                return;
+            }
+
+            // Outside the building and clear of its neighbours. Worked out
+            // before anything is added, so a building with nowhere to put one
+            // says so rather than dropping a marker in a wall.
+            let spot = null;
+            try {
+                const taken = (state.working.charge_points || [])
+                    .filter(function (cp) { return cp.lon != null && cp.lat != null; })
+                    .map(function (cp) { return [cp.lon, cp.lat]; });
+                spot = await outsideSpot(name, taken);
+            } catch (error) {
+                setStatus('Could not read the footprints: ' + error.message, 'error');
+                return;
+            }
+            if (!spot) {
+                setStatus('No room outside ' + name + ' for a charger clear of ' +
+                          'its neighbours.', 'error');
+                return;
+            }
+
+            state.working.charge_points.push({
+                name: name + ' CP',
+                capacity: 22,
+                charger_type: 'AC Level 2',
+                owner: 'Akademiska Hus',
+                host: name,
+                lon: spot[0],
+                lat: spot[1],
+                ev: { name: name + ' EV', capacity: 60 }
+            });
+            render();
+            markDirty();
+        }
+    }
+
+    /** How many buildings are actually in the community. */
+    function memberCount() {
+        if (!state.base || !state.base.buildings) return 0;
+        return state.base.buildings.length - state.excluded.size;
+    }
+
     /** The definition to dispatch: the working copy minus excluded members. */
     function buildSpec() {
         const spec = clone(state.working);
 
         if (state.excluded.size) {
+            // Which non-members' roofs the community rents, and which keep
+            // their panels to themselves. A rented array stays in the spec
+            // attached to nobody, which is how the builder recognises a
+            // community plant, and carries a host so the table still draws it
+            // on the right roof. A building's own array leaves with it.
+            const rented = new Set();
+            const dormant = new Set();
+            spec.buildings.forEach(function (b) {
+                if (!state.excluded.has(b.name)) return;
+                const names = b.pv_plants || [];
+                if (!names.length) return;
+                const target = state.roofOwner[b.name] === 'community'
+                    ? rented : dormant;
+                names.forEach(function (name) { target.add(name); });
+            });
+
+            const hostOf = {};
+            spec.buildings.forEach(function (b) {
+                (b.pv_plants || []).forEach(function (name) {
+                    if (rented.has(name)) hostOf[name] = b.name;
+                });
+            });
+
             spec.buildings = spec.buildings.filter(function (b) {
                 return !state.excluded.has(b.name);
             });
-            // A roof array left behind when its host leaves is not orphaned -
-            // the builder promotes an unattached plant to a community plant, so
-            // it would keep generating for a building nobody can see. Dropped
-            // with its host instead.
+
             const kept = new Set();
             spec.buildings.forEach(function (b) {
                 (b.pv_plants || []).forEach(function (name) { kept.add(name); });
             });
             spec.pv_plants = (spec.pv_plants || []).filter(function (p) {
-                return kept.has(p.name);
+                return kept.has(p.name) || rented.has(p.name);
+            }).map(function (p) {
+                // Named by no building any more, so it needs to say where it is.
+                if (rented.has(p.name) && hostOf[p.name]) {
+                    p.host = hostOf[p.name];
+                }
+                return p;
+            });
+
+            // A battery belongs to its building: out it goes with it. Community
+            // storage - the unattached kind - stays whatever happens.
+            spec.batteries = (spec.batteries || []).filter(function (b) {
+                return !(b.attached && b.host && state.excluded.has(b.host));
+            });
+            // So does a charger: it is mounted on that building's wall.
+            spec.charge_points = (spec.charge_points || []).filter(function (cp) {
+                return !(cp.host && state.excluded.has(cp.host));
             });
         }
 
@@ -548,6 +713,15 @@
     const BAY_CLEARANCE_M = 8;
 
     let bays = null;                // [[lon, lat], ...] one end of the house to the other
+    let footprints = null;          // every campus footprint, by id
+
+    // How far outside its own wall a charger stands, and how far it has to stay
+    // from anybody else's. The first is a pavement's width - close enough to
+    // read as this building's. The second is what keeps the marker, which is
+    // drawn with a glow several times its own size, from sitting on top of the
+    // neighbour it is not plugged into.
+    const CHARGER_STANDOFF_M = 12;
+    const CHARGER_NEIGHBOUR_M = 14;
 
     function ringsOf(geometry) {
         if (!geometry) return [];
@@ -585,6 +759,93 @@
             near = Math.min(near, Math.hypot(px - t * dx, py - t * dy));
         }
         return near * M_PER_DEG;
+    }
+
+    /** Every campus footprint, keyed by its id. Fetched once. */
+    async function loadFootprints() {
+        if (footprints) return footprints;
+        const response = await fetch(FOOTPRINTS_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(FOOTPRINTS_URL + ': ' + response.status);
+        const data = await response.json();
+        footprints = {};
+        (data.features || []).forEach(function (feature) {
+            const id = (feature.properties || {}).id;
+            if (!id) return;
+            const rings = ringsOf(feature.geometry);
+            if (rings.length) footprints[id] = rings;
+        });
+        return footprints;
+    }
+
+    /** Somewhere outside this building to stand a charger.
+     *
+     * A charger is not in the building, it is against it - so the candidates
+     * are points a pavement's width out from each wall, and the one chosen is
+     * the one with the most room around it. Any candidate that lands inside
+     * another building, or too close to one, is discarded rather than nudged:
+     * a charger drawn through a neighbour's wall is worse than one on the far
+     * side of its own.
+     *
+     * Returns [lon, lat], or null when the building has no footprint we know
+     * or every side of it is blocked.
+     */
+    async function outsideSpot(buildingName, taken) {
+        const all = await loadFootprints();
+        const key = Object.keys(all).find(function (id) {
+            return sameBuilding(id, buildingName);
+        });
+        if (!key) return null;
+
+        const mine = all[key].slice().sort(function (a, b) {
+            return b.length - a.length;
+        })[0];
+        const others = Object.keys(all).filter(function (id) { return id !== key; })
+            .reduce(function (list, id) { return list.concat(all[id]); }, []);
+
+        let best = null;
+        let bestRoom = -Infinity;
+
+        for (let i = 0, j = mine.length - 1; i < mine.length; j = i++) {
+            const a = mine[j];
+            const b = mine[i];
+            // Midpoint of this wall, and the outward normal to it. Which of the
+            // two normals points out is decided by testing one of them.
+            const mx = (a[0] + b[0]) / 2;
+            const my = (a[1] + b[1]) / 2;
+            const dx = (b[0] - a[0]) * LON_SCALE;
+            const dy = b[1] - a[1];
+            const len = Math.hypot(dx, dy);
+            if (len <= 0) continue;
+
+            const step = CHARGER_STANDOFF_M / M_PER_DEG;
+            let nx = (dy / len) * step / LON_SCALE;
+            let ny = (-dx / len) * step;
+            if (insideRing([mx + nx, my + ny], mine)) { nx = -nx; ny = -ny; }
+
+            const spot = [mx + nx, my + ny];
+            if (insideRing(spot, mine)) continue;
+
+            // Room: how far the nearest other building is, and how far the
+            // nearest charger already placed. Both matter, so take the worse.
+            let room = Infinity;
+            for (const ring of others) {
+                if (insideRing(spot, ring)) { room = -1; break; }
+                room = Math.min(room, metresFromWalls(spot, ring));
+            }
+            if (room < CHARGER_NEIGHBOUR_M) continue;
+
+            (taken || []).forEach(function (other) {
+                const ddx = (spot[0] - other[0]) * LON_SCALE;
+                const ddy = spot[1] - other[1];
+                room = Math.min(room, Math.hypot(ddx, ddy) * M_PER_DEG);
+            });
+
+            if (room > bestRoom) {
+                bestRoom = room;
+                best = spot;
+            }
+        }
+        return best;
     }
 
     async function loadBays() {
@@ -952,6 +1213,23 @@
     async function applyNow() {
         if (state.api === null) {
             setStatus('No backend - start it and reload.', 'error');
+            return;
+        }
+
+        // An empty community has nothing to dispatch. The backend refuses it
+        // outright - every KPI would be zero - so the table is cleared here
+        // instead, which is also what the panel shows on the way in.
+        if (!memberCount()) {
+            if (applyTimer !== null) {
+                clearTimeout(applyTimer);
+                applyTimer = null;
+            }
+            state.layer = null;
+            state.dirty = false;
+            finishBusy();
+            channel.postMessage({ type: 'ecom_empty' });
+            setStatus('No members yet - tick a building to start.', 'idle');
+            render();
             return;
         }
 
@@ -2371,13 +2649,33 @@
             // A building with no footprint in the campus file has no roof we
             // can size, so it is shown and disabled rather than quietly absent.
             const usable = area > 0;
+            // Panels can go on any roof on the campus, member or not. What
+            // differs is who they belong to, and that only has to be asked
+            // once there are panels and the building is not a member.
+            const outside = state.excluded.has(b.name);
+            const rented = state.roofOwner[b.name] === 'community';
             return '' +
                 '<div class="ecom-roof' + (coverage > 0 ? ' is-on' : '') +
-                    (usable ? '' : ' is-blocked') + '">' +
+                    (usable ? '' : ' is-blocked') +
+                    (outside ? ' is-outside' : '') + '">' +
                     '<span class="ecom-roof-name">' + esc(b.name) +
                         (surveyed ? '<i class="ecom-roof-tag" title="Surveyed ' +
                          'from the Rhino model - real surface, tilt and azimuth">' +
                          'surveyed</i>' : '') +
+                        (outside && coverage > 0
+                            ? '<button type="button" class="ecom-roof-owner' +
+                                  (rented ? ' is-rented' : '') + '"' +
+                                  ' data-roofowner="' + esc(b.name) + '"' +
+                                  ' title="' + (rented
+                                      ? 'The community rents this roof: the panels ' +
+                                        'feed the members even though this building ' +
+                                        'is not one. Tap to hand them back.'
+                                      : 'The panels are this building\'s own and it ' +
+                                        'is not a member, so they feed nobody in the ' +
+                                        'community. Tap to rent the roof.') + '">' +
+                                  (rented ? 'rented' : 'dormant') +
+                              '</button>'
+                            : '') +
                     '</span>' +
                     '<span class="ecom-roof-area">' +
                         (usable ? area.toLocaleString() + ' m²' : 'no roof data') +
@@ -2658,14 +2956,56 @@
         const inCount = all.length - state.excluded.size;
         const rows = all.map(function (b) {
             const on = !state.excluded.has(b.name);
+            // What this building already has of its own. Only offered once it
+            // is a member: a battery or a charger on a building outside the
+            // scheme has nobody to serve, and the panel should not pretend
+            // otherwise by letting one be added.
+            const kit = on
+                ? '<div class="ecom-ctl-member-kit">' +
+                      '<button type="button" class="ecom-kit' +
+                          (roofCoverage(b.name) > 0 ? ' is-on' : '') + '"' +
+                          ' data-kit="pv" data-kit-building="' + esc(b.name) + '"' +
+                          ' title="Panels on this roof, at ' + ADDED_ROOF_COVERAGE +
+                          '% coverage. The Solar group sets the share exactly.">' +
+                          '<span class="material-icons">wb_sunny</span>' +
+                          (roofCoverage(b.name) > 0
+                              ? Math.round(roofKw(b.name)) + ' kW' : 'PV') +
+                      '</button>' +
+                      '<button type="button" class="ecom-kit' +
+                          (ownBattery(b.name) ? ' is-on' : '') + '"' +
+                          ' data-kit="battery" data-kit-building="' + esc(b.name) + '"' +
+                          ' title="A battery in this building, which takes its ' +
+                          'surplus before the neighbours see it and covers its ' +
+                          'own demand first. Community storage is separate.">' +
+                          '<span class="material-icons">battery_charging_full</span>' +
+                          (ownBattery(b.name)
+                              ? Math.round(ownBattery(b.name).capacity) + ' kWh'
+                              : 'Battery') +
+                      '</button>' +
+                      '<button type="button" class="ecom-kit' +
+                          (ownChargers(b.name).length ? ' is-on' : '') + '"' +
+                          ' data-kit="charger" data-kit-building="' + esc(b.name) + '"' +
+                          ' title="A charge point outside this building, placed ' +
+                          'clear of its neighbours.">' +
+                          '<span class="material-icons">ev_station</span>' +
+                          (ownChargers(b.name).length
+                              ? String(ownChargers(b.name).length) : 'Charger') +
+                      '</button>' +
+                  '</div>'
+                : '';
+
             return '' +
-                '<label class="ecom-ctl-member' + (on ? '' : ' is-off') + '"' +
-                ' data-member="' + esc(b.name) + '">' +
-                    '<input type="checkbox" data-member="' + esc(b.name) + '"' +
-                        (on ? ' checked' : '') + '>' +
-                    '<span class="ecom-ctl-member-name">' + esc(b.name) + '</span>' +
-                    '<span class="ecom-ctl-member-owner">' + esc(b.owner || '') + '</span>' +
-                '</label>';
+                '<div class="ecom-ctl-member-row' + (on ? '' : ' is-off') + '">' +
+                    '<label class="ecom-ctl-member' + (on ? '' : ' is-off') + '"' +
+                    ' data-member="' + esc(b.name) + '">' +
+                        '<input type="checkbox" data-member="' + esc(b.name) + '"' +
+                            (on ? ' checked' : '') + '>' +
+                        '<span class="ecom-ctl-member-name">' + esc(b.name) + '</span>' +
+                        '<span class="ecom-ctl-member-owner">' +
+                            esc(b.owner || '') + '</span>' +
+                    '</label>' +
+                    kit +
+                '</div>';
         }).join('');
 
         return group('members', 'Members', inCount + ' of ' + all.length,
@@ -3101,7 +3441,7 @@
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
         'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step',
-        'data-optimizer-span', 'data-peak'
+        'data-optimizer-span', 'data-peak', 'data-kit', 'data-roofowner'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
         return '[' + name + ']';
@@ -3245,14 +3585,32 @@
             return;
         }
 
+        // Who owns the panels on a roof outside the community.
+        const roofOwner = el.getAttribute('data-roofowner');
+        if (roofOwner) {
+            state.roofOwner[roofOwner] =
+                state.roofOwner[roofOwner] === 'community' ? 'own' : 'community';
+            render();
+            markDirty();
+            return;
+        }
+
+        // Give a member a roof, a battery or a charger - or take it away again.
+        const kit = el.getAttribute('data-kit');
+        if (kit) {
+            const name = el.getAttribute('data-kit-building');
+            if (name) toggleKit(kit, name);
+            return;
+        }
+
         const members = el.getAttribute('data-members');
         if (members) {
             if (members === 'all') {
                 state.excluded = new Set();
             } else {
-                // One member has to stay: the backend refuses a community with
-                // no buildings, and every KPI would be zero anyway.
-                state.excluded = new Set(state.base.buildings.slice(1)
+                // Everyone out, including the last one. The panel opens in
+                // this state, so it has to be reachable from the buttons.
+                state.excluded = new Set(state.base.buildings
                     .map(function (b) { return b.name; }));
             }
             render();
@@ -3269,15 +3627,15 @@
             if (target.checked) state.excluded.delete(member);
             else state.excluded.add(member);
 
-            if (state.excluded.size >= state.base.buildings.length) {
-                // Refuse rather than let the dispatch 422 on an empty community.
-                state.excluded.delete(member);
-                target.checked = true;
-                setStatus('A community needs at least one building.', 'error');
-                return;
-            }
-
+            // An empty community is a legitimate place to be - it is where the
+            // panel starts - so taking the last member out is allowed. What it
+            // cannot do is dispatch: the backend refuses a community with no
+            // buildings, and every KPI would be zero. markDirty handles that;
+            // see applyNow, which clears the table instead of posting.
             target.parentElement.classList.toggle('is-off', !target.checked);
+            // The per-building controls appear and disappear with membership,
+            // so the whole panel is rebuilt rather than this one row patched.
+            render();
             markDirty();
             return;
         }
@@ -3335,6 +3693,18 @@
 
         try {
             state.base = await getJson('/api/scenarios/' + SCENARIO);
+            // Nobody is in the community until someone is put in it. The
+            // campus is a set of buildings that could join, not a scheme that
+            // exists and can be whittled down, and starting from empty is the
+            // difference between demonstrating that and asserting it.
+            state.excluded = new Set(state.base.buildings.map(function (b) {
+                return b.name;
+            }));
+            // Said out loud, straight away. The display loads the committed
+            // export when it comes up - a full community, baked in - and with
+            // nothing to contradict it the table would show a scheme the panel
+            // says has no members in it.
+            channel.postMessage({ type: 'ecom_empty' });
         } catch (error) {
             state.api = null;
             loaded = false;

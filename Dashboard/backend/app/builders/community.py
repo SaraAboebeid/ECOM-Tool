@@ -68,9 +68,24 @@ def build_community(
         remember(building_spec.name, "building", building_spec.location)
 
     # --- batteries ---
+    #
+    # A battery names its host as a footprint id - "awl", "sb2" - because that
+    # is what the table draws with. The dispatcher knows buildings by name, so
+    # the two are matched loosely here: letters and digits only, folded to
+    # lower case, which is enough to join "CSB Chabo" to "csb-chabo".
+    def loose(text: str) -> str:
+        return "".join(ch for ch in str(text).lower() if ch.isalnum())
+
+    by_loose_name = {loose(b.name): b.name for b in spec.buildings}
+
     batteries = []
     for battery_spec in spec.batteries:
-        batteries.append(build_battery(battery_spec))
+        # An unmatched host is community storage, not an error: a battery may
+        # legitimately stand in a building whose meter is not in the scheme,
+        # and the dispatcher pools anything it cannot wire privately.
+        host = (by_loose_name.get(loose(battery_spec.host))
+                if battery_spec.attached and battery_spec.host else None)
+        batteries.append(build_battery(battery_spec, host_building=host))
         remember(f"BAT_{battery_spec.name}", "battery", battery_spec.location)
 
     # --- charge points ---

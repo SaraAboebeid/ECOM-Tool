@@ -65,6 +65,23 @@ class BatterySpec(BaseModel):
         "Converted to kWh for the toolkit and used directly by LEC-Opt.",
     )
 
+    # Whether the host owns this battery or merely houses it.
+    #
+    # These are different things and the campus has both. The 247 kWh unit at
+    # AWL is community storage that happens to stand in AWL's plant room: it
+    # answers any member. A battery someone adds to a building from the panel
+    # is that building's: it takes that building's surplus before the
+    # neighbours see it, and covers that building's deficit first.
+    #
+    # Defaults to False so that a scenario written before this field existed
+    # keeps the meaning it had - host placed the marker and nothing more.
+    attached: bool = Field(
+        False,
+        description="True when the host building owns this battery and is "
+                    "served by it first. False makes it community storage, "
+                    "drawn at the host but shared by everyone.",
+    )
+
     location: Optional[Coordinates] = None
 
     # Which building it stands in, by footprint id - "awl", "sb2" and so on.

@@ -241,11 +241,38 @@ def build_optimizer_inputs(
     # community and to no member. Every constraint that touches storage is
     # already guarded with `if building.bess_capacity == 0`, so the real
     # buildings are unaffected.
-    total_battery = sum(b.capacity for b in spec.batteries)
+    # A battery that names a member building belongs to it; the rest are the
+    # community store. LEC-Opt already carries bess_capacity per building, so
+    # a hosted battery lands on that building's own row and only the unhosted
+    # remainder goes to the community node.
+    def _loose(text: object) -> str:
+        return "".join(ch for ch in str(text).lower() if ch.isalnum())
+
+    by_loose_name = {_loose(b.name): b.name for b in spec.buildings}
+    hosted: dict[str, list] = {}
+    shared = []
+    for battery in spec.batteries:
+        name = (by_loose_name.get(_loose(battery.host))
+                if battery.attached and battery.host else None)
+        if name is None:
+            shared.append(battery)
+        else:
+            hosted.setdefault(name, []).append(battery)
+
+    total_battery = sum(b.capacity for b in shared)
     # Was `sum(b.capacity ...)` - an unstated 1C, which let a 54 kWh battery
     # answer a 54 kW peak. The spec now carries the rate, defaulting to the
     # 0.25C the campus workbook applies to a battery that states no rate.
-    total_power = sum(b.power_kw for b in spec.batteries)
+    total_power = sum(b.power_kw for b in shared)
+
+    if hosted:
+        notes.append(
+            f"{sum(b.capacity for v in hosted.values() for b in v):,.0f} kWh of "
+            f"storage is attached to {len(hosted)} member "
+            f"building{'s' if len(hosted) != 1 else ''} and serves "
+            f"{'them' if len(hosted) != 1 else 'it'} first: "
+            + ", ".join(sorted(hosted)) + "."
+        )
 
     if total_battery > 0:
         notes.append(
@@ -312,12 +339,14 @@ def build_optimizer_inputs(
             for i in range(min(len(series), HOURS_PER_YEAR)):
                 pv_total[i] += series[i]
 
+        # A building holds whatever is hosted in it, and nothing otherwise -
+        # the unhosted remainder sits on the community node below.
+        mine = hosted.get(building.name, [])
         building_data[building.name] = pd.DataFrame({
             "electricity_load": _slice(demand, spec, n),
             "pv_production": _slice(pv_total, spec, n),
-            # Member buildings hold no storage; the community node does.
-            "bess_capacity": [0.0] * n,
-            "bess_power": [0.0] * n,
+            "bess_capacity": [sum(b.capacity for b in mine)] * n,
+            "bess_power": [sum(b.power_kw for b in mine)] * n,
         }, index=index)
 
     if total_battery > 0:

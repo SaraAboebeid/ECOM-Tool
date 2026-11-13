@@ -11,7 +11,14 @@ class BatteryBuildError(ValueError):
     """Raised with the offending battery named."""
 
 
-def build_battery(spec: BatterySpec) -> Battery:
+def build_battery(spec: BatterySpec, host_building: str | None = None) -> Battery:
+    """Build the toolkit battery.
+
+    host_building is the member building this one belongs to, already resolved
+    to the name the dispatcher knows it by - spec.host is a footprint id, which
+    is what the table draws with, and the two are not always spelled the same.
+    Passing None makes it community storage.
+    """
     try:
         battery = Battery(
             name=spec.name,
@@ -24,6 +31,7 @@ def build_battery(spec: BatterySpec) -> Battery:
             degradation=spec.degradation,
             initial_soc=spec.initial_soc_kwh,  # toolkit wants kWh, not a fraction
             max_power=spec.power_kw,           # capacity x C-rate, kW
+            host_building=host_building,       # None means community storage
         )
     except Exception as err:
         raise BatteryBuildError(f"battery {spec.name!r}: {err}") from err

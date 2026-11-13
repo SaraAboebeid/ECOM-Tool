@@ -3022,7 +3022,7 @@
     // keyboard, so a static hour would just look broken. The ECOM dashboard can
     // still take over - a timeline message stops the clock, because two things
     // driving the hour at once reads as a stutter.
-    const HOUR_MS = 10000;
+    const HOUR_MS = 5000;
 
     let clockTimer = null;
     let hourCount = 24;
@@ -3148,6 +3148,87 @@
             (p.flow_hourly || []).forEach(function (v) { ev += Math.max(0, v || 0); });
         });
         return { members: members, chargers: chargers, total_ev_charging: ev };
+    }
+
+    /** Clear the table down to a campus nobody has joined yet.
+     *
+     * The footprints stay - they come from the static file, not the dispatch,
+     * and a map with no buildings is not a campus waiting for a community, it
+     * is a broken map. Everything the dispatch produced goes: flows, assets,
+     * KPIs, the period. The empty state is a real reading, so it is announced
+     * as one rather than left as whatever the last run happened to leave.
+     */
+    function showEmpty() {
+        layerKpis = null;
+        layerHours = null;
+        layerPeriod = null;
+        nodeData = { type: 'FeatureCollection', features: [] };
+        flowData = { type: 'FeatureCollection', features: [] };
+        // The buildings keep their geometry and lose their membership. What
+        // makes a building a member here is carrying an `ecom` object - see
+        // setHour, where a feature without one stays dark - so that is what
+        // goes. ecom_meta goes with it, or announceKpis falls back to the
+        // committed export's totals and the bar keeps reading 33 members.
+        if (layerData && layerData.features) {
+            layerData = {
+                type: 'FeatureCollection',
+                features: layerData.features.map(function (feature) {
+                    const copy = JSON.parse(JSON.stringify(feature));
+                    copy.properties = copy.properties || {};
+                    delete copy.properties.ecom;
+                    copy.properties.has_pv = 0;
+                    copy.properties.pv_kw = 0;
+                    copy.properties.demandNow = 0;
+                    copy.properties.solarNow = 0;
+                    // Nobody hosts a battery when there is no community: this
+                    // is what ecom-battery-host-fill filters on, and leaving
+                    // it set keeps one building lit to a charge it no longer
+                    // holds.
+                    copy.properties.batteryHost = 0;
+                    return copy;
+                })
+            };
+        }
+        // Written even while the layer is off, for the same reason applyLayer
+        // does it: the sources outlive a deactivation, so leaving them full
+        // would redraw the old community the moment the layer came back on.
+        // The travelling lights are rebuilt from this every frame, so emptying
+        // their source alone lasts until the next tick.
+        headPaths = [];
+
+        const empty = { type: 'FeatureCollection', features: [] };
+        const fillSource = map.getSource(SOURCE_ID);
+        if (fillSource && layerData) fillSource.setData(layerData);
+        // Every derived source as well. The travelling lights and the battery
+        // fill are drawn from their own sources, so clearing the flows alone
+        // left dots moving along streets that no longer carry anything and a
+        // building still filled to the charge of a battery nobody owns.
+        [NODES_SOURCE_ID, FLOWS_SOURCE_ID, FLOW_HEAD_SOURCE_ID,
+         BATTERY_LEVEL_SOURCE_ID].forEach(function (id) {
+            const source = map.getSource(id);
+            if (source) source.setData(empty);
+        });
+
+        setHour(0);
+
+        if (!isActive) return;
+
+        showCaption(null);
+        // Zeroes, stated. announceKpis says nothing when it has no totals, and
+        // silence leaves the bar showing the last community that did have some.
+        ecomChannel.postMessage({
+            type: 'ecom_kpis', hours: 24,
+            kpis: {
+                self_sufficiency: 0, self_consumption: 0,
+                total_demand: 0, total_grid_import: 0, total_grid_export: 0,
+                total_pv_gen: 0, total_pv_used: 0,
+                members: 0, chargers: 0, total_ev_charging: 0
+            }
+        });
+        ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });
+        ecomChannel.postMessage({
+            type: 'ecom_applied', period: '', hours: 0, nodes: 0, flows: 0
+        });
     }
 
     function applyLayer(layer) {
@@ -3570,6 +3651,15 @@
         // A re-dispatched community, sent by the controller's parameter panel.
         if (data.type === 'ecom_layer' && data.layer) {
             applyLayer(data.layer);
+        }
+
+        // No members. Not an error and not a failed dispatch: the panel opens
+        // this way, and the campus is drawn as a set of buildings that could
+        // join rather than a community with nothing in it. Everything the last
+        // dispatch produced is cleared, or the table keeps showing flows for a
+        // community that no longer has anyone in it.
+        if (data.type === 'ecom_empty') {
+            showEmpty();
         }
 
         // View filters. These hide what is already on the table, so they need

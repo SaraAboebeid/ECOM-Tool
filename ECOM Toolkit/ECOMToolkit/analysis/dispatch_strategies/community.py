@@ -23,6 +23,11 @@ class CommunityDispatchStrategy:
             # Before the community's own energy is shared out, so a charger
             # can be served from a roof rather than always from the grid.
             dispatcher._add_charge_point_demand(t, state, charge_point_demand)
+            # A building's own battery, before the neighbours: it covers its
+            # own deficit and takes its own surplus first. Community storage
+            # still runs further down, after peer-to-peer and community PV.
+            dispatcher._own_battery_discharge(t, state)
+            dispatcher._own_battery_charge(t, state)
             dispatcher._dispatch_peer_to_peer(t, state)
             dispatcher._dispatch_community_pv(t, state, community_pv)
             dispatcher._dispatch_battery_discharge(t, state)

@@ -574,6 +574,78 @@
     line-height: 1.4;
 }
 
+/* What a member building owns: panels, a battery, chargers. One row under the
+   tick box, present only while the building is in the community - a battery on
+   a building outside the scheme has nobody to serve. */
+.ecom-ctl-member-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.15rem 0;
+}
+
+.ecom-ctl-member-kit {
+    display: flex;
+    gap: 0.3rem;
+    padding: 0 0 0.2rem 1.6rem;
+}
+
+.ecom-kit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.18rem 0.45rem;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    background: #27272a;
+    color: #a1a1aa;
+    font: inherit;
+    font-size: 0.68rem;
+    line-height: 1.1;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.ecom-kit .material-icons { font-size: 13px; }
+.ecom-kit:hover { background: #323238; color: #e4e4e7; }
+
+/* On, and carrying a number rather than a word: once a building has panels the
+   useful thing to show is how many kilowatts of them. */
+.ecom-kit.is-on {
+    border-color: #60a5fa;
+    background: #1e3a5f;
+    color: #e4e4e7;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A roof outside the community. Dormant by default - the panels are the
+   building's own and feed nobody here - or rented, when the community has
+   taken the roof on. */
+.ecom-roof.is-outside .ecom-roof-name { color: #71717a; }
+
+.ecom-roof-owner {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid #52525b;
+    border-radius: 999px;
+    background: transparent;
+    color: #a1a1aa;
+    font: inherit;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+
+.ecom-roof-owner.is-rented {
+    border-color: #eab308;
+    color: #eab308;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ecom-kit { transition: none; }
+}
+
 /* Shortcuts to the hardest moments in the measured data. Each chip carries two
    lines - what it is, and when that falls - because "2022 peak day" alone is
    not something anyone can check against a calendar. */
