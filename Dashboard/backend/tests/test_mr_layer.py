@@ -96,6 +96,37 @@ def layer(client):
     return response.json()
 
 
+# --------------------------------------------------------------- geometry
+
+def test_has_footprint_folds_accents_and_punctuation():
+    """The same test the layer builder joins on, so the two cannot disagree."""
+    assert mr_layer.has_footprint("Hall A")        # footprint id is 'hall-a'
+    assert mr_layer.has_footprint("Idealära")      # accent here, none there
+    assert not mr_layer.has_footprint("Ghost Hall")
+
+
+def test_geometry_endpoint_separates_drawable_buildings(client, monkeypatch, tmp_path):
+    """A member with no outline is dispatched, counted in every total and drawn
+    nowhere, so the controller is told which buildings it can offer."""
+    import app.main as main
+
+    spec = definition()
+    spec["buildings"].append(
+        {"name": "Ghost Hall", "owner": "Akademiska Hus", "footprint_area": 500.0,
+         "number_of_floors": 2, "demand": {"annual_kwh": 100000, "shape": DAILY}})
+    (tmp_path / "t.json").write_text(json.dumps(spec), encoding="utf-8")
+    monkeypatch.setattr(main, "SCENARIO_DIR", tmp_path)
+
+    body = client.get("/api/scenarios/t/geometry").json()
+    assert body["with_geometry"] == ["Hall A", "Idealära"]
+    assert body["without_geometry"] == ["Ghost Hall"]
+
+
+def test_geometry_endpoint_rejects_a_path_and_a_missing_scenario(client):
+    assert client.get("/api/scenarios/..%2Fsecret/geometry").status_code in (400, 404)
+    assert client.get("/api/scenarios/no_such_scenario/geometry").status_code == 404
+
+
 # ------------------------------------------------------------------- join
 
 def test_canonical_folds_case_accents_and_punctuation():

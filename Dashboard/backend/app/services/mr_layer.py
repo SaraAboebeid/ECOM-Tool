@@ -593,6 +593,32 @@ def _without_seams(geometry: dict) -> dict:
     return {"type": "MultiPolygon", "coordinates": kept}
 
 
+def footprint_keys() -> frozenset:
+    """The canonical id of every building the table has an outline for.
+
+    Not cached on its own: the file text underneath already is, and parsing
+    forty-odd features is cheap enough that a second cache would only go stale
+    under a test that swaps the footprints out.
+
+    The same test build_layer applies to decide whether a member can be drawn -
+    canonical(footprint id) against canonical(member name) - exposed so the
+    controller can offer only those buildings as members, rather than letting a
+    building be ticked in that is dispatched, counted in every total and then
+    drawn nowhere.
+    """
+    data = json.loads(_footprint_text())
+    return frozenset(
+        canonical((feature.get("properties") or {}).get("id", ""))
+        for feature in data.get("features", [])
+        if (feature.get("properties") or {}).get("id")
+    )
+
+
+def has_footprint(name: str) -> bool:
+    """Whether a building of this name has an outline on the table."""
+    return canonical(name) in footprint_keys()
+
+
 def load_footprints() -> dict:
     """A fresh copy of the footprints per call - the caller writes into it.
 

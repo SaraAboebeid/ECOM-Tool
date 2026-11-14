@@ -187,6 +187,52 @@ def test_series_are_json_safe():
     assert len(result["series"]["timestamps"]) == result["hours"]
 
 
+def test_a_day_is_solved_over_36_hours_and_24_are_kept(monkeypatch):
+    """The optimizer looks 36 hours ahead and keeps the first 24.
+
+    Solving each day on its own 24 hours would let the battery empty itself at
+    midnight, because nothing after midnight would be in view. The rolling
+    window is what stops that, so it is asserted rather than left to a default
+    nobody is looking at: what the solver is actually HANDED, not what the
+    request model says it will be handed.
+    """
+    from app.services import optimize
+
+    seen = {}
+    functions1 = optimize._import_lec()
+    real = functions1.optimization_function_lec
+
+    def spy(*args, **kwargs):
+        seen["horizon_hours"] = kwargs["horizon_hours"]
+        seen["store_hours"] = kwargs["store_hours"]
+        seen["input_hours"] = len(next(iter(kwargs["building_data"].values())))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(functions1, "optimization_function_lec", spy)
+
+    # Exactly the arguments the controller sends: a span, and nothing about the
+    # window.
+    result = run_optimization(tiny_spec(), days=1)
+
+    assert seen["horizon_hours"] == 36
+    assert seen["store_hours"] == 24
+    assert result["hours"] == 24            # the 24 kept, not the 36 solved
+    # The last day's window reaches 12 hours past the end of the period, so the
+    # inputs have to run past it.
+    assert seen["input_hours"] >= 24 + (36 - 24)
+
+
+def test_every_optimizer_parameter_says_what_it_stands_for():
+    """The controller shows this beside each constant, so none can be blank."""
+    from app.schemas.optimizer_params import describe_parameters
+
+    for p in describe_parameters():
+        assert len(p["meaning"].strip()) > 40, f"{p['name']} has no meaning"
+        # Provenance stays separate: a file and line number is not an
+        # explanation for someone at the table.
+        assert "functions1.py" not in p["meaning"], p["name"]
+
+
 # ---------------------------------------------------------------- job api
 
 @pytest.fixture

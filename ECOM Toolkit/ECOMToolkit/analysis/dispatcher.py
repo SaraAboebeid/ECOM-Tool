@@ -616,6 +616,10 @@ class ECOMDispatcher:
         elif self.dispatch_mode == "market":
             from ECOMToolkit.analysis.dispatch_strategies.market import MarketDispatchStrategy
             MarketDispatchStrategy().dispatch(self, strategy)
+        elif self.dispatch_mode == "isolated":
+            # The baseline: the same buildings with no community.
+            from ECOMToolkit.analysis.dispatch_strategies.isolated import IsolatedDispatchStrategy
+            IsolatedDispatchStrategy().dispatch(self, strategy)
         else:
             raise ValueError(f"Unknown dispatch mode: {self.dispatch_mode}")
     def _log_hourly_flows(self, t, hour):

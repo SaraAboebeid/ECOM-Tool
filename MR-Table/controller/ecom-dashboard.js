@@ -45,7 +45,7 @@ function renderEcomDashboard() {
             <div class="dashboard-card">
                 <div class="dashboard-section-title">
                     <span class="material-icons" style="font-size: 18px;">insights</span>
-                    Community Performance
+                    With &amp; without the energy community
                 </div>
                 <div id="ecom-kpis" class="ecom-kpis"></div>
             </div>

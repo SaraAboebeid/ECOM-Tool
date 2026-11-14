@@ -586,27 +586,28 @@
 
 .ecom-ctl-member-kit {
     display: flex;
-    gap: 0.3rem;
-    padding: 0 0 0.2rem 1.6rem;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.1rem 0 0.35rem 1.7rem;
 }
 
 .ecom-kit {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.18rem 0.45rem;
+    gap: 0.3rem;
+    padding: 0.3rem 0.6rem;
     border: 1px solid #3f3f46;
-    border-radius: 6px;
+    border-radius: 7px;
     background: #27272a;
     color: #a1a1aa;
     font: inherit;
-    font-size: 0.68rem;
-    line-height: 1.1;
+    font-size: 0.82rem;
+    line-height: 1.15;
     cursor: pointer;
     transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
-.ecom-kit .material-icons { font-size: 13px; }
+.ecom-kit .material-icons { font-size: 16px; }
 .ecom-kit:hover { background: #323238; color: #e4e4e7; }
 
 /* On, and carrying a number rather than a word: once a building has panels the
@@ -617,6 +618,255 @@
     color: #e4e4e7;
     font-variant-numeric: tabular-nums;
 }
+
+/* Size, not just presence. A toggle answers "does this building have a
+   battery"; the table's question is nearly always "how big", and that was not
+   askable anywhere. One row per thing the building owns, shown only while it
+   owns it. */
+/* The community's own panels and store, ahead of the list of buildings. */
+.ecom-community-assets {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0.5rem 0;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid #3f3f46;
+    border-radius: 9px;
+    background: #232326;
+}
+
+.ecom-ctl-subhead {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+}
+
+.ecom-community-buttons {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.ecom-community-buttons .ecom-add-shared {
+    flex: 1;
+    margin-top: 0;
+    justify-content: center;
+}
+
+/* ------------------------------------------------------- load profiles
+
+   Sits in the band beside the Members list, three columns wide, so ticking a
+   building and watching its line arrive happen in the same view. */
+
+.ecom-groups .ecom-profiles-card { grid-column: span 2; }
+
+/* Only when there is room for a third: the band is four columns wide on a
+   1700px screen, so Members (two) and the chart (two) fill a row exactly, and
+   a chart three wide would have wrapped underneath the list it belongs beside. */
+@media (min-width: 2300px) {
+    .ecom-groups .ecom-profiles-card { grid-column: span 3; }
+}
+
+@media (max-width: 760px) {
+    .ecom-groups .ecom-profiles-card { grid-column: span 1; }
+}
+
+/* A heading, not a button: nothing opens or closes. */
+.ecom-profiles-head { cursor: default; }
+.ecom-profiles-head:hover { background: none; }
+
+.ecom-profiles-body { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.ecom-prof-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.82rem;
+    color: #a1a1aa;
+}
+
+.ecom-prof-top em { color: #fbbf24; font-style: normal; }
+
+/* Two scales: kW on one axis, or every building against its own peak. */
+.ecom-seg { display: inline-flex; border: 1px solid #3f3f46; border-radius: 7px; overflow: hidden; }
+.ecom-seg button {
+    padding: 0.25rem 0.65rem;
+    border: none;
+    background: #27272a;
+    color: #a1a1aa;
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+.ecom-seg button + button { border-left: 1px solid #3f3f46; }
+.ecom-seg button.is-on { background: #1e3a5f; color: #e4e4e7; }
+
+.ecom-prof-readout {
+    min-height: 1.2rem;
+    font-size: 0.84rem;
+    color: #e4e4e7;
+    font-variant-numeric: tabular-nums;
+}
+
+.ecom-prof-plot { transition: opacity 0.15s ease; }
+.ecom-prof-plot.is-stale { opacity: 0.45; }
+
+.ecom-prof-svg { display: block; width: 100%; height: auto; }
+
+.ecom-prof-grid { stroke: #3a3a3f; stroke-width: 1; }
+.ecom-prof-vgrid { stroke: #2f2f34; stroke-width: 1; }
+.ecom-prof-vgrid.is-day { stroke: #4a4a52; }
+.ecom-prof-tick { fill: #8b8b94; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ecom-prof-day { fill: #b4b4bd; font-size: 13px; font-weight: 600; }
+
+.ecom-prof-line {
+    fill: none;
+    stroke-width: 1.7;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    transition: opacity 0.12s ease;
+}
+.ecom-prof-line.is-focus { stroke-width: 3; }
+
+/* The hour the table is on, and the hour under the pointer. */
+.ecom-prof-now { stroke: #facc15; stroke-width: 2; }
+.ecom-prof-hover { stroke: #e4e4e7; stroke-width: 1; stroke-dasharray: 3 3; }
+
+.ecom-prof-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.4rem;
+    max-height: 7.5rem;
+    overflow-y: auto;
+}
+
+.ecom-prof-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid #3f3f46;
+    border-radius: 999px;
+    background: #27272a;
+    color: #c4c4cc;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.ecom-prof-chip i { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+.ecom-prof-chip:hover { background: #323238; }
+.ecom-prof-chip.is-on { border-color: #e4e4e7; color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ecom-prof-plot, .ecom-prof-line { transition: none; }
+}
+
+/* The roof, as a line of its own above the buttons: area, and whether it was
+   measured or sized from a footprint. */
+.ecom-roof-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+    min-width: 7.2rem;
+    margin-right: 0.2rem;
+    font-size: 0.78rem;
+    color: #7d7d7d;
+}
+
+.ecom-roof-info .ecom-roof-area { text-align: left; }
+.ecom-roof-info.is-blocked { color: #5c5c5c; font-style: italic; }
+
+/* Inside the member list the row has less room than in a group of its own, and
+   it was pushing the list sideways: a horizontal scrollbar under the rows and
+   the kW readout cut off at the edge. Narrower columns, no left indent beyond
+   the tick box, and nothing allowed to overflow. */
+.ecom-ctl-member-row .ecom-kit-size {
+    grid-template-columns: 5.4rem minmax(0, 1fr) 4.4rem;
+    padding-left: 0.6rem;
+    padding-right: 0.3rem;
+    box-sizing: border-box;
+}
+
+.ecom-ctl-members { overflow-x: hidden; }
+
+/* A community asset has a long name - "Community array 1", "Community store" -
+   so its row is two lines, the name above and the slider below, rather than
+   three columns with the name squeezed into the first. */
+.ecom-community-assets .ecom-kit-size {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "name  name"
+        "slide read";
+    padding-left: 0;
+    row-gap: 0.1rem;
+}
+
+.ecom-community-assets .ecom-kit-size > label { grid-area: name; }
+.ecom-community-assets .ecom-kit-size > input { grid-area: slide; }
+.ecom-community-assets .ecom-kit-size > b { grid-area: read; min-width: 4.4rem; }
+
+.ecom-community-buttons .ecom-add-shared {
+    white-space: nowrap;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+}
+
+.ecom-kit-size {
+    display: grid;
+    grid-template-columns: 6.2rem minmax(60px, 1fr) 5.2rem;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    padding: 0.1rem 0 0.1rem 1.7rem;
+    font-size: 0.8rem;
+    color: #9b9b9b;
+}
+
+.ecom-kit-size > label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.ecom-kit-size .material-icons { font-size: 15px; opacity: 0.8; }
+
+.ecom-kit-size input[type=range] { width: 100%; height: 22px; }
+.ecom-kit-size.is-pv input[type=range] { accent-color: #eaff00; }
+.ecom-kit-size.is-battery input[type=range] { accent-color: #fb7185; }
+.ecom-kit-size.is-charger input[type=range] { accent-color: #34d399; }
+
+.ecom-kit-size b {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #e4e4e7;
+    font-weight: 600;
+}
+
+/* Add a shared asset: one that belongs to the community rather than to any
+   building. Sits at the foot of its own group, where the per-building rows
+   cannot be mistaken for it. */
+.ecom-add-shared {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: 0.45rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px dashed #52525b;
+    border-radius: 8px;
+    background: transparent;
+    color: #a1a1aa;
+    font: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.ecom-add-shared:hover { border-color: #60a5fa; color: #e4e4e7; }
+.ecom-add-shared .material-icons { font-size: 16px; }
 
 /* A roof outside the community. Dormant by default - the panels are the
    building's own and feed nobody here - or rented, when the community has
@@ -907,8 +1157,19 @@
 }
 
 /* The members list is the one group tall enough to set the row height on its
-   own, so it gets a shorter window here than it had in the column. */
-.ecom-groups .ecom-ctl-members { max-height: 210px; }
+   own. It was a 210px window - a few buildings at a time - until every row
+   gained a toggle strip and size sliders, at which point two or three
+   buildings filled it. Twice the width and twice the height: wide enough that
+   a row's name, owner and three buttons sit on one line, and tall enough to
+   see several buildings together. */
+.ecom-groups .ecom-ctl-members { max-height: 420px; }
+
+.ecom-groups .ecom-ctl-group.is-wide { grid-column: span 2; }
+
+/* A narrow panel has no second column to spend. */
+@media (max-width: 760px) {
+    .ecom-groups .ecom-ctl-group.is-wide { grid-column: span 1; }
+}
 
 /* In the band a group is a card in its own right, not one of a stack. */
 .ecom-groups .ecom-ctl-group { background: #2f2f2f; }
@@ -992,17 +1253,29 @@
     border-radius: 8px;
 }
 
+/* Two rows, not four columns. Four columns in a panel this narrow left the
+   name with whatever was spare, which was about two characters: "Fy", "Ell",
+   "Idé". The name gets a line of its own and the controls get the next. */
 .ecom-roof {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 4.6rem minmax(70px, 1.1fr) 3.6rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "name  area"
+        "slide kw";
     align-items: center;
-    gap: 0.4rem;
-    min-height: 36px;
-    padding: 0 0.55rem;
+    column-gap: 0.5rem;
+    row-gap: 0.15rem;
+    padding: 0.4rem 0.55rem;
     border-bottom: 1px solid #383838;
-    font-size: 0.8rem;
+    font-size: 0.88rem;
     color: #9b9b9b;
 }
+
+.ecom-roof-name { grid-area: name; }
+.ecom-roof-area { grid-area: area; }
+.ecom-roof input[type=range] { grid-area: slide; }
+.ecom-roof-kw { grid-area: kw; }
+.ecom-roof-blocked { grid-area: slide; }
 .ecom-roof:last-child { border-bottom: none; }
 
 /* Carrying panels reads brighter than not. */
@@ -1012,11 +1285,12 @@
 .ecom-roof-name {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.35rem;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 0.88rem;
 }
 
 /* A measured array, not one this panel invented from a footprint. */
@@ -1034,10 +1308,11 @@
 }
 
 .ecom-roof-area {
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     color: #7d7d7d;
     text-align: right;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .ecom-roof input[type=range] {
@@ -1352,4 +1627,602 @@
 .ecom-ctl-flash {
     animation: ecom-ctl-flash 1800ms ease-out 1;
     border-radius: 6px;
+}
+
+/* =================================================================== layout
+   The energy layer's page.
+
+       +---------------------------+---------------------------+
+       |  Parameters (tabs)        |  Load profiles            |
+       +---------------------------+---------------------------+
+       |  Timeline: date, hour, jump-to, apply, introduction   |
+       +-------------------------------------------------------+
+       |  KPIs                                                 |
+       +-------------------------------------------------------+
+
+   What you change on the left, what it does on the right, when it is under the
+   timeline, and the totals along the foot.
+
+   Switched on by `ecom-mode` on #main-panel (controller.js, updateDashboard)
+   and by nothing else: every other layer renders into the same three panels
+   and expects the standard 2x2 grid. The panels are placed, not moved - their
+   ids and what renders into them are exactly as they were.
+   ======================================================================== */
+
+#main-panel.ecom-mode {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    gap: 0.7rem;
+    padding: 0.8rem 1rem;
+}
+
+/* The inline grid placement on each section is the standard layout's; this
+   one overrides it. */
+#main-panel.ecom-mode #metadata-section  { grid-column: 1 !important; grid-row: 1 !important; }
+#main-panel.ecom-mode #legend-section    { grid-column: 1 !important; grid-row: 2 !important; }
+#main-panel.ecom-mode #dashboard-section { grid-column: 1 !important; grid-row: 3 !important; }
+
+/* Every section had a heading - "Community Parameters", "Date & Time", "Energy
+   Community" - that the content now says for itself. Hidden, which is also
+   what buys the vertical room for three rows. */
+#main-panel.ecom-mode > section > h2 { display: none; }
+#main-panel.ecom-mode .panel-section { padding: 0.65rem 0.8rem; }
+
+/* The page header is 87px of a 1080px screen, spent on a title. */
+body:has(#main-panel.ecom-mode) > header { padding: 0.5rem 1.6rem; }
+body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
+
+/* ---------------------------------------------------- row 1: params | profiles */
+
+#main-panel.ecom-mode #metadata-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#main-panel.ecom-mode #ecom-groups {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.75rem;
+}
+
+#main-panel.ecom-mode .ecom-groups .ecom-profiles-card {
+    grid-column: auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.ecom-params {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid #3f3f3f;
+    border-radius: 10px;
+    background: #2f2f2f;
+    overflow: hidden;
+}
+
+/* Tabs: one section at a time, with the whole column to itself. */
+.ecom-tabs {
+    display: flex;
+    flex: none;
+    border-bottom: 1px solid #3f3f3f;
+    background: #2a2a2a;
+}
+
+.ecom-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+        "icon title"
+        "icon note";
+    column-gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem 0.65rem;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: none;
+    color: #a1a1aa;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.ecom-tab:hover { background: #333; }
+
+.ecom-tab-icon  { grid-area: icon; font-size: 22px; color: #6b6b73; }
+.ecom-tab-title { grid-area: title; font-size: 0.95rem; font-weight: 600; color: #d4d4d8; }
+.ecom-tab-note {
+    grid-area: note;
+    font-size: 0.75rem;
+    color: #8b8b94;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The accent is the group's own colour - the one its markers have on the table. */
+.ecom-tab--pink   { --tab: #ff00a6; }
+.ecom-tab--yellow { --tab: #eaff00; }
+.ecom-tab--orange { --tab: var(--ecom-battery, #fa3600); }
+.ecom-tab--cyan   { --tab: var(--ecom-grid, #00ffe5); }
+.ecom-tab--green  { --tab: #00ff5e; }
+.ecom-tab--violet { --tab: #a78bfa; }
+.ecom-tab--slate  { --tab: #7d8da3; }
+
+.ecom-tab.is-on { background: #303030; border-bottom-color: var(--tab, #7d8da3); }
+.ecom-tab.is-on .ecom-tab-icon { color: var(--tab, #e4e4e7); }
+.ecom-tab.is-on .ecom-tab-title { color: #fff; }
+
+.ecom-tabpanel {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.7rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ecom-tabpanel > * { flex: none; }
+
+/* ------------------------------------------------ optimizer constants
+
+   Each constant has an info icon that opens a plain-English line under it. A
+   button, because a tooltip needs a pointer hovering and this is a touch table. */
+
+.ecom-tabpanel .ecom-ctl-param { font-size: 0.92rem; min-height: 42px; }
+.ecom-tabpanel .ecom-ctl-param em { font-size: 0.76rem; }
+.ecom-tabpanel .ecom-ctl-param input { width: 96px; padding: 0.35rem 0.5rem; font-size: 0.92rem; }
+
+.ecom-info {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #7a8aa3;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.ecom-info .material-icons { font-size: 20px; }
+.ecom-info:hover { background: #383838; color: #cfe0ff; }
+.ecom-info.is-on { background: #1e3a5f; color: #9fd0ff; }
+
+.ecom-ctl-param-block { border-bottom: 1px solid #333; }
+.ecom-ctl-param-block:last-child { border-bottom: none; }
+
+.ecom-ctl-param-info {
+    margin: 0 0 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-left: 3px solid #60a5fa;
+    border-radius: 0 8px 8px 0;
+    background: #262b36;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: #d4d4d8;
+}
+.ecom-ctl-param-info p { margin: 0 0 0.35rem; }
+.ecom-ctl-param-default,
+.ecom-ctl-param-warn { display: block; font-size: 0.76rem; color: #8b8b94; }
+.ecom-ctl-param-warn { margin-top: 0.15rem; color: #fbbf24; }
+
+/* The rolling window, stated. */
+.ecom-ctl-window {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    background: #262b36;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: #c9d3e6;
+}
+.ecom-ctl-window .material-icons { font-size: 18px; color: #7a8aa3; margin-top: 0.1rem; }
+.ecom-ctl-window b { color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ecom-info { transition: none; }
+}
+
+/* A line that opens into the explanation, rather than the explanation sitting
+   open under the list. */
+.ecom-ctl-about summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: #8b8b94;
+    padding: 0.1rem 0;
+}
+.ecom-ctl-about summary:hover { color: #d4d4d8; }
+.ecom-ctl-about[open] summary { margin-bottom: 0.25rem; }
+
+/* ------------------------------------------------- the members list, compact
+
+   A building was three lines tall - name, roof, buttons - so thirty-three of
+   them were a very long scroll in a panel that is already short. Now the name,
+   the roof and the three buttons share one line wherever the column is wide
+   enough for them, and wrap onto a second only where it is not. The type went
+   up at the same time: the old sizes were chosen to fit three lines, and one
+   line has the room.
+
+   The row's own children are the tick box with the name, the strip of buttons,
+   and - only while something is on - one size slider each. Flex-wrap lets the
+   first two share a line and sends every slider to a line of its own. */
+
+.ecom-tabpanel .ecom-ctl-member-row {
+    display: flex;
+    /* The row rule above this one is a column, and a flex-basis in a column is
+       a height: without this the 215px meant as a minimum width made every
+       building 215px tall. */
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.7rem;
+    row-gap: 0;
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #383838;
+}
+
+.ecom-tabpanel .ecom-ctl-member-row:last-child { border-bottom: none; }
+
+.ecom-tabpanel .ecom-ctl-member-row > .ecom-ctl-member {
+    flex: 1 1 215px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0;
+    border-bottom: none;
+    font-size: 1.02rem;
+    gap: 0.6rem;
+}
+
+.ecom-tabpanel .ecom-ctl-member input { width: 20px; height: 20px; }
+.ecom-tabpanel .ecom-ctl-member-name { font-weight: 500; }
+.ecom-tabpanel .ecom-ctl-member-owner {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.ecom-tabpanel .ecom-ctl-member-row > .ecom-ctl-member-kit {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0;
+}
+
+/* On a narrower screen the column is too tight for the owner as well, and a
+   building wraps to a second line to make room for it. Dropped from the line
+   there; it is still in the tooltip on the name. */
+@media (max-width: 1700px) {
+    .ecom-tabpanel .ecom-ctl-member-owner { display: none; }
+
+    /* Name, roof and three buttons have about 560px between them. The name only
+       needs room for its longest word, not the 215px it is given at full width,
+       and the buttons can be a little snugger. */
+    .ecom-tabpanel .ecom-ctl-member-row > .ecom-ctl-member { flex-basis: 150px; }
+    .ecom-tabpanel .ecom-roof-info { min-width: 5.4rem; }
+    .ecom-tabpanel .ecom-ctl-member-row > .ecom-ctl-member-kit { gap: 0.3rem; }
+    .ecom-tabpanel .ecom-kit { font-size: 0.88rem; padding: 0.3rem 0.45rem; gap: 0.2rem; }
+}
+
+.ecom-tabpanel .ecom-roof-info { font-size: 0.86rem; min-width: 6.6rem; }
+.ecom-tabpanel .ecom-roof-tag { font-size: 0.64rem; }
+
+.ecom-tabpanel .ecom-kit { font-size: 0.92rem; padding: 0.32rem 0.6rem; }
+.ecom-tabpanel .ecom-kit .material-icons { font-size: 18px; }
+
+.ecom-tabpanel .ecom-ctl-member-row > .ecom-kit-size {
+    flex: 1 1 100%;
+    font-size: 0.88rem;
+    padding: 0.1rem 0.2rem 0.3rem 1.8rem;
+}
+
+/* All in, All out and the roof shortcuts on one line, wrapping only if the
+   column is too narrow for them. */
+.ecom-members-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.5rem;
+}
+
+.ecom-members-toolbar > .ecom-ctl-btn { flex: 0 0 auto; padding: 0.45rem 1rem; font-size: 0.95rem; }
+
+.ecom-members-roofs {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+    font-size: 0.86rem;
+    color: #9b9b9b;
+    white-space: nowrap;
+}
+
+/* The buttons that add something to the community. They were a dashed outline
+   in grey on a dark panel, which is to say nearly invisible: the one thing in
+   the tab that does something was the one thing that did not look like a
+   button. Solid and light, like Apply. */
+.ecom-add-shared {
+    justify-content: center;
+    border: none;
+    background: #f1f1f4;
+    color: #17171a;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.6rem 0.8rem;
+}
+.ecom-add-shared:hover { background: #ffffff; color: #000; }
+.ecom-add-shared .material-icons { font-size: 20px; }
+
+/* Taking something away is the lesser action: still plainly a button, but not
+   the same weight as adding. */
+.ecom-add-shared[data-shared$="-remove"] {
+    background: transparent;
+    border: 1px solid #a1a1aa;
+    color: #e4e4e7;
+    font-weight: 500;
+}
+.ecom-add-shared[data-shared$="-remove"]:hover { background: #3a3a3f; }
+
+/* Scrollbars in the page's own colours. The default is a bright white track,
+   which on a dark panel reads as a hole in it. */
+.ecom-tabpanel,
+.ecom-tabpanel .ecom-ctl-members,
+.ecom-profiles-card,
+.ecom-prof-legend {
+    scrollbar-width: thin;
+    scrollbar-color: #5a5a62 #26262a;
+}
+
+/* The members list takes whatever height the panel has and scrolls inside it,
+   rather than being cut off at a fixed 420px with the rest of the panel empty. */
+.ecom-tabpanel > .ecom-ctl-members {
+    flex: 1 1 auto;
+    min-height: 140px;
+    max-height: none;
+    overflow: auto;
+}
+
+/* ------------------------------------------------------ row 2: the timeline */
+
+#main-panel.ecom-mode #legend-content > .ecom-ctl {
+    display: grid;
+    /* The third column holds the apply bar, which has a link chip on its end;
+       too narrow and the chip is cut off and the strip scrolls sideways. */
+    grid-template-columns: 220px minmax(0, 1fr) minmax(310px, 380px);
+    grid-template-areas:
+        "sky when bar"
+        "sky when status"
+        "sky when story";
+    grid-template-rows: auto auto 1fr;
+    gap: 0.45rem 0.9rem;
+    align-items: stretch;
+}
+
+/* The sky shrinks to a clock: the hour, the date, daylight and the sun. */
+#main-panel.ecom-mode .ecom-sky-card {
+    grid-area: sky;
+    height: auto;
+    min-height: 124px;
+}
+
+/* It was fixed to the foot of the sky card, a drawer under a window. */
+#main-panel.ecom-mode .ecom-when {
+    grid-area: when;
+    margin-top: 0;
+    border: 1px solid #3f3f3f;
+    border-radius: 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: center;
+    align-items: center;
+    gap: 0.25rem 1.1rem;
+    padding: 0.45rem 0.8rem;
+}
+
+/* Date and span on one line, the hour scrubber on its own, wide, and the
+   jump-to shortcuts under it. */
+.ecom-when-row--date { order: 1; flex: 0 1 auto; }
+.ecom-when-row--span { order: 2; flex: 1 1 240px; }
+.ecom-when-row--hour { order: 3; flex: 1 1 100%; }
+#main-panel.ecom-mode .ecom-when .ecom-when-note { order: 4; flex: 1 1 100%; }
+#main-panel.ecom-mode .ecom-when #ecom-peaks { order: 5; flex: 1 1 auto; }
+#main-panel.ecom-mode .ecom-when .ecom-when-legend { order: 6; flex: 0 0 auto; }
+
+#main-panel.ecom-mode .ecom-when-row label { width: 2.6rem; }
+#main-panel.ecom-mode .ecom-when-row--hour input[type=range] { height: 28px; }
+
+#main-panel.ecom-mode .ecom-ctl-bar {
+    grid-area: bar;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* Smaller type and tighter padding: a message here is a line of status, not a
+   paragraph, and this column sets the height of the whole strip. */
+#main-panel.ecom-mode #ecom-ctl-status {
+    grid-area: status;
+    margin: 0;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.74rem;
+    line-height: 1.3;
+    min-width: 0;
+}
+
+#main-panel.ecom-mode .ecom-ctl-story {
+    grid-area: story;
+    margin-top: 0;
+    padding: 0.45rem 0.65rem;
+}
+#main-panel.ecom-mode .ecom-ctl-story-head { margin-bottom: 0.3rem; }
+
+/* The solar figure moves to the corner and goes on one line, clear of the
+   clock. It sat on top of the time in a card this narrow. The clock is also
+   smaller and a little higher, so the date does not run into sunrise and
+   sunset along the bottom edge. */
+#main-panel.ecom-mode .ecom-sky-card .sun-time-center { top: 52%; padding: 0.15rem 0.6rem; }
+#main-panel.ecom-mode .ecom-sky-card .sun-time { font-size: 1.9rem; }
+#main-panel.ecom-mode .ecom-sky-card .sun-date { font-size: 0.72rem; }
+#main-panel.ecom-mode .ecom-sky-pv {
+    top: 0.35rem;
+    left: 0.5rem;
+    right: auto;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.15rem 0.45rem;
+    text-align: left;
+}
+#main-panel.ecom-mode .ecom-sky-pv span { font-size: 0.62rem; }
+
+/* ------------------------------------------------------------ row 3: the KPIs */
+
+#main-panel.ecom-mode #dashboard-content { height: auto; }
+
+#main-panel.ecom-mode .dashboard-container {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.7rem;
+    height: auto;
+}
+
+#main-panel.ecom-mode .dashboard-card {
+    position: relative;
+    padding: 0.5rem 0.75rem 0.6rem;
+    border-radius: 10px;
+}
+
+/* Legend & View is a narrow column and the figures get everything else. It was
+   450px wide to keep five chips on one line; stood on end they take a fifth of
+   that, and the width goes to the numbers that are now the point of the strip. */
+#main-panel.ecom-mode .dashboard-card:first-child { flex: 0 0 148px; padding: 0.45rem 0.6rem; }
+#main-panel.ecom-mode .dashboard-card:last-child  { flex: 1 1 auto; min-width: 0; }
+
+#main-panel.ecom-mode .ecom-view .ecom-ctl-chips {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+}
+#main-panel.ecom-mode .ecom-view .ecom-ctl-chip {
+    /* The base chip is 38px tall for a finger. Five of them on end made the
+       legend taller than the figures beside it, and the legend was setting the
+       height of the whole strip. Still a comfortable target at 26px wide as
+       they are: the full width of the column. */
+    min-height: 26px;
+    padding: 0 0.55rem;
+    font-size: 0.8rem;
+    justify-content: flex-start;
+}
+
+/* Its heading is the one line of explanation it needs. */
+#main-panel.ecom-mode .dashboard-card:first-child .dashboard-section-title {
+    margin-bottom: 0.3rem;
+}
+
+/* The sentence under the chips said what tapping a swatch does, which the chips
+   already say by being buttons. In a strip it only costs a line of height. */
+#main-panel.ecom-mode .ecom-legend-note { display: none; }
+
+#main-panel.ecom-mode .dashboard-section-title {
+    font-size: 0.72rem;
+    margin-bottom: 0.35rem;
+}
+
+#main-panel.ecom-mode .ecom-kpi-tiles {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    margin-bottom: 0;
+}
+
+/* The comparison: each tile is the figure with the community, what the same
+   buildings manage alone, and the difference - so it reads as one thing. */
+.ecom-kpi-compare-head {
+    margin: 0 0 0.4rem;
+    font-size: 0.84rem;
+    color: #a1a1aa;
+}
+.ecom-kpi-compare-head b { color: #e4e4e7; font-weight: 600; }
+
+.ecom-kpi-tiles--compare { margin-bottom: 0; }
+
+.ecom-kpi-cmp {
+    padding: 0.5rem 0.7rem 0.55rem;
+    gap: 0.05rem;
+}
+
+.ecom-kpi-cmp .ecom-kpi-label { order: 0; font-size: 0.72rem; }
+.ecom-kpi-cmp .ecom-kpi-value { order: 1; font-size: 1.45rem; line-height: 1.1; }
+
+.ecom-kpi-alone {
+    order: 2;
+    font-size: 0.8rem;
+    color: #9b9ba3;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* The difference, as a coloured line rather than a sign someone has to read:
+   green for better, red for worse, grey where it is neither. */
+.ecom-kpi-delta {
+    order: 3;
+    align-self: flex-start;
+    margin-top: 0.15rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.ecom-kpi-delta.is-good    { background: rgba(0, 255, 94, 0.14);  color: #7dffb0; }
+.ecom-kpi-delta.is-bad     { background: rgba(250, 54, 0, 0.16);  color: #ffb4a0; }
+.ecom-kpi-delta.is-neutral { background: rgba(255, 255, 255, 0.07); color: #a1a1aa; }
+
+/* Six tiles across a laptop screen leave each about 120px wide, and the corner
+   icon then sits on top of the figure. The colour on the tile's edge says what
+   it is, and the label under the figure says it again. */
+@media (max-width: 1700px) {
+    #main-panel.ecom-mode .ecom-kpi-icon { display: none; }
+}
+
+/* The three columns of detail are folded away until asked for. */
+.ecom-kpi-columns:not(.is-open) { display: none; }
+.ecom-kpi-columns.is-open { margin-top: 0.6rem; }
+
+.ecom-kpi-more {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.65rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid #4a4a4a;
+    border-radius: 999px;
+    background: #2f2f2f;
+    color: #a1a1aa;
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+.ecom-kpi-more:hover { background: #3a3a3a; color: #e4e4e7; }
+.ecom-kpi-more .material-icons { font-size: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ecom-tab { transition: none; }
 }

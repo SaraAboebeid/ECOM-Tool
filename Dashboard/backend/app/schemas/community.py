@@ -40,7 +40,9 @@ class CommunitySpec(BaseModel):
     grid: GridSpec = Field(description="Required - see the module docstring.")
     analysis_period: AnalysisPeriodSpec = Field(default_factory=AnalysisPeriodSpec)
 
-    dispatch_mode: Literal["community", "market"] = "community"
+    # "isolated" is the same buildings with no community - nothing shared - and
+    # exists to be compared against, not to be shown: see services/comparison.py.
+    dispatch_mode: Literal["community", "market", "isolated"] = "community"
     internal_price_buying: Annotated[float, Field(ge=0)] = Field(
         1.0, description="Price for peer-to-peer trades within the community, SEK/kWh."
     )

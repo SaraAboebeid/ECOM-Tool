@@ -208,6 +208,13 @@ function updateDashboard(targetId) {
         setSunStudyLayout(false);
     }
 
+    // The energy layer lays the page out its own way: parameters beside the
+    // load profiles, the timeline under them, the KPIs under that. A class on
+    // the grid rather than moved nodes, because every other layer renders into
+    // the same three panels and expects them where they were - set here for
+    // every layer, so a switch away puts the standard 2x2 back.
+    if (mainPanel) mainPanel.classList.toggle('ecom-mode', targetId === 'ecom-energy-btn');
+
     // Reset titles by default
     if (dashboardTitle) dashboardTitle.textContent = 'Dashboard';
     if (legendTitle) legendTitle.textContent = 'Legend';
