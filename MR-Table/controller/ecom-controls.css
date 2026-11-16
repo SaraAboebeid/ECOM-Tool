@@ -867,6 +867,19 @@
     grid-template-columns: 5.4rem auto minmax(60px, 1fr) 5.4rem;
 }
 
+/* V2G for a building's chargers: its own line under the chargers row, indented
+   with it. */
+.ecom-ctl-member-row .ecom-kit-v2g {
+    flex: 1 1 100%;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 0.3rem 0.3rem 1.8rem;
+    font-size: 0.82rem;
+    color: #a1a1aa;
+}
+.ecom-ctl-member-row .ecom-kit-v2g input { accent-color: #34d399; }
+
 /* The real battery's live reading, on its building's row under the modelled
    battery. A line of its own, the full width of the row, indented with the
    sliders above it. */

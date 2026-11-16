@@ -101,10 +101,10 @@
         if (!before || !before.totals || !result || !result.totals) return '';
         const change = (result.totals.overall_cost || 0) - (before.totals.overall_cost || 0);
         if (Math.abs(change) < 0.5) {
-            return '<div class="ecom-opt-delta">no change from before</div>';
+            return '<div class="ecom-opt-delta">same as previous run</div>';
         }
         return '<div class="ecom-opt-delta" style="color:' + (change < 0 ? GOOD : BAD) + '">' +
-            (change < 0 ? '−' : '+') + num(Math.abs(change)) + ' SEK vs before the change</div>';
+            (change < 0 ? '−' : '+') + num(Math.abs(change)) + ' SEK vs previous run</div>';
     }
 
     function card(mode, result) {
@@ -116,6 +116,11 @@
                 metric('Grid import', t.grid_import_kwh, 'kWh') +
                 metric('Grid export', t.grid_export_kwh, 'kWh') +
                 metric('Peak import', t.peak_net_import_kw, 'kW') +
+                // With V2G on, what the cars gave back over the run - the part
+                // of the saving that comes from the cars themselves.
+                (result && result.v2g
+                    ? metric('From the cars (V2G)', t.ev_discharge_kwh, 'kWh')
+                    : '') +
             '</div>' + delta(mode, result) + '</div>';
     }
 
@@ -132,7 +137,10 @@
 
         let html = '<div class="ecom-opt-head"><span class="ecom-opt-title">Optimization</span>' +
             '<span class="ecom-opt-sub">' + (o.label || '') +
-            (o.period ? ' &middot; ' + o.period : '') + '</span></div>';
+            (o.period ? ' &middot; ' + o.period : '') +
+            (done.some(function (m) { return results[m].v2g; })
+                ? ' &middot; <b style="color:#39ff88">V2G on</b>' : '') +
+            '</span></div>';
 
         done.forEach(function (m) { html += card(m, results[m]); });
 

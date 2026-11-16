@@ -3136,10 +3136,14 @@
         const flows = (flowData && flowData.features) || [];
         let members = 0;
         let chargers = 0;
+        // Storage the community can use: every battery in the dispatch, a
+        // building's own and the community's alike, by its capacity in kWh.
+        let batteryKwh = 0;
         nodes.forEach(function (f) {
             const kind = f.properties && f.properties.kind;
             if (kind === 'building') members += 1;
             else if (kind === 'charge_point') chargers += 1;
+            else if (kind === 'battery') batteryKwh += Number(f.properties.capacity) || 0;
         });
         let ev = 0;
         flows.forEach(function (f) {
@@ -3147,7 +3151,8 @@
             if (String(p.target || '').indexOf('CP_') !== 0) return;
             (p.flow_hourly || []).forEach(function (v) { ev += Math.max(0, v || 0); });
         });
-        return { members: members, chargers: chargers, total_ev_charging: ev };
+        return { members: members, chargers: chargers, total_ev_charging: ev,
+                 battery_kwh: batteryKwh };
     }
 
     /** Clear the table down to a campus nobody has joined yet.
@@ -3222,7 +3227,7 @@
                 self_sufficiency: 0, self_consumption: 0,
                 total_demand: 0, total_grid_import: 0, total_grid_export: 0,
                 total_pv_gen: 0, total_pv_used: 0,
-                members: 0, chargers: 0, total_ev_charging: 0
+                members: 0, chargers: 0, total_ev_charging: 0, battery_kwh: 0
             }
         });
         ecomChannel.postMessage({ type: 'ecom_summary', summary: buildSummary() });

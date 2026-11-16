@@ -330,3 +330,20 @@ def test_jobs_listing_excludes_results(client):
     assert "jobs" in body
     for job in body["jobs"]:
         assert "result" not in job
+
+
+def test_ev_totals_count_the_cars_and_not_the_batteries():
+    """`_ch` / `_ds` per charger are the cars; `_bess_ch` / `_bess_ds` are not."""
+    import pandas as pd
+    from app.services.optimize import _totals
+    frame = pd.DataFrame({
+        "CP1_ch": [2.0, 3.0], "CP1_ds": [0.0, 1.5],
+        "CP2_ch": [1.0, 0.0], "CP2_ds": [0.5, 0.0],
+        "AWL_bess_ch": [50.0, 0.0], "AWL_bess_ds": [0.0, 40.0],
+        "CP1_ch_fcrn": [9.0, 9.0],          # reserve bids, not energy delivered
+        "P_import_all": [10.0, 10.0], "P_export_all": [0.0, 0.0],
+        "Overall cost": [1.0, 1.0],
+    })
+    t = _totals(frame)
+    assert t["ev_charge_kwh"] == 6.0
+    assert t["ev_discharge_kwh"] == 2.0

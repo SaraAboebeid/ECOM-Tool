@@ -621,6 +621,8 @@ def run_optimization(
     return {
         "solver": status["solver"],
         "mode": mode,
+        # Whether the cars were allowed to give energy back (vehicle-to-grid).
+        "v2g": bool(v2g),
         "days": int(n_days),
         "hours": hours,
         "notes": notes,
@@ -740,9 +742,26 @@ def _num(frame: pd.DataFrame, column: str) -> float:
     return value if math.isfinite(value) else 0.0
 
 
+def _ev_total(frame: pd.DataFrame, suffix: str) -> float:
+    """kWh into (`_ch`) or out of (`_ds`) the cars, over every charge point.
+
+    functions1 writes one `{charge point}_ch` / `_ds` column per charger, beside
+    `{building}_bess_ch` / `_ds` for the batteries - which are not cars, so they
+    are left out. Discharge is only ever non-zero with V2G on.
+    """
+    total = 0.0
+    for column in frame.columns:
+        name = str(column)
+        if name.endswith(suffix) and not name.endswith("_bess" + suffix):
+            total += float(pd.to_numeric(frame[column], errors="coerce").fillna(0.0).sum())
+    return total
+
+
 def _totals(frame: pd.DataFrame) -> dict:
     resolution = 1  # the adapter always builds a 60-minute index
     return {
+        "ev_charge_kwh": _ev_total(frame, "_ch") / resolution,
+        "ev_discharge_kwh": _ev_total(frame, "_ds") / resolution,
         "grid_import_kwh": _num(frame, "P_import_all") / resolution,
         "grid_export_kwh": _num(frame, "P_export_all") / resolution,
         "supplier_cost": _num(frame, "Supplier cost"),

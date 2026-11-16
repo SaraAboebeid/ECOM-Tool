@@ -2416,6 +2416,11 @@
                     community: spec,
                     days: span.days,
                     mode: mode,
+                    // The optimizer has one switch for every car, not one per
+                    // charger: on when any charger in the community offers V2G.
+                    v2g: (spec.charge_points || []).some(function (cp) {
+                        return cp.is_v2g;
+                    }),
                     horizon_hours: OPTIMIZER_LOOKAHEAD_H,
                     store_hours: OPTIMIZER_KEEP_H,
                     parameters: Object.keys(state.paramValues).length
@@ -4291,7 +4296,20 @@
                     ' min="3" max="150" step="1" value="' + power + '">' +
                 '<b data-size-readout="charger:' + esc(name) + '">' + power +
                     ' kW' + (chargers.length > 1 ? ' each' : '') + '</b>' +
-                '</div>';
+                '</div>' +
+                // Vehicle-to-grid for this building's chargers, all of them at
+                // once like the power slider: the cars may give energy back to
+                // the community, not only take it. The optimizer runs with V2G
+                // on whenever any charger has it.
+                '<label class="ecom-ctl-check ecom-kit-v2g" title="Vehicle-to-grid: ' +
+                    'the cars on these chargers can also discharge into the ' +
+                    'community when that is worth more than holding the charge. ' +
+                    'They still leave with the charge their trip needs.">' +
+                    '<input type="checkbox" data-kit-v2g="' + esc(name) + '"' +
+                        (chargers.every(function (cp) { return cp.is_v2g; })
+                            ? ' checked' : '') + '>' +
+                    '<span>V2G - the cars can give energy back</span>' +
+                '</label>';
         }
         return rows;
     }
@@ -4578,7 +4596,7 @@
                 '<input type="checkbox" data-toggle="autoopt"' +
                     (state.autoOptimize ? ' checked' : '') + '>' +
                 '<span>Run automatically when something changes, and compare ' +
-                    'with the run before</span>' +
+                    'with the previous run</span>' +
             '</label>' +
             '<div class="ecom-ctl-actions">' +
                 '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
@@ -5266,6 +5284,20 @@
             }
             applySlider(typedSlider, Math.min(Math.max(typed, 1), cap), null);
             render();
+            return;
+        }
+
+        // V2G for every charger at one building, from its row in Members. Both
+        // flags together, as the Mobility switch does: the backend refuses a
+        // car with V2G on behind a charger without it.
+        const v2gBuilding = target.getAttribute && target.getAttribute('data-kit-v2g');
+        if (v2gBuilding) {
+            ownChargers(v2gBuilding).forEach(function (cp) {
+                cp.is_v2g = target.checked;
+                if (cp.ev) cp.ev.v2g_enabled = target.checked;
+            });
+            render();
+            markDirty();
             return;
         }
 

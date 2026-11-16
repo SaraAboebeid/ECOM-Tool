@@ -11,7 +11,7 @@
 //   top      Members      buildings in the community     the member switches
 //            Solar        kWh a day from the roofs       the PV controls
 //            Chargers     charge points                  add / remove a CP
-//            EV charging  kWh a day to the cars          the same
+//            Battery      kWh of storage available       the battery controls
 //
 //   bottom   Self-sufficiency   share of demand met on campus
 //            Grid import        kWh a day
@@ -53,6 +53,7 @@
         pv: palette.pv || '#eaff00',
         grid: palette.grid || '#00ffe5',
         ev: palette.ev || palette.charge_point || '#39ff88',
+        battery: palette.battery || '#fa3600',
         better: '#4ade80',
         worse: '#f87171'
     };
@@ -74,9 +75,11 @@
             { key: 'chargers', label: 'Chargers', unit: 'charge points', kind: 'count',
               colour: COLOURS.ev, better: null,
               value: function (k) { return k.chargers || 0; } },
-            { key: 'ev', label: 'EV charging', unit: 'kWh / day', kind: 'amount',
-              colour: COLOURS.ev, better: null,
-              value: function (k, days) { return (k.total_ev_charging || 0) / days; } }
+            // Storage available to the community, in kWh of capacity - not per
+            // day: a battery's size does not depend on how long the span is.
+            { key: 'battery', label: 'Battery', unit: 'kWh available', kind: 'amount',
+              colour: COLOURS.battery, better: null,
+              value: function (k) { return k.battery_kwh || 0; } }
         ],
         bottom: [
             { key: 'self_sufficiency', label: 'Self-sufficiency', unit: 'met on campus',
