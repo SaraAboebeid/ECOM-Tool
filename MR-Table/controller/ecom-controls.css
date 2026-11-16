@@ -867,6 +867,38 @@
     grid-template-columns: 5.4rem auto minmax(60px, 1fr) 5.4rem;
 }
 
+/* The spot price chart in the Grid tab. */
+.ecom-spot {
+    margin-top: 0.8rem;
+    padding: 0.6rem 0.7rem 0.5rem;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.ecom-spot-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.82rem;
+    color: #c4c4cc;
+}
+.ecom-spot-head b { color: #facc15; font-variant-numeric: tabular-nums; }
+.ecom-spot-svg { display: block; width: 100%; height: 210px; }
+.ecom-spot-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin-top: 0.25rem;
+    font-size: 0.74rem;
+    color: #a1a1aa;
+}
+.ecom-spot-key span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.ecom-spot-key i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.ecom-spot-key i.is-dash { height: 0; border-top: 2px dashed; background: none; }
+.ecom-spot-key .ecom-spot-unit { margin-left: auto; color: #71717a; }
+
 /* V2G for a building's chargers: its own line under the chargers row, indented
    with it. */
 .ecom-ctl-member-row .ecom-kit-v2g {
@@ -925,6 +957,111 @@
     color: #e4e4e7;
     font-weight: 600;
 }
+
+/* "Build your own energy community": the head of the Community tab, where the
+   shared solar, battery and chargers are added. Meant to be the first thing the
+   eye lands on in the tab, so it is framed and the buttons are filled. */
+.ecom-build {
+    margin-bottom: 0.9rem;
+    padding: 0.85rem 0.95rem 0.95rem;
+    border: 1px solid rgba(255, 43, 214, 0.45);
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, rgba(255, 43, 214, 0.14), rgba(0, 255, 229, 0.06) 70%),
+        #232327;
+    box-shadow: 0 0 0 1px rgba(255, 43, 214, 0.08), 0 6px 24px rgba(255, 43, 214, 0.08);
+}
+.ecom-build-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.12rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: #fdf4ff;
+}
+.ecom-build-title .material-icons { color: #ff2bd6; font-size: 22px; }
+.ecom-build-text {
+    margin: 0.35rem 0 0.7rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: #c4c4cc;
+}
+.ecom-build-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.5rem;
+}
+.ecom-build-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+}
+.ecom-build-btn .material-icons { font-size: 20px; }
+.ecom-build-btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+.ecom-build-btn:active { transform: translateY(0); }
+.ecom-build-btn.is-pv {
+    background: rgba(234, 255, 0, 0.16); border-color: rgba(234, 255, 0, 0.55); color: #f4ff8a;
+}
+.ecom-build-btn.is-battery {
+    background: rgba(250, 54, 0, 0.16); border-color: rgba(250, 54, 0, 0.6); color: #ffb199;
+}
+.ecom-build-btn.is-charger {
+    background: rgba(52, 211, 153, 0.16); border-color: rgba(52, 211, 153, 0.6); color: #a7f3d0;
+}
+/* The Members tab's version: title and one line of steps, no buttons - the
+   buttons are on every row below it. */
+.ecom-build.is-compact {
+    margin-bottom: 0.6rem;
+    padding: 0.55rem 0.8rem 0.6rem;
+}
+.ecom-build.is-compact .ecom-build-title { font-size: 1.02rem; }
+.ecom-build.is-compact .ecom-build-text { margin: 0.25rem 0 0; }
+.ecom-build-text b {
+    display: inline-grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-right: 0.15rem;
+    border-radius: 50%;
+    background: #ff2bd6;
+    color: #1a0016;
+    font-size: 0.7rem;
+}
+.ecom-build-tag {
+    padding: 0 0.3rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+.ecom-build-tag.is-pv { color: #f4ff8a; background: rgba(234, 255, 0, 0.14); }
+.ecom-build-tag.is-battery { color: #ffb199; background: rgba(250, 54, 0, 0.16); }
+.ecom-build-tag.is-charger { color: #a7f3d0; background: rgba(52, 211, 153, 0.16); }
+
+/* The PV / Battery / Charger buttons on each building's row, in the colour of
+   what they add - the same colours as on the table - so they read as the way
+   to build rather than as grey settings. Filled once the building has one. */
+.ecom-kit[data-kit="pv"] { border-color: rgba(234, 255, 0, 0.45); color: #e9f27a; }
+.ecom-kit[data-kit="battery"] { border-color: rgba(250, 54, 0, 0.5); color: #ffa585; }
+.ecom-kit[data-kit="charger"] { border-color: rgba(52, 211, 153, 0.5); color: #8ff0c8; }
+.ecom-kit[data-kit="pv"]:hover { background: rgba(234, 255, 0, 0.1); }
+.ecom-kit[data-kit="battery"]:hover { background: rgba(250, 54, 0, 0.12); }
+.ecom-kit[data-kit="charger"]:hover { background: rgba(52, 211, 153, 0.12); }
+.ecom-kit.is-on[data-kit="pv"] { background: rgba(234, 255, 0, 0.18); border-color: #eaff00; color: #fbffc2; }
+.ecom-kit.is-on[data-kit="battery"] { background: rgba(250, 54, 0, 0.2); border-color: #fa3600; color: #ffd2c2; }
+.ecom-kit.is-on[data-kit="charger"] { background: rgba(52, 211, 153, 0.2); border-color: #34d399; color: #d1fae5; }
+
+.ecom-build-btn.is-pv:hover { box-shadow: 0 0 14px rgba(234, 255, 0, 0.25); }
+.ecom-build-btn.is-battery:hover { box-shadow: 0 0 14px rgba(250, 54, 0, 0.25); }
+.ecom-build-btn.is-charger:hover { box-shadow: 0 0 14px rgba(52, 211, 153, 0.25); }
 
 /* Add a shared asset: one that belongs to the community rather than to any
    building. Sits at the foot of its own group, where the per-building rows

@@ -14,6 +14,7 @@
 //            Battery      kWh of storage available       the battery controls
 //
 //   bottom   Self-sufficiency   share of demand met on campus
+//            Self-consumption   share of the solar used on campus
 //            Grid import        kWh a day
 //            Grid export        kWh a day
 //
@@ -85,6 +86,13 @@
             { key: 'self_sufficiency', label: 'Self-sufficiency', unit: 'met on campus',
               kind: 'share', colour: COLOURS.pv, better: 'up', track: true,
               value: function (k) { return k.self_sufficiency || 0; } },
+            // Of the solar made on campus, the share used on campus rather than
+            // exported. The partner of self-sufficiency: that one asks how much
+            // of the demand the community covers, this one how much of its own
+            // generation it manages to use.
+            { key: 'self_consumption', label: 'Self-consumption', unit: 'of solar used on campus',
+              kind: 'share', colour: COLOURS.pv, better: 'up',
+              value: function (k) { return k.self_consumption || 0; } },
             { key: 'import', label: 'Grid import', unit: 'kWh / day', kind: 'amount',
               colour: COLOURS.grid, better: 'down',
               value: function (k, days) { return (k.total_grid_import || 0) / days; } },

@@ -364,6 +364,8 @@
         // Re-solve whenever something changes, and show the answer against the
         // one before the change. Off, the optimizer runs only when asked.
         autoOptimize: true,
+        spotByYear: {},        // hourly SE3 spot prices by year, SEK/kWh
+        spotHover: null,       // the hour under the pointer on the spot chart
         optimizerPrevious: null, // the last complete set of results, before this run
         optimizerResults: {},  // finished runs by mode, for the display
         optimizerRunning: '',  // the mode being solved right now
@@ -1310,6 +1312,15 @@
             }
         });
         state.year = year;
+
+        // The spot price goes with the demand: 2023's buildings are priced at
+        // 2023's spot. Only while the import price is on spot - a fixed price
+        // is somebody's choice and stays.
+        const grid = state.working.grid;
+        const prices = state.spotByYear[year];
+        if (grid && grid.buying_price && Array.isArray(grid.buying_price.hourly) && prices) {
+            grid.buying_price = { hourly: prices.slice() };
+        }
     }
 
     // Tolerates a missing spec: the table can announce its own totals before
@@ -1608,6 +1619,18 @@
 
     function resetAll() {
         state.working = clone(state.base);
+        // The scenario comes back in its own year - its demand files and its
+        // spot prices - while the picker may be on another. Put the picker's
+        // year back on it, or a reset on 2023 quietly ran 2022.
+        const shownYear = state.year;
+        const fileYear = (state.working.buildings || []).map(function (b) {
+            const m = ((b.demand || {}).csv_path || '').match(/_(\d{4})\.csv$/);
+            return m ? Number(m[1]) : null;
+        }).filter(Boolean)[0];
+        if (fileYear && fileYear !== shownYear) {
+            state.year = fileYear;
+            setYear(shownYear);
+        }
         // Reset is itself a change, and the next Apply should describe the
         // difference from what the table is showing - not from the scenario
         // it happens to be returning to.
@@ -1709,7 +1732,7 @@
             });
             // The campus has no chargers until someone adds one, but the
             // introduction has a step for the charge point: the example gets
-            // one at the P-hus, where Mobility's Add would put it.
+            // one at the P-hus, where Community's "Add a charger" would put it.
             if (!chargePoints().length) addChargePoint();
             return buildSpec();
         } finally {
@@ -2690,7 +2713,6 @@
         members: { icon: 'apartment', accent: 'pink' },
         community: { icon: 'solar_power', accent: 'yellow' },
         grid: { icon: 'bolt', accent: 'cyan' },
-        mobility: { icon: 'ev_station', accent: 'green' },
         view: { icon: 'visibility', accent: 'slate' },
         optimizer: { icon: 'insights', accent: 'violet' }
     };
@@ -2719,7 +2741,6 @@
         membersGroup();
         communityGroup();
         gridGroup();
-        mobilityGroup();
         optimizerGroup();
 
         const active = sections.some(function (s) { return s.id === state.openGroup; })
@@ -3265,6 +3286,9 @@
     // table clock, and rebuilding the panel each second would snatch away
     // whatever slider is under a finger.
     function paintSky() {
+        // The spot chart keeps the table's hour too. Here, because every hour
+        // change already comes through this function.
+        paintSpotNow();
         const sky = document.getElementById('ecom-sky');
         // sun-study-ui.js owns the solar maths and loads after this file. If it
         // is missing the panel is still usable - the sky just stays flat.
@@ -3904,13 +3928,7 @@
                 '<div class="ecom-ctl-subhead">Solar</div>' +
                 (arrays.length
                     ? sharedPv()
-                    : '<p class="ecom-ctl-empty">No community solar.</p>') +
-                '<button type="button" class="ecom-add-shared" data-shared="pv"' +
-                    ' title="Panels the scheme owns, on no member\'s roof. They ' +
-                    'feed whoever needs them. Panels on a building are added from ' +
-                    'its row in Members.">' +
-                    '<span class="material-icons">add</span>Add solar array' +
-                '</button>' +
+                    : '<p class="ecom-ctl-empty">No community solar yet.</p>') +
             '</div>';
 
         let battery_;
@@ -3954,23 +3972,24 @@
                         ? 'No community store. ' + inBuildings + ' ' +
                           (inBuildings > 1 ? 'batteries are' : 'battery is') +
                           ' owned by individual buildings - see Members.'
-                        : 'No battery in this community.') +
-                '</p>' +
-                '<button type="button" class="ecom-add-shared" data-shared="battery"' +
-                    ' title="A store the scheme owns, which answers any member ' +
-                    'rather than one building. Batteries added to a building ' +
-                    'from Members are that building\'s.">' +
-                    '<span class="material-icons">add</span>Add battery' +
-                '</button>';
+                        : 'No community battery yet.') +
+                '</p>';
         }
 
+        const chargerCount = chargePoints().length;
         return group('community', 'Community',
             Math.round(arrayKw).toLocaleString() + ' kW · ' +
-                (store ? Math.round(store.capacity).toLocaleString() : '0') + ' kWh',
+                (store ? Math.round(store.capacity).toLocaleString() : '0') + ' kWh · ' +
+                chargerCount + (chargerCount === 1 ? ' charger' : ' chargers'),
+            buildMarkup(!!store) +
             solar +
             '<div class="ecom-community-assets">' +
                 '<div class="ecom-ctl-subhead">Battery</div>' +
                 battery_ +
+            '</div>' +
+            '<div class="ecom-community-assets">' +
+                '<div class="ecom-ctl-subhead">Charging</div>' +
+                chargingMarkup() +
             '</div>');
     }
 
@@ -4033,47 +4052,258 @@
             'against 112 kW.';
     }
 
+    /** The hourly spot prices for the year being shown (SEK/kWh, 8760). */
+    function spotPrices() {
+        if (state.spotByYear[state.year]) return state.spotByYear[state.year];
+        const base = state.base && state.base.grid && state.base.grid.buying_price;
+        return base && Array.isArray(base.hourly) && base.hourly.length ? base.hourly : null;
+    }
+
+    /** Mean, low and high of the spot price over the hours the table is showing. */
+    function spotWindow(hourly) {
+        const first = (dayOfYear(state.startMonth, state.startDay) - 1) * 24;
+        const span = Math.max(1, state.spanDays || 1) * 24;
+        const slice = hourly.slice(first, first + span);
+        const values = slice.length ? slice : hourly;
+        let sum = 0;
+        let low = Infinity;
+        let high = -Infinity;
+        values.forEach(function (v) {
+            sum += v;
+            if (v < low) low = v;
+            if (v > high) high = v;
+        });
+        return { mean: sum / values.length, low: low, high: high, whole: !slice.length };
+    }
+
     function gridGroup() {
         const grid = state.working.grid || {};
-        const buy = (grid.buying_price || {}).fixed;
+        const buying = grid.buying_price || {};
+        const spot = spotPrices();
+        // On spot while the working copy still carries an hourly series.
+        const onSpot = Array.isArray(buying.hourly);
         const sell = (grid.selling_price || {}).fixed;
-        const carbon = (grid.carbon_intensity || {}).fixed;
-        return group('grid', 'Grid',
-            (buy != null ? buy : 1.35) + ' SEK/kWh in',
-            slider({
+        const win = spot ? spotWindow(spot) : null;
+
+        // The import price: the real hourly SE3 day-ahead price, or one flat
+        // price for every hour. The slider used to be the only control, so it
+        // showed a 1.35 that was not in use and, once touched, silently swapped
+        // the hourly prices for a flat one.
+        let importMarkup = '';
+        if (spot) {
+            importMarkup =
+                '<div class="ecom-ctl-span">' +
+                    '<button type="button" class="ecom-ctl-chip' + (onSpot ? ' is-on' : '') +
+                        '" data-price-mode="spot">Spot price (SE3, hourly)</button>' +
+                    '<button type="button" class="ecom-ctl-chip' + (onSpot ? '' : ' is-on') +
+                        '" data-price-mode="fixed">Fixed price</button>' +
+                '</div>';
+        }
+        if (onSpot && win) {
+            importMarkup +=
+                '<span class="ecom-ctl-hint">Import is the day-ahead spot price, hour ' +
+                'by hour - used by the table and by the optimizer. ' +
+                (win.whole ? 'Over the year' : 'Over the days shown') + ': ' +
+                'average <b>' + win.mean.toFixed(2) + '</b> SEK/kWh, from ' +
+                win.low.toFixed(2) + ' to ' + win.high.toFixed(2) + '. ' +
+                'Spot only - grid fees, tax and VAT are not in it.</span>';
+        } else {
+            importMarkup += slider({
                 name: 'buy_price', label: 'Import price',
-                value: buy != null ? buy : 1.35,
+                value: buying.fixed != null ? buying.fixed : 1.35,
                 min: 0, max: 5, step: 0.05, unit: 'SEK/kWh'
-            }) +
+            });
+        }
+
+        return group('grid', 'Grid',
+            onSpot && win
+                ? 'spot · avg ' + win.mean.toFixed(2) + ' SEK/kWh'
+                : Number(buying.fixed != null ? buying.fixed : 1.35).toFixed(2) + ' SEK/kWh in',
+            importMarkup +
             slider({
                 name: 'sell_price', label: 'Export price',
                 value: sell != null ? sell : 0.55,
                 min: 0, max: 5, step: 0.05, unit: 'SEK/kWh'
             }) +
-            slider({
-                name: 'carbon', label: 'Carbon intensity',
-                value: carbon != null ? carbon : 41,
-                min: 0, max: 400, step: 1, unit: 'g/kWh'
-            })
+            (spot ? spotChart(spot, onSpot ? null : buying.fixed) : '')
         );
     }
 
-    function mobilityGroup() {
+    // ------------------------------------------------------- spot chart
+    //
+    // The import price over the days the table is showing: what a cheap or a
+    // dear hour actually is, so that a battery charging at midday or a car
+    // waiting until night has a reason anyone can see. With a fixed price
+    // chosen, that price is drawn over the spot line it replaces.
+    const SPOT_W = 600;
+    const SPOT_H = 210;
+    const SPOT_PAD = { left: 44, right: 12, top: 14, bottom: 30 };
+    const SPOT_COLOUR = '#00ffe5';
+
+    /** The hours of the spot series the table is showing. */
+    function spotSlice(hourly) {
+        const first = (dayOfYear(state.startMonth, state.startDay) - 1) * 24;
+        const span = Math.max(1, state.spanDays || 1) * 24;
+        return { first: first, values: hourly.slice(first, first + span) };
+    }
+
+    function spotChart(hourly, fixed) {
+        const slice = spotSlice(hourly);
+        const v = slice.values;
+        if (!v.length) return '';
+        const lo = Math.min(0, Math.min.apply(null, v), fixed != null ? fixed : Infinity);
+        let hi = Math.max.apply(null, v.concat(fixed != null ? [fixed] : []));
+        if (hi - lo < 0.1) hi = lo + 0.1;
+        const plotW = SPOT_W - SPOT_PAD.left - SPOT_PAD.right;
+        const plotH = SPOT_H - SPOT_PAD.top - SPOT_PAD.bottom;
+        const x = function (i) { return SPOT_PAD.left + (v.length > 1 ? i / (v.length - 1) : 0) * plotW; };
+        const y = function (p) { return SPOT_PAD.top + (1 - (p - lo) / (hi - lo)) * plotH; };
+
+        const line = v.map(function (p, i) {
+            return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p).toFixed(1);
+        }).join(' ');
+        const area = line + ' L' + x(v.length - 1).toFixed(1) + ' ' + y(lo).toFixed(1) +
+                     ' L' + x(0).toFixed(1) + ' ' + y(lo).toFixed(1) + ' Z';
+        const mean = v.reduce(function (s, p) { return s + p; }, 0) / v.length;
+
+        // Price ticks: the bottom, the top and one between, in SEK/kWh.
+        let ticks = '';
+        [lo, (lo + hi) / 2, hi].forEach(function (p) {
+            ticks += '<line x1="' + SPOT_PAD.left + '" x2="' + (SPOT_W - SPOT_PAD.right) +
+                '" y1="' + y(p).toFixed(1) + '" y2="' + y(p).toFixed(1) +
+                '" stroke="#3f3f46" stroke-width="1"/>' +
+                '<text x="' + (SPOT_PAD.left - 6) + '" y="' + (y(p) + 4).toFixed(1) +
+                '" text-anchor="end" fill="#8b8b93" font-size="11">' + p.toFixed(2) + '</text>';
+        });
+        // Hour ticks every six hours, with the date at each midnight.
+        for (let i = 0; i < v.length; i += 6) {
+            const midnight = i % 24 === 0;
+            ticks += '<line x1="' + x(i).toFixed(1) + '" x2="' + x(i).toFixed(1) +
+                '" y1="' + SPOT_PAD.top + '" y2="' + (SPOT_H - SPOT_PAD.bottom) +
+                '" stroke="' + (midnight ? '#52525b' : '#2f2f35') + '" stroke-width="1"/>';
+            let label = String(i % 24).padStart(2, '0');
+            if (midnight) {
+                const day = fromDayOfYear(dayOfYear(state.startMonth, state.startDay) + i / 24);
+                label = day.day + ' ' + MONTH_NAMES[day.month - 1].slice(0, 3);
+            }
+            ticks += '<text x="' + x(i).toFixed(1) + '" y="' + (SPOT_H - SPOT_PAD.bottom + 16) +
+                '" text-anchor="middle" fill="' + (midnight ? '#c4c4cc' : '#8b8b93') +
+                '" font-size="11">' + label + '</text>';
+        }
+
+        const now = Math.min(Math.max(0, state.hour || 0), v.length - 1);
+        return '<div class="ecom-spot" data-spot-key="' + spotKey(fixed) + '">' +
+            '<div class="ecom-spot-head">' +
+                '<span>Spot price, SE3 &middot; ' + state.year + '</span>' +
+                '<b id="ecom-spot-now-text">' + v[now].toFixed(2) + ' SEK/kWh now</b>' +
+            '</div>' +
+            '<svg class="ecom-spot-svg" viewBox="0 0 ' + SPOT_W + ' ' + SPOT_H + '"' +
+                ' preserveAspectRatio="none" role="img" aria-label="Hourly spot price">' +
+                ticks +
+                '<path d="' + area + '" fill="' + SPOT_COLOUR + '" fill-opacity="0.08"/>' +
+                '<path d="' + line + '" fill="none" stroke="' + SPOT_COLOUR +
+                    '" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+                '<line x1="' + SPOT_PAD.left + '" x2="' + (SPOT_W - SPOT_PAD.right) +
+                    '" y1="' + y(mean).toFixed(1) + '" y2="' + y(mean).toFixed(1) +
+                    '" stroke="' + SPOT_COLOUR + '" stroke-opacity="0.55" stroke-dasharray="5 4"/>' +
+                (fixed != null
+                    ? '<line x1="' + SPOT_PAD.left + '" x2="' + (SPOT_W - SPOT_PAD.right) +
+                      '" y1="' + y(fixed).toFixed(1) + '" y2="' + y(fixed).toFixed(1) +
+                      '" stroke="#ffc247" stroke-width="2"/>'
+                    : '') +
+                '<line id="ecom-spot-now" x1="' + x(now).toFixed(1) + '" x2="' + x(now).toFixed(1) +
+                    '" y1="' + SPOT_PAD.top + '" y2="' + (SPOT_H - SPOT_PAD.bottom) +
+                    '" stroke="#facc15" stroke-width="1.5"/>' +
+                '<circle id="ecom-spot-dot" cx="' + x(now).toFixed(1) + '" cy="' + y(v[now]).toFixed(1) +
+                    '" r="4" fill="#facc15"/>' +
+            '</svg>' +
+            '<div class="ecom-spot-key">' +
+                '<span><i style="background:' + SPOT_COLOUR + '"></i>spot, hourly</span>' +
+                '<span><i class="is-dash" style="border-color:' + SPOT_COLOUR + '"></i>average ' +
+                    mean.toFixed(2) + '</span>' +
+                (fixed != null
+                    ? '<span><i style="background:#ffc247"></i>fixed ' + fixed.toFixed(2) + '</span>'
+                    : '') +
+                '<span><i style="background:#facc15"></i>hour on the table</span>' +
+                '<span class="ecom-spot-unit">SEK/kWh</span>' +
+            '</div>' +
+        '</div>';
+    }
+
+    /** What the chart was drawn for: when this changes it is redrawn, not moved. */
+    function spotKey(fixed) {
+        return state.year + ':' + dayOfYear(state.startMonth, state.startDay) + ':' +
+            (state.spanDays || 1) + ':' + (fixed != null ? fixed : 'spot');
+    }
+
+    /**
+     * Keep the chart with the table: move the hour marker, or redraw the chart
+     * when the days, the year or the fixed price it was drawn for have changed.
+     */
+    function paintSpotNow() {
+        const chart = document.querySelector('.ecom-spot');
+        if (!chart) return;
+        const hourly = spotPrices();
+        if (!hourly) return;
+        const grid = state.working && state.working.grid;
+        const buying = (grid && grid.buying_price) || {};
+        const shownFixed = Array.isArray(buying.hourly) ? null : buying.fixed;
+        if (chart.getAttribute('data-spot-key') !== spotKey(shownFixed)) {
+            chart.outerHTML = spotChart(hourly, shownFixed);
+            return;
+        }
+        const marker = document.getElementById('ecom-spot-now');
+        if (!marker) return;
+        const v = spotSlice(hourly).values;
+        if (!v.length) return;
+        // Same scale as spotChart: read it back off the drawn ticks would be
+        // fragile, so it is recomputed - cheap for at most a year of hours.
+        const fixed = shownFixed;
+        const lo = Math.min(0, Math.min.apply(null, v), fixed != null ? fixed : Infinity);
+        let hi = Math.max.apply(null, v.concat(fixed != null ? [fixed] : []));
+        if (hi - lo < 0.1) hi = lo + 0.1;
+        const plotW = SPOT_W - SPOT_PAD.left - SPOT_PAD.right;
+        const plotH = SPOT_H - SPOT_PAD.top - SPOT_PAD.bottom;
+        const now = Math.min(Math.max(0, state.hour || 0), v.length - 1);
+        const px = SPOT_PAD.left + (v.length > 1 ? now / (v.length - 1) : 0) * plotW;
+        const py = SPOT_PAD.top + (1 - (v[now] - lo) / (hi - lo)) * plotH;
+        marker.setAttribute('x1', px.toFixed(1));
+        marker.setAttribute('x2', px.toFixed(1));
+        const dot = document.getElementById('ecom-spot-dot');
+        if (dot) { dot.setAttribute('cx', px.toFixed(1)); dot.setAttribute('cy', py.toFixed(1)); }
+        const text = document.getElementById('ecom-spot-now-text');
+        if (text) text.textContent = v[now].toFixed(2) + ' SEK/kWh now';
+    }
+
+    /** Switch the import price between the hourly spot series and a flat one. */
+    function setPriceMode(mode) {
+        const spot = spotPrices();
+        const grid = state.working.grid;
+        if (!spot || !grid) return;
+        if (mode === 'spot') {
+            grid.buying_price = { hourly: spot.slice() };
+        } else {
+            // Starts at the spot average of the days shown, so switching does
+            // not jump the bill before the slider has been touched.
+            const mean = spotWindow(spot).mean;
+            grid.buying_price = { fixed: Number((Math.round(mean / 0.05) * 0.05).toFixed(2)) };
+        }
+        render();
+        markDirty();
+    }
+
+    /**
+     * The chargers, as the Charging section of the Community tab. It was a tab
+     * of its own (Mobility); it lives with the other things the community runs
+     * on now - solar, storage and charging - and lists every charger, the ones
+     * added from a building's row too, each labelled with its building.
+     */
+    function chargingMarkup() {
         const points = chargePoints();
 
         if (!points.length) {
-            return group('mobility', 'Mobility', 'none',
-                '<span class="ecom-ctl-hint">No charge points in this ' +
-                'community.</span>' +
-                '<div class="ecom-ctl-actions">' +
-                    '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
-                        ' data-action="cp-add">Add a charge point</button>' +
-                '</div>');
+            return '<p class="ecom-ctl-empty">No chargers yet.</p>';
         }
-
-        const total = points.reduce(function (sum, cp) {
-            return sum + (cp.capacity || 0);
-        }, 0);
 
         const rows = points.map(function (cp, index) {
             const placed = cp.lat != null;
@@ -4081,7 +4311,8 @@
             return '' +
                 '<div class="ecom-cp">' +
                     '<div class="ecom-cp-head">' +
-                        '<span class="ecom-cp-name">' + esc(cp.name) + '</span>' +
+                        '<span class="ecom-cp-name">' + esc(cp.name) +
+                            (cp.host ? ' &middot; ' + esc(hostLabel(cp.host)) : '') + '</span>' +
                         '<span class="ecom-cp-kw">' + Math.round(cp.capacity) + ' kW</span>' +
                         (points.length > 1
                             ? '<button type="button" class="ecom-mini"' +
@@ -4117,17 +4348,52 @@
                 '</div>';
         }).join('');
 
-        return group('mobility', 'Mobility',
-            points.length + (points.length === 1 ? ' charger · ' : ' chargers · ') +
-                Math.round(total) + ' kW',
-            '<div class="ecom-cps">' + rows + '</div>' +
-            '<div class="ecom-ctl-actions">' +
-                '<button type="button" class="ecom-ctl-btn" data-action="cp-add">' +
-                    'Add a charge point</button>' +
+        return '<div class="ecom-cps">' + rows + '</div>';
+    }
+
+    /**
+     * The head of the Community tab: what can be built, as three buttons that
+     * look like the thing to do rather than footnotes under each list. Each
+     * adds an asset the community owns; equipment on one building is added
+     * from that building's row in Members.
+     */
+    function buildMarkup(hasStore) {
+        const button = function (cls, attr, icon, label, title) {
+            return '<button type="button" class="ecom-build-btn ' + cls + '" ' + attr +
+                ' title="' + esc(title) + '">' +
+                '<span class="material-icons">' + icon + '</span>' + esc(label) +
+            '</button>';
+        };
+        return '<div class="ecom-build">' +
+            '<div class="ecom-build-title">' +
+                '<span class="material-icons">hub</span>' +
+                'Add what the whole community shares' +
             '</div>' +
-            '<span class="ecom-ctl-hint">The charger and its car move together ' +
-            'on vehicle-to-grid: the backend rejects a car with it on behind a ' +
-            'charger without it.</span>');
+            '<p class="ecom-build-text">Add solar, storage and chargers that the ' +
+                'community owns together and every member can draw on. Equipment ' +
+                'for one building is added from its row in Members.</p>' +
+            '<div class="ecom-build-actions">' +
+                button('is-pv', 'data-shared="pv"', 'solar_power', 'Add solar',
+                       'A shared array on no member\'s roof. It feeds whoever ' +
+                       'needs it.') +
+                (hasStore
+                    ? ''
+                    : button('is-battery', 'data-shared="battery"',
+                             'battery_charging_full', 'Add battery',
+                             'A store the community owns, which answers any ' +
+                             'member rather than one building.')) +
+                button('is-charger', 'data-action="cp-add"', 'ev_station', 'Add charger',
+                       'A charger the community owns, in the P-hus car park.') +
+            '</div>' +
+        '</div>';
+    }
+
+    /** A building's display name from a charger's host (a footprint id or a name). */
+    function hostLabel(host) {
+        const building = ((state.base && state.base.buildings) || []).find(function (b) {
+            return sameBuilding(b.name, host);
+        });
+        return building ? building.name : host;
     }
 
     /** The toggles and size sliders under one building's row.
@@ -4559,12 +4825,6 @@
 
         return group('optimizer', 'Optimizer',
             changed ? changed + ' changed' : offered.length + ' constants',
-            '<span class="ecom-ctl-hint">These drive the MILP optimizer, not the ' +
-            'dispatch the table animates - it returns costs rather than a new ' +
-            'set of flows, and changing one leaves the table as it is. A run ' +
-            'starts on the date chosen above, in Day, and covers the span ' +
-            'picked here; a year is the calendar year, because a period cannot ' +
-            'wrap the new year.</span>' +
             '<div class="ecom-ctl-span">' +
                 [['community', 'As an energy community'],
                  ['separate', 'As today'],
@@ -4950,6 +5210,7 @@
             case 'buy_price':
                 w.grid.buying_price = { fixed: value };
                 set(value.toFixed(2) + ' SEK/kWh');
+                paintSpotNow();     // the fixed line moves with the slider
                 markDirty();
                 break;
             case 'sell_price':
@@ -4974,7 +5235,7 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step',
+        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step', 'data-price-mode',
         'data-optimizer-span', 'data-optimizer-mode', 'data-peak', 'data-kit', 'data-roofowner',
         'data-shared', 'data-profile-mode', 'data-profile-focus',
         'data-param-info', 'data-charger-step'
@@ -5000,6 +5261,9 @@
 
         const jump = el.getAttribute('data-story-step');
         if (jump !== null) { storyGo(Number(jump)); return; }
+
+        const priceMode = el.getAttribute('data-price-mode');
+        if (priceMode) { setPriceMode(priceMode); return; }
 
         const action = el.getAttribute('data-action');
         if (action === 'kpi-more') {
@@ -5288,7 +5552,7 @@
         }
 
         // V2G for every charger at one building, from its row in Members. Both
-        // flags together, as the Mobility switch does: the backend refuses a
+        // flags together, as the switch in Community's Charging list does: the backend refuses a
         // car with V2G on behind a charger without it.
         const v2gBuilding = target.getAttribute && target.getAttribute('data-kit-v2g');
         if (v2gBuilding) {
@@ -5391,7 +5655,7 @@
         // awaited: the panel opens on Members and the group is closed until
         // someone asks for it.
         loadBays().then(function () {
-            if (state.openGroup === 'mobility') render();
+            if (state.openGroup === 'community') render();
         });
 
         // Started here, not awaited: the panel is useful without them, but
@@ -5445,6 +5709,18 @@
             const select = document.getElementById('ecom-year');
             if (select) select.innerHTML = yearOptions();
         } catch (error) { /* the picker keeps the scenario year only */ }
+
+        // The spot prices of every year there is demand for, fetched now so
+        // that changing year can swap them in at once, before the dispatch it
+        // triggers goes out. A year without a price file keeps the scenario's.
+        await Promise.all((state.years.length ? state.years : [state.year]).map(
+            async function (year) {
+                try {
+                    const prices = await getJson('/api/prices/se3/' + year);
+                    if (Array.isArray(prices.hourly)) state.spotByYear[year] = prices.hourly;
+                } catch (error) { /* stays on the scenario's own prices */ }
+            }));
+        if (state.openGroup === 'grid') render();
 
         // The two days of each year worth aiming at. Same reasoning as the
         // year list: late enough not to hold up the panel, early enough to be

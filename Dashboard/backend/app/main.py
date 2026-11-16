@@ -368,6 +368,30 @@ def preview(spec: CommunitySpec) -> dict:
     }
 
 
+SPOT_PRICE_DIR = Path(__file__).resolve().parents[3] / "Data" / "prices"
+
+
+@app.get("/api/prices/se3/{year}")
+def spot_prices(year: int) -> dict:
+    """A year of hourly SE3 day-ahead spot prices, in SEK/kWh.
+
+    Written by scripts/import_spot_prices.py from the ENTSO-E export (Nord Pool's
+    SE3 day-ahead price). The controller swaps these in when the year changes,
+    so the prices follow the demand year instead of staying on 2022.
+    """
+    path = SPOT_PRICE_DIR / f"se3_spot_{year}.csv"
+    if not path.is_file():
+        raise HTTPException(status_code=404,
+                            detail=f"no spot prices for {year}; run "
+                                   f"scripts/import_spot_prices.py --year {year}")
+    values = [float(line.split(",")[1])
+              for line in path.read_text(encoding="utf-8").splitlines()[1:] if line]
+    if len(values) != 8760:
+        raise HTTPException(status_code=500,
+                            detail=f"{path.name} has {len(values)} hours, expected 8760")
+    return {"area": "SE3", "year": year, "unit": "SEK/kWh", "hourly": values}
+
+
 @app.get("/api/scenarios/{name}/years")
 def scenario_years(name: str) -> dict:
     """Which years of measured demand this scenario can be run for.
