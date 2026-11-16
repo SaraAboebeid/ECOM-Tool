@@ -361,6 +361,12 @@
     display: flex;
     flex-direction: column;
 }
+.ecom-ctl-result h5 {
+    grid-column: 1 / -1;
+    margin: 0.3rem 0 0;
+    font-size: 0.75rem;
+    color: #d0d0d0;
+}
 .ecom-ctl-result span { font-size: 0.7rem; color: #8b8b8b; }
 .ecom-ctl-result b {
     font-size: 1rem;
@@ -728,6 +734,23 @@
     transition: opacity 0.12s ease;
 }
 .ecom-prof-line.is-focus { stroke-width: 3; }
+
+/* The building under the pointer: its line lifted out of the rest, the others
+   stood back, and a dot and a name on it. */
+.ecom-prof-svg.has-hover .ecom-prof-line { stroke-opacity: 0.28; }
+.ecom-prof-svg.has-hover .ecom-prof-line.is-hover { stroke-opacity: 1; stroke-width: 3.4; }
+
+.ecom-prof-tip { pointer-events: none; }
+.ecom-prof-tip circle { stroke: #1c1c1f; stroke-width: 2; }
+.ecom-prof-tip text {
+    font-size: 14px;
+    font-weight: 600;
+    /* An outline in the page colour, so the name reads over any line it crosses. */
+    paint-order: stroke;
+    stroke: #1c1c1f;
+    stroke-width: 4px;
+    stroke-linejoin: round;
+}
 
 /* The hour the table is on, and the hour under the pointer. */
 .ecom-prof-now { stroke: #facc15; stroke-width: 2; }
@@ -1559,59 +1582,6 @@
     color: var(--ecom-warn, #ffc247);
 }
 
-/* The introduction: one button the presenter can find without looking down. */
-.ecom-ctl-story {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
-}
-.ecom-ctl-story.is-running {
-    border-color: rgba(232, 238, 246, 0.28);
-    background: rgba(232, 238, 246, 0.05);
-}
-.ecom-ctl-story-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-}
-.ecom-ctl-story-label {
-    font-size: 12px;
-    letter-spacing: 0.02em;
-    opacity: 0.78;
-}
-.ecom-ctl-dots {
-    display: flex;
-    gap: 5px;
-}
-/* Each dot is a jump, for the question asked out of order. */
-.ecom-ctl-dot {
-    width: 8px;
-    height: 8px;
-    padding: 0;
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
-    background: rgba(255, 255, 255, 0.22);
-    transition: width 160ms ease, background 160ms ease;
-}
-.ecom-ctl-dot.is-done { background: rgba(232, 238, 246, 0.55); }
-.ecom-ctl-dot.is-on {
-    width: 20px;
-    background: var(--ecom-action, #e8eef6);
-}
-.ecom-ctl-story-bar {
-    display: flex;
-    gap: 8px;
-}
-.ecom-ctl-story-bar .ecom-ctl-btn { flex: 1; }
-.ecom-ctl-story-bar .ecom-ctl-btn[disabled] {
-    opacity: 0.35;
-    cursor: default;
-}
 
 /* A control keeping time with the table.
    The beats are 400 ms announce, 800 ms land, 600 ms settle: the tint comes up
@@ -1819,21 +1789,6 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
 .ecom-ctl-param-warn { display: block; font-size: 0.76rem; color: #8b8b94; }
 .ecom-ctl-param-warn { margin-top: 0.15rem; color: #fbbf24; }
 
-/* The rolling window, stated. */
-.ecom-ctl-window {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem 0.7rem;
-    border-radius: 8px;
-    background: #262b36;
-    font-size: 0.88rem;
-    line-height: 1.4;
-    color: #c9d3e6;
-}
-.ecom-ctl-window .material-icons { font-size: 18px; color: #7a8aa3; margin-top: 0.1rem; }
-.ecom-ctl-window b { color: #fff; }
-
 @media (prefers-reduced-motion: reduce) {
     .ecom-info { transition: none; }
 }
@@ -1904,6 +1859,38 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     align-items: center;
     gap: 0.4rem;
     padding: 0;
+}
+
+/* How many chargers a building has: a number between a minus and a plus. */
+.ecom-kit-chargers { grid-template-columns: 6rem auto minmax(60px, 1fr) 5.8rem; }
+.ecom-tabpanel .ecom-ctl-member-row > .ecom-kit-chargers { column-gap: 0.5rem; }
+
+.ecom-stepper {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #27272a;
+}
+.ecom-stepper button {
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #e4e4e7;
+    font: inherit;
+    font-size: 1.15rem;
+    cursor: pointer;
+}
+.ecom-stepper button:hover:not([disabled]) { background: #3a3a40; }
+.ecom-stepper button[disabled] { opacity: 0.3; cursor: default; }
+.ecom-stepper b {
+    min-width: 1.8rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: #34d399;
 }
 
 /* On a narrower screen the column is too tight for the owner as well, and a
@@ -2008,9 +1995,8 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     grid-template-columns: 220px minmax(0, 1fr) minmax(310px, 380px);
     grid-template-areas:
         "sky when bar"
-        "sky when status"
-        "sky when story";
-    grid-template-rows: auto auto 1fr;
+        "sky when status";
+    grid-template-rows: auto 1fr;
     gap: 0.45rem 0.9rem;
     align-items: stretch;
 }
@@ -2065,12 +2051,6 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     min-width: 0;
 }
 
-#main-panel.ecom-mode .ecom-ctl-story {
-    grid-area: story;
-    margin-top: 0;
-    padding: 0.45rem 0.65rem;
-}
-#main-panel.ecom-mode .ecom-ctl-story-head { margin-bottom: 0.3rem; }
 
 /* The solar figure moves to the corner and goes on one line, clear of the
    clock. It sat on top of the time in a card this narrow. The clock is also
@@ -2135,6 +2115,11 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     margin-bottom: 0.3rem;
 }
 
+/* The figures' own title said "with and without the energy community", and the
+   line directly under it says the same with the numbers in. Two lines of height
+   for one sentence, on a screen where every line comes off the top row. */
+#main-panel.ecom-mode .dashboard-card:last-child .dashboard-section-title { display: none; }
+
 /* The sentence under the chips said what tapping a swatch does, which the chips
    already say by being buttons. In a strip it only costs a line of height. */
 #main-panel.ecom-mode .ecom-legend-note { display: none; }
@@ -2149,8 +2134,71 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     margin-bottom: 0;
 }
 
-/* The comparison: each tile is the figure with the community, what the same
-   buildings manage alone, and the difference - so it reads as one thing. */
+/* The comparison as a table: one column per measure, and down it the community,
+   the same buildings each on their own, and the difference. Read straight
+   across, the two figures sit in the same column one above the other, which is
+   the whole job of a comparison. */
+.ecom-kpi-table {
+    display: grid;
+    grid-template-columns: minmax(8.5rem, 11rem) repeat(var(--kpi-cols, 6), minmax(0, 1fr));
+    align-items: center;
+    border: 1px solid #3a3a40;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.tone-green  { --tone: #7dffb0; --edge: #00ff5e; }
+.tone-pink   { --tone: #ff86d5; --edge: #ff00a6; }
+.tone-yellow { --tone: #f2ff7a; --edge: #eaff00; }
+.tone-cyan   { --tone: #7dfff2; --edge: var(--ecom-battery, #fa3600); }
+.tone-blue   { --tone: #9fd0ff; --edge: #60a5fa; }
+
+.ecom-kpi-cell {
+    padding: 0.28rem 0.65rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ecom-kpi-corner { background: #26262a; border-bottom: 1px solid #3a3a40; }
+
+/* The measures, each under a stripe of its own colour - the colour it has on the
+   table. */
+.ecom-kpi-cell.is-colhead {
+    padding-top: 0.35rem;
+    padding-bottom: 0.3rem;
+    background: #26262a;
+    border-bottom: 1px solid #3a3a40;
+    border-top: 3px solid var(--edge);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #9b9ba3;
+}
+
+.ecom-kpi-rowhead {
+    padding: 0.28rem 0.65rem;
+    font-size: 0.88rem;
+    color: #a1a1aa;
+    white-space: nowrap;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+}
+
+/* With the community is the row that matters: brighter, larger, tinted. */
+.ecom-kpi-rowhead.is-with,
+.ecom-kpi-cell.is-with { background: rgba(255, 255, 255, 0.05); }
+.ecom-kpi-rowhead.is-with { color: #fff; font-weight: 600; }
+.ecom-kpi-cell.is-with { font-size: 1.4rem; font-weight: 700; color: var(--tone); }
+
+.ecom-kpi-cell.is-alone { font-size: 1.08rem; color: #c9c9d1; }
+
+.ecom-kpi-rowhead.is-diff,
+.ecom-kpi-cell.is-diff { border-top: 1px solid #34343a; }
+
+/* The comparison tile - kept for a layer that arrives with no baseline. */
 .ecom-kpi-compare-head {
     margin: 0 0 0.4rem;
     font-size: 0.84rem;

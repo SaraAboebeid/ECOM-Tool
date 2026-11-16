@@ -206,6 +206,11 @@ class OptimizeRequest(BaseModel):
     parameters: OptimizerParameters | None = Field(
         None, description="Overrides for LEC-Opt's hardcoded constants.")
     temperature_c: float = Field(18.0, description="Ambient temperature for aging.")
+    mode: Literal["community", "separate"] = Field(
+        "community",
+        description="community: the buildings optimised together as one energy "
+        "community. separate: the same buildings as they are today, each on its "
+        "own connection with nothing shared.")
 
 
 @app.get("/api/live/battery")
@@ -315,6 +320,7 @@ def start_optimization(request: OptimizeRequest) -> dict:
             "store_hours": request.store_hours,
             "aging": request.aging,
             "v2g": request.v2g,
+            "mode": request.mode,
             "temperature_c": request.temperature_c,
             "parameters": (request.parameters.model_dump(mode="json")
                            if request.parameters else None),

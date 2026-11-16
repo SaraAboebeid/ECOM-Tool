@@ -222,6 +222,62 @@ def test_a_day_is_solved_over_36_hours_and_24_are_kept(monkeypatch):
     assert seen["input_hours"] >= 24 + (36 - 24)
 
 
+def _two_buildings(**overrides) -> CommunitySpec:
+    spec = tiny_spec(**overrides)
+    spec.buildings.append(type(spec.buildings[0])(
+        name="Small", owner="Akademiska Hus", footprint_area=300.0,
+        demand={"annual_kwh": 120000, "shape": DAILY}))
+    return spec
+
+
+def test_separate_mode_solves_every_building_on_its_own_connection():
+    """"As today": no sharing, and each building pays its own bill."""
+    spec = _two_buildings(batteries=[], charge_points=[])
+    result = run_optimization(spec, days=1, mode="separate")
+
+    assert result["mode"] == "separate"
+    assert [s["name"] for s in result["sites"]] == ["B1", "Small"]
+    # The totals are the sites added up - including the peak, because separate
+    # connections are charged on their own peaks, not on the peak of the sum.
+    for key, site_key in (("overall_cost", "overall_cost"),
+                          ("grid_import_kwh", "grid_import_kwh"),
+                          ("peak_net_import_kw", "peak_net_import_kw")):
+        assert result["totals"][key] == pytest.approx(
+            sum(s[site_key] for s in result["sites"]), rel=1e-6), key
+    assert result["hours"] == 24
+
+
+def test_the_community_does_not_cost_more_than_the_same_buildings_apart():
+    """One connection means one subscription fee and one peak charge, and the
+    buildings can use each other's surplus - so together cannot be dearer."""
+    spec = _two_buildings(batteries=[], charge_points=[])
+    together = run_optimization(spec, days=1, mode="community")["totals"]["overall_cost"]
+    apart = run_optimization(spec, days=1, mode="separate")["totals"]["overall_cost"]
+    assert together < apart
+
+
+def test_community_solar_is_in_the_optimizer_and_separate_mode_leaves_it_out():
+    """Panels no building names used to be absent from the optimizer entirely."""
+    spec = tiny_spec(
+        batteries=[], charge_points=[],
+        pv_plants=[{"name": "Roof", "surface_area": 500.0, "slope": 30.0},
+                   {"name": "Ground", "surface_area": 4000.0, "slope": 30.0}])
+    inputs = build_optimizer_inputs(spec)
+
+    node = inputs["building_data"][COMMUNITY_STORAGE_NODE]
+    assert node["pv_production"].sum() > 0          # the ground array is there
+    assert node["electricity_load"].sum() == 0      # and it carries nothing else
+    assert node["bess_capacity"].iloc[0] == 0       # no battery was asked for
+
+    separate = run_optimization(spec, days=1, mode="separate")
+    assert [s["name"] for s in separate["sites"]] == ["B1"]   # no community site
+
+
+def test_an_unknown_optimizer_mode_is_refused():
+    with pytest.raises(ValueError):
+        run_optimization(tiny_spec(), days=1, mode="neighbours")
+
+
 def test_every_optimizer_parameter_says_what_it_stands_for():
     """The controller shows this beside each constant, so none can be blank."""
     from app.schemas.optimizer_params import describe_parameters

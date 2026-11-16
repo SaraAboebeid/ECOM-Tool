@@ -349,10 +349,30 @@ def build_optimizer_inputs(
             "bess_power": [sum(b.power_kw for b in mine)] * n,
         }, index=index)
 
-    if total_battery > 0:
+    # Solar the community owns - panels no building names, a ground array or a
+    # roof rented from a building outside the scheme. It used to be left out of
+    # the optimizer altogether: the loop above reads only the plants attached to
+    # a building, so a community array was in the dispatch and every KPI beside
+    # it and absent from the one model that prices the result.
+    #
+    # It goes on the same zero-load node as the community battery, which already
+    # exists to hold what belongs to the community and to no member.
+    community_pv = [0.0] * HOURS_PER_YEAR
+    for plant in getattr(built.community, "PV_plant", None) or []:
+        series = plant.hourly_result.df["value"].tolist()
+        for i in range(min(len(series), HOURS_PER_YEAR)):
+            community_pv[i] += series[i]
+    has_community_pv = any(v > 0 for v in community_pv)
+    if has_community_pv:
+        notes.append(
+            "Community-owned solar is modelled on the node "
+            f"{COMMUNITY_STORAGE_NODE!r}, with the community battery."
+        )
+
+    if total_battery > 0 or has_community_pv:
         building_data[COMMUNITY_STORAGE_NODE] = pd.DataFrame({
             "electricity_load": [0.0] * n,
-            "pv_production": [0.0] * n,
+            "pv_production": _slice(community_pv, spec, n),
             "bess_capacity": [total_battery] * n,
             "bess_power": [total_power] * n,
         }, index=index)
@@ -486,8 +506,19 @@ def run_optimization(
     nordpool: Optional[NordPoolClient] = None,
     progress: Optional[Callable[[str], None]] = None,
     parameters=None,
+    mode: str = "community",
 ) -> dict:
-    """Run the rolling-horizon optimizer and summarise the result."""
+    """Run the rolling-horizon optimizer and summarise the result.
+
+    mode "community" optimises the buildings together, as one energy community
+    on one grid connection - the model LEC-Opt is. mode "separate" optimises the
+    same buildings as they are today, each on its own: its own connection, its
+    own subscription and peak charge, no sharing with its neighbours, and none
+    of the community's own solar or battery. Run both and the difference is what
+    the community is worth to the optimizer.
+    """
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
     functions1 = _import_lec()
     status = solver_status()
     if not status["available"]:
@@ -529,11 +560,10 @@ def run_optimization(
         base = parameters if parameters is not None else OptimizerParameters()
         effective = base.model_copy(update={"battery_efficiency": one_way})
 
-    with _RUN_LOCK, quiet.capture() as sink, \
-            _applied_parameters(functions1, effective):
-        frame = functions1.optimization_function_lec(
-            charging_point_data=inputs["charging_point_data"],
-            building_data=inputs["building_data"],
+    def solve(building_data, charging_point_data, building_on=1):
+        return functions1.optimization_function_lec(
+            charging_point_data=charging_point_data,
+            building_data=building_data,
             prices=inputs["prices"],
             temperature=inputs["temperature"],
             activation=inputs["activation"],
@@ -545,26 +575,162 @@ def run_optimization(
             aging=int(bool(aging)),
             v2g_on=int(bool(v2g)),
             dc=False,
-            building_on=1,
+            building_on=building_on,
             previous_monthly_peak=0.0,
             current_month=inputs["start_date"].month,
             initial_bess_soc=0.5,
             pv_on=1, bess_on=1,
         )
 
-    if frame is None or len(frame) == 0:
-        raise OptimizerUnavailable(
-            "the optimizer returned no rows; the solver log is in the server output")
+    sites: list[dict] = []
+    with _RUN_LOCK, quiet.capture() as sink, \
+            _applied_parameters(functions1, effective):
+        if mode == "community":
+            frame = solve(inputs["building_data"], inputs["charging_point_data"])
+            if frame is None or len(frame) == 0:
+                raise OptimizerUnavailable(
+                    "the optimizer returned no rows; the solver log is in the "
+                    "server output")
+            totals, series = _totals(frame), _series(frame)
+            hours = len(frame)
+        else:
+            frames = []
+            to_solve = _separate_sites(spec, inputs, notes)
+            for number, site in enumerate(to_solve, start=1):
+                if progress:
+                    progress(f"{site['name']} on its own "
+                             f"({number} of {len(to_solve)})")
+                one = solve(site["building_data"], site["charging_point_data"],
+                            building_on=site["building_on"])
+                if one is None or len(one) == 0:
+                    raise OptimizerUnavailable(
+                        f"the optimizer returned no rows for {site['name']}; the "
+                        f"solver log is in the server output")
+                frames.append(one)
+                t = _totals(one)
+                sites.append({
+                    "name": site["name"],
+                    "overall_cost": t["overall_cost"],
+                    "grid_import_kwh": t["grid_import_kwh"],
+                    "grid_export_kwh": t["grid_export_kwh"],
+                    "peak_net_import_kw": t["peak_net_import_kw"],
+                })
+            totals, series = _combine_totals(frames), _combine_series(frames)
+            hours = len(frames[0])
 
     return {
         "solver": status["solver"],
+        "mode": mode,
         "days": int(n_days),
-        "hours": len(frame),
+        "hours": hours,
         "notes": notes,
-        "totals": _totals(frame),
-        "series": _series(frame),
+        "totals": totals,
+        "series": series,
+        # Per building, for a run where each was solved on its own.
+        "sites": sites,
         "log_tail": sink.getvalue().splitlines()[-12:],
     }
+
+
+MODES = ("community", "separate")
+
+
+def _separate_sites(spec: CommunitySpec, inputs: dict, notes: list) -> list[dict]:
+    """What an "as today" run solves: every member building on its own.
+
+    A site is one grid connection. Each building is one, with its own roof
+    panels, its own battery and the chargers mounted on it. Anything the
+    community owns - the shared battery, shared solar - is not in any of them,
+    because without a community there is nobody to own it.
+
+    A charger that belongs to no building is a connection of its own, so it is
+    solved on its own rather than quietly handed to a building it was never
+    mounted on.
+    """
+    def loose(text: object) -> str:
+        return "".join(ch for ch in str(text).lower() if ch.isalnum())
+
+    names = [n for n in inputs["building_data"] if n != COMMUNITY_STORAGE_NODE]
+    by_loose = {loose(n): n for n in names}
+
+    owned: dict[str, dict] = {n: {} for n in names}
+    loose_chargers: dict = {}
+    for cp in spec.charge_points:
+        frame = inputs["charging_point_data"].get(cp.name)
+        if frame is None:
+            continue
+        owner = by_loose.get(loose(cp.host)) if cp.host else None
+        (owned[owner] if owner else loose_chargers)[cp.name] = frame
+
+    sites = [{
+        "name": n,
+        "building_data": {n: inputs["building_data"][n]},
+        "charging_point_data": owned[n],
+        "building_on": 1,
+    } for n in names]
+
+    if loose_chargers:
+        # building_on=0: no building in this connection, only the chargers. A
+        # building's data still has to be handed over - the model sizes its
+        # timeline from it - but it is not built.
+        sites.append({
+            "name": "Chargers with no building",
+            "building_data": {names[0]: inputs["building_data"][names[0]]},
+            "charging_point_data": loose_chargers,
+            "building_on": 0,
+        })
+
+    dropped = []
+    if COMMUNITY_STORAGE_NODE in inputs["building_data"]:
+        dropped.append("the community battery and solar")
+        # The notes written while the inputs were built describe the community's
+        # shared store and its sizing against the community peak. None of that is
+        # in this run, and leaving it reads as though it were. What belongs to a
+        # building stays.
+        notes[:] = [n for n in notes if "attached to" in n]
+    notes.append(
+        f"Each of the {len(names)} buildings is solved on its own, as today: its "
+        f"own grid connection, its own peak charge and subscription, nothing "
+        f"shared with its neighbours"
+        + (f", and without {' and '.join(dropped)}" if dropped else "") + "."
+    )
+    return sites
+
+
+def _combine_totals(frames: list) -> dict:
+    """Add up one run per site into the figures for all of them together.
+
+    Every figure is a plain sum - each building pays its own bill - including the
+    peak: separate connections are charged on their own peaks, so the number
+    that matters is the sum of those, which is larger than the peak of the sum.
+    """
+    keys = _totals(frames[0]).keys()
+    out = {key: 0.0 for key in keys}
+    for frame in frames:
+        for key, value in _totals(frame).items():
+            out[key] += value
+    return out
+
+
+def _combine_series(frames: list) -> dict:
+    """The hourly series of every site, added together."""
+    out = {}
+    first = _series(frames[0])
+    for key in ("P_import_all", "P_export_all", "Overall cost", "Supplier cost"):
+        if key in first:
+            out[key] = [0.0] * len(first[key])
+    soc: dict = {}
+    for frame in frames:
+        one = _series(frame)
+        for key in out:
+            for i, value in enumerate(one.get(key, [])):
+                if i < len(out[key]):
+                    out[key][i] += value
+        soc.update(one.get("soc", {}))
+    out = {k: [round(v, 4) for v in vs] for k, vs in out.items()}
+    out["soc"] = soc
+    out["timestamps"] = first["timestamps"]
+    return out
 
 
 def _num(frame: pd.DataFrame, column: str) -> float:

@@ -92,216 +92,6 @@
         { key: 'charge_point', label: 'Charging', color: PALETTE.charge_point || '#00ff5e' }
     ];
 
-    // ----------------------------------------------------------- the story
-    //
-    // An introduction, for showing the community to a room. The entities are
-    // introduced one at a time and only then do they start trading, because
-    // sharing cannot be explained until there is something to share between.
-    //
-    // The order is demand, then supply, then the outside world, then the two
-    // new things, then the community. Buildings first because they are what
-    // the room already recognises; the grid third rather than last because it
-    // is the reference point - total dependency is what makes self-sufficiency
-    // mean anything two steps later.
-    //
-    // Nothing is connected to anything until the last step. The entities are
-    // introduced as objects on a campus - a building, a roof, a substation, a
-    // store, a charger - and only then does energy start moving between them.
-    // That is what makes the last step land: the community is not another
-    // object to add, it is the lines appearing between the ones already there.
-    //
-    // One new entity per step and nothing is ever taken away, so the picture
-    // accumulates instead of being replaced. The encodings arrive in order of
-    // how hard they grab attention - colour, then lines, then a moving level,
-    // then motion, then sound - because a car driving about and a transformer
-    // buzzing from the first step means nobody hears the first three sentences.
-    //
-    // The clock is held still until the last step. Time moving and a new
-    // entity appearing at once is where an audience loses the thread.
-    /**
-     * The hour at which one colour of line carries the most.
-     *
-     * A step that introduces a colour has to be shown at an hour when that
-     * colour exists. Typed in by hand it goes stale: the red step was set to
-     * seven in the evening, which reads right - a battery covering the evening
-     * - and in this community the battery discharges at midnight and nowhere
-     * else, so the step that introduces red had no red on it at all.
-     *
-     * Read off the dispatched layer instead, so it follows the data: resize
-     * the battery or put panels on every roof and the step moves with it.
-     */
-    function busiestHour(kind, fallback) {
-        const flows = state.layer && state.layer.flows && state.layer.flows.features;
-        if (!flows) return fallback;
-        const total = [];
-        flows.forEach(function (feature) {
-            if (feature.properties.kind !== kind) return;
-            (feature.properties.flow_hourly || []).forEach(function (value, hour) {
-                total[hour] = (total[hour] || 0) + (value || 0);
-            });
-        });
-        let best = -1;
-        let most = 0;
-        total.forEach(function (value, hour) {
-            if (value > most) { most = value; best = hour; }
-        });
-        return best >= 0 ? best : fallback;
-    }
-
-    const STORY = [
-        {
-            key: 'buildings',
-            title: 'The buildings',
-            // Counts are filled in from the scenario when the step is sent -
-            // see storyText. They were typed in once, and went stale the day
-            // AWL's measurements arrived and the community grew by one.
-            line: '{members} buildings on campus, each with a year of measured ' +
-                  'electricity behind it. This is the demand the community has ' +
-                  'to cover.',
-            figure: 'Members of the energy community',
-            kinds: ['building'],
-            pairs: [],
-            hour: 12,
-            // Every member alike, faded in together. Shading them by demand
-            // here would answer a question nobody has asked yet, and answer it
-            // badly: one hall dwarfs the rest, so thirty-one of the thirty-two
-            // would come up nearly black on the very step that introduces them
-            // as the community.
-            uniform: true,
-            reveal: 'buildings'
-        },
-        {
-            key: 'solar',
-            title: 'The roofs',
-            // Arrays and roofs are counted separately: several roofs carry two
-            // arrays, and an earlier wording that counted arrays as buildings
-            // was contradicted by the table, where fewer footprints light up.
-            line: '{arrays} arrays on {roofs} of the {members} roofs. Brightest at ' +
-                  'midday, nothing at night - and never enough on its own.',
-            figure: 'Generation, where it is made',
-            kinds: ['building', 'pv'],
-            pairs: [],
-            hour: 12,
-            uniform: true,
-            reveal: 'solar'
-        },
-        {
-            key: 'grid',
-            title: 'The grid',
-            line: 'The connection to everything outside the campus, at ' +
-                  'Kraftcentralen. Today every building buys from it on ' +
-                  'its own account.',
-            figure: 'Where the electricity comes from today',
-            kinds: ['building', 'pv', 'grid'],
-            pairs: [],
-            hour: 12,
-            uniform: true
-        },
-        {
-            key: 'battery',
-            title: 'The battery',
-            line: 'A community store, in the AWL building. It fills when there ' +
-                  'is more sun than demand and empties again after dark.',
-            figure: 'Shifting energy through the day',
-            kinds: ['building', 'pv', 'grid', 'battery'],
-            pairs: [],
-            hour: 19,
-            uniform: true
-        },
-        {
-            key: 'charging',
-            title: 'The charge point',
-            line: 'A charger in the P-hus, where the cars on this campus ' +
-                  'park. It draws in the evening and overnight, when the ' +
-                  'roofs have nothing left to give.',
-            figure: 'A new load, on a schedule',
-            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: [],
-            hour: 20,
-            uniform: true
-        },
-        {
-            key: 'lines-grid',
-            title: 'Teal: bought from the grid',
-            // The lines have a grammar and nobody is told it. Three steps, one
-            // colour each and only that colour - the previous one is taken
-            // away before the next arrives, because two colours on the table
-            // at once is a comparison, and this is a vocabulary.
-            //
-            // Teal first because it is the whole picture today: at this hour
-            // every building draws from Kraftcentralen and nothing else.
-            line: 'A teal line is electricity bought from outside. At this ' +
-                  'hour it is every line on the table - the campus as it is ' +
-                  'now, each building on its own account.',
-            figure: 'Teal - from the grid',
-            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: ['grid>building', 'grid>charge_point'],
-            hour: 'grid',
-            fallbackHour: 20,
-            flows: 'still',
-            uniform: false
-        },
-        {
-            key: 'lines-sharing',
-            title: 'Pink: between members',
-            // Midday, because this is the one colour that needs sunshine to
-            // exist at all: at nineteen hundred there is nothing to share.
-            line: 'Pink runs between members: a roof with more than it needs ' +
-                  'supplying a neighbour, or filling the battery, or charging ' +
-                  'the car. The yellow roofs are where it comes from. This is ' +
-                  'what a community adds - the teal lines were the campus ' +
-                  'without one.',
-            figure: 'Pink - shared inside the community',
-            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: ['building>building', 'building>battery',
-                    'building>charge_point', 'building>grid'],
-            hour: 'building',
-            fallbackHour: 12,
-            flows: 'still',
-            uniform: false
-        },
-        {
-            key: 'lines-battery',
-            title: 'Red: out of the battery',
-            line: 'Red is the battery giving back what the roofs made today. ' +
-                  'A few kilowatts against the grid\'s thousands, which is why ' +
-                  'the line is drawn heavier than its share - it is small, and ' +
-                  'it is the one thing on the table that moves energy through ' +
-                  'time rather than across the campus.',
-            figure: 'Red - out of the store',
-            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: ['battery>building'],
-            hour: 'battery',
-            fallbackHour: 19,
-            flows: 'still',
-            uniform: false
-        },
-        {
-            key: 'community',
-            title: 'The energy community',
-            line: 'Now they are connected. A surplus roof supplies a ' +
-                  'neighbour before anyone buys from outside, the battery ' +
-                  'covers the evening, the car charges overnight, and the ' +
-                  'grid makes up whatever is left.',
-            figure: 'Press Finish to set it running',
-            kinds: null,          // everything
-            pairs: null,          // every flow, peer to peer included
-            // The hour is still held. This step is the community being wired
-            // up - the connections drawn one at a time and left standing - and
-            // the day only starts when the presenter says so. Forty-one lines
-            // appearing at once and immediately flowing is the moment the
-            // picture stops being followable.
-            hour: 19,
-            flows: 'still',
-            // The footprints hand back to their readings here: at a held hour
-            // the shading is a still reading of that hour, which is a fair
-            // thing to look at while the lines are being drawn.
-            uniform: false,
-            // Sound waits for the table to be running.
-            sound: false
-        }
-    ];
-
     const state = {
         api: undefined,        // '' same origin, a URL, or null when unreachable
         stale: false,          // reachable, but too old to have /api/mr/layer
@@ -347,7 +137,6 @@
         playing: true,        // whether the table is running its own clock
         sound: false,         // the table's sonification, off until asked for
         flash: null,          // the control keeping time with a change on the table
-        story: -1,            // which step of the introduction, -1 for none
         layer: null,          // the last layer dispatched, for the hourly PV readout
         openGroup: 'members',
         status: 'Looking for the backend…',
@@ -358,6 +147,9 @@
         live: null,            // the real battery's last reading
         optimizer: null,       // last optimizer run, or an in-flight job
         optimizerSpan: 'day',  // how much of the year to solve
+        optimizerMode: 'community', // community | separate | both
+        optimizerResults: {},  // finished runs by mode, for the display
+        optimizerRunning: '',  // the mode being solved right now
         optimizerStartedAt: 0  // when the run began, for the clock while it waits
     };
 
@@ -487,6 +279,12 @@
     /** Capacity of a battery added from the Members list, kWh. */
     const ADDED_BATTERY_KWH = 50;
 
+    /** Power of the first charger added to a building, kW. */
+    const ADDED_CHARGER_KW = 22;
+
+    /** The most chargers one building will be given from the panel. */
+    const MAX_CHARGERS_PER_BUILDING = 8;
+
     function ownBattery(name) {
         return (state.working.batteries || []).find(function (b) {
             return b.attached && sameBuilding(b.host, name);
@@ -499,13 +297,33 @@
         });
     }
 
-    /** Footprint ids and building names are spelled differently; match loosely. */
+    // The same two spellings the backend reconciles. The Rhino layer for the
+    // electrical engineering building was named "Elkrafteknik" and never
+    // corrected, and the footprint file inherited it.
+    const NAME_ALIASES = { elkrafteknik: 'elkraftteknik', bibiotek: 'bibliotek' };
+
+    /** A building's name reduced to what is the same in every spelling of it.
+     *
+     * Accents come off before anything else is dropped: "Idélära" has to meet
+     * the footprint "idealara", and stripping everything that is not a-z first
+     * leaves "idlra", which meets nothing. That is what silently refused a
+     * charger on four buildings - Idélära, Kårhus entré, Kårresturangen and
+     * Elkraftteknik - with a message about there being no room, when the real
+     * fault was that their outline was never found.
+     *
+     * Mirrors canonical() in services/mr_layer.py, which is what decides which
+     * footprint a member is drawn on: this has to agree with it, or the panel
+     * and the table disagree about which building is which.
+     */
+    function canonicalName(value) {
+        const folded = String(value == null ? '' : value).normalize('NFKD')
+            .replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return NAME_ALIASES[folded] || folded;
+    }
+
+    /** Footprint ids and building names are spelled differently; match them. */
     function sameBuilding(a, b) {
-        const fold = function (text) {
-            return String(text == null ? '' : text).toLowerCase()
-                .replace(/[^a-z0-9]/g, '');
-        };
-        return !!a && !!b && fold(a) === fold(b);
+        return !!a && !!b && canonicalName(a) === canonicalName(b);
     }
 
     /** Resize a building's panels, battery or charger. */
@@ -575,49 +393,110 @@
         }
 
         if (kind === 'charger') {
+            // The chip is on/off for the building's chargers as a whole: off
+            // takes every one of them away. One at a time is the stepper's job.
             const mine = ownChargers(name);
-            state.working.charge_points = state.working.charge_points || [];
             if (mine.length) {
                 const drop = new Set(mine);
-                state.working.charge_points = state.working.charge_points
+                state.working.charge_points = (state.working.charge_points || [])
                     .filter(function (cp) { return !drop.has(cp); });
                 render();
                 markDirty();
                 return;
             }
-
-            // Outside the building and clear of its neighbours. Worked out
-            // before anything is added, so a building with nowhere to put one
-            // says so rather than dropping a marker in a wall.
-            let spot = null;
-            try {
-                const taken = (state.working.charge_points || [])
-                    .filter(function (cp) { return cp.lon != null && cp.lat != null; })
-                    .map(function (cp) { return [cp.lon, cp.lat]; });
-                spot = await outsideSpot(name, taken);
-            } catch (error) {
-                setStatus('Could not read the footprints: ' + error.message, 'error');
-                return;
-            }
-            if (!spot) {
-                setStatus('No room outside ' + name + ' for a charger clear of ' +
-                          'its neighbours.', 'error');
-                return;
-            }
-
-            state.working.charge_points.push({
-                name: name + ' CP',
-                capacity: 22,
-                charger_type: 'AC Level 2',
-                owner: 'Akademiska Hus',
-                host: name,
-                lon: spot[0],
-                lat: spot[1],
-                ev: { name: name + ' EV', capacity: 60 }
-            });
-            render();
-            markDirty();
+            await addCharger(name);
         }
+    }
+
+    /** One more charger outside this building.
+     *
+     * A building can have several; each is placed away from the ones already
+     * standing, so a second does not land on the first. The new one copies the
+     * power of the building's existing chargers, so "add another" gives another
+     * of the same rather than snapping back to a default.
+     */
+    async function addCharger(name) {
+        state.working.charge_points = state.working.charge_points || [];
+        const existing = ownChargers(name);
+        if (existing.length >= MAX_CHARGERS_PER_BUILDING) {
+            setStatus(name + ' already has ' + existing.length + ' chargers - that ' +
+                      'is as many as the panel will add to one building.', 'error');
+            return;
+        }
+
+        // Outside the building and clear of its neighbours. Worked out before
+        // anything is added, so a building with nowhere to put one says so
+        // rather than dropping a marker in a wall - and says WHICH of the two
+        // it is, because "no room" and "no outline" need different fixes.
+        let spot = null;
+        try {
+            const footprintsById = await loadFootprints();
+            const found = Object.keys(footprintsById).some(function (id) {
+                return sameBuilding(id, name);
+            });
+            if (!found) {
+                setStatus('The table has no outline for ' + name + ', so there is ' +
+                          'nowhere to stand a charger.', 'error');
+                return;
+            }
+            const taken = state.working.charge_points
+                .filter(function (cp) { return cp.lon != null && cp.lat != null; })
+                .map(function (cp) { return [cp.lon, cp.lat]; });
+            spot = await outsideSpot(name, taken);
+        } catch (error) {
+            setStatus('Could not read the footprints: ' + error.message, 'error');
+            return;
+        }
+        if (!spot) {
+            setStatus('No room outside ' + name + ' for another charger clear of ' +
+                      'its neighbours.', 'error');
+            return;
+        }
+
+        // Numbered, never reused while one stands: names are node ids in the
+        // dispatch, and two chargers with one name would be one node.
+        const taken = new Set(state.working.charge_points.map(function (cp) {
+            return cp.name;
+        }));
+        let n = existing.length + 1;
+        while (taken.has(name + ' CP ' + n)) n += 1;
+
+        state.working.charge_points.push({
+            name: name + ' CP ' + n,
+            capacity: existing.length ? existing[0].capacity : ADDED_CHARGER_KW,
+            charger_type: 'AC Level 2',
+            owner: 'Akademiska Hus',
+            host: name,
+            lon: spot[0],
+            lat: spot[1],
+            // A vehicle per charger: the toolkit computes demand for exactly one,
+            // so a charger without it draws nothing at all. Plugged in from the
+            // evening to the morning, the way the campus charger already is -
+            // with the backend's defaults it was a 3.7 kW car driving 35 km a
+            // day, which is eleven kilowatt-hours over two days: a charger that
+            // is there and does nothing.
+            ev: {
+                name: name + ' EV ' + n,
+                capacity: 60,
+                max_charging_power: 11,
+                daily_distance: 40,
+                v2g_enabled: false,
+                availability: [1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+            }
+        });
+        render();
+        markDirty();
+    }
+
+    /** Take one charger away from a building: the newest. */
+    function removeCharger(name) {
+        const mine = ownChargers(name);
+        if (!mine.length) return;
+        const last = mine[mine.length - 1];
+        state.working.charge_points = (state.working.charge_points || [])
+            .filter(function (cp) { return cp !== last; });
+        render();
+        markDirty();
     }
 
     /** Take out the buildings the table has no outline for.
@@ -901,45 +780,58 @@
         for (let i = 0, j = mine.length - 1; i < mine.length; j = i++) {
             const a = mine[j];
             const b = mine[i];
-            // Midpoint of this wall, and the outward normal to it. Which of the
-            // two normals points out is decided by testing one of them.
-            const mx = (a[0] + b[0]) / 2;
-            const my = (a[1] + b[1]) / 2;
             const dx = (b[0] - a[0]) * LON_SCALE;
             const dy = b[1] - a[1];
             const len = Math.hypot(dx, dy);
             if (len <= 0) continue;
 
-            const step = standoff / M_PER_DEG;
-            let nx = (dy / len) * step / LON_SCALE;
-            let ny = (-dx / len) * step;
-            if (insideRing([mx + nx, my + ny], mine)) { nx = -nx; ny = -ny; }
+            // Three points along each wall rather than only its middle. With one
+            // candidate per wall a four-walled building ran out of places after
+            // four chargers and the fifth went on top of one of them; the
+            // middle comes first in the list so a lone charger still sits where
+            // it always did.
+            for (const along of WALL_POINTS) {
+                const mx = a[0] + (b[0] - a[0]) * along;
+                const my = a[1] + (b[1] - a[1]) * along;
 
-            const spot = [mx + nx, my + ny];
-            if (insideRing(spot, mine)) continue;
+                // The outward normal to the wall. Which of the two normals
+                // points out is decided by testing one of them.
+                const step = standoff / M_PER_DEG;
+                let nx = (dy / len) * step / LON_SCALE;
+                let ny = (-dx / len) * step;
+                if (insideRing([mx + nx, my + ny], mine)) { nx = -nx; ny = -ny; }
 
-            // Room: how far the nearest other building is, and how far the
-            // nearest charger already placed. Both matter, so take the worse.
-            let room = Infinity;
-            for (const ring of others) {
-                if (insideRing(spot, ring)) { room = -1; break; }
-                room = Math.min(room, metresFromWalls(spot, ring));
-            }
-            if (room < clearance) continue;
+                const spot = [mx + nx, my + ny];
+                if (insideRing(spot, mine)) continue;
 
-            (taken || []).forEach(function (other) {
-                const ddx = (spot[0] - other[0]) * LON_SCALE;
-                const ddy = spot[1] - other[1];
-                room = Math.min(room, Math.hypot(ddx, ddy) * M_PER_DEG);
-            });
+                // Room: how far the nearest other building is, and how far the
+                // nearest charger already placed. Both matter, so take the worse.
+                let room = Infinity;
+                for (const ring of others) {
+                    if (insideRing(spot, ring)) { room = -1; break; }
+                    room = Math.min(room, metresFromWalls(spot, ring));
+                }
+                if (room < clearance) continue;
 
-            if (room > bestRoom) {
-                bestRoom = room;
-                best = spot;
+                (taken || []).forEach(function (other) {
+                    const ddx = (spot[0] - other[0]) * LON_SCALE;
+                    const ddy = spot[1] - other[1];
+                    room = Math.min(room, Math.hypot(ddx, ddy) * M_PER_DEG);
+                });
+
+                // Strictly better, so a tie keeps the earlier candidate: the
+                // middle of the first wall, as before.
+                if (room > bestRoom) {
+                    bestRoom = room;
+                    best = spot;
+                }
             }
         }
         return best;
     }
+
+    // Where along a wall a charger may stand, as a fraction of its length.
+    const WALL_POINTS = [0.5, 0.25, 0.75];
 
     async function loadBays() {
         if (bays) return bays;
@@ -1483,205 +1375,22 @@
         });
     }
 
-    // -------------------------------------------------------------- story
+    // ------------------------------------------------------- presentation
 
-    // Once per session. Coming back out of the introduction is a decision, and
-    // the next display ping should not undo it.
-    let storyOffered = false;
+    // The guided introduction is gone, but a display opened while it was
+    // running can still be holding its last step: flows frozen at one hour,
+    // buildings shaded flat, a caption up, a filter on the lines. Said once per
+    // session so such a display goes back to showing the running community.
+    let presentationReset = false;
 
-    /**
-     * Start at the first step when the layer comes up.
-     *
-     * The introduction is the first thing the room sees, so the table opens on
-     * the buildings rather than on the finished community - the whole point is
-     * to arrive at that, not to begin with it. Exit or Finish leaves it, and it
-     * does not come back until the page does.
-     */
-    function offerStory() {
-        if (storyOffered || state.story >= 0) return;
-        storyOffered = true;
-        storyGo(0);
-    }
-
-    // What the sound was doing before the introduction muted it.
-    let soundBeforeStory = null;
-
-    /**
-     * A step's words with the community's own numbers in them.
-     *
-     * Members are the buildings the table actually colours - the layer's
-     * match count - not every building in the definition: four of those have
-     * a demand and no footprint, and a figure the table cannot show is a
-     * figure the room can check against the table and find wrong.
-     */
-    function storyText(text) {
-        if (!text) return text;
-        const base = state.base || {};
-        const buildings = base.buildings || [];
-        const members = (state.layer && state.layer.matched) || buildings.length;
-        const roofs = buildings.filter(function (b) {
-            return (b.pv_plants || []).length > 0;
-        }).length;
-        const arrays = (base.pv_plants || []).length;
-        return String(text)
-            .replace(/\{members\}/g, members)
-            .replace(/\{roofs\}/g, roofs)
-            .replace(/\{arrays\}/g, arrays);
-    }
-
-    function storyGo(index) {
-        const from = state.story;
-        const leaving = state.story >= 0 && index < 0;
-        const starting = state.story < 0 && index >= 0;
-        // Finishing the introduction is not the same as walking out of it. The
-        // last step ends with a community wired up and standing still, and
-        // Finish is the moment it starts running - so that hands the table over
-        // with the day going and the sound up, where Exit puts back whatever
-        // was there before.
-        const finishing = leaving && from === STORY.length - 1;
-        if (starting) soundBeforeStory = state.sound;
-        state.story = index;
-
-        if (index < 0) {
-            // Back to whatever the panel's own view filters say, the table's
-            // own clock, and no caption.
-            channel.postMessage({ type: 'ecom_caption', caption: null });
-            channel.postMessage({ type: 'ecom_uniform', on: false });
-            channel.postMessage({ type: 'ecom_flows', mode: 'running' });
-            pushFilters();
-            if (leaving) {
-                channel.postMessage({ type: 'ecom_release' });
-                // Every step mutes the sound, so quitting at step three used to
-                // leave the table silent with no way to tell why. Finishing
-                // hands over to a running table and brings it up; exiting part
-                // way puts back whatever was there before.
-                if (finishing) {
-                    channel.postMessage({ type: 'ecom_sound', on: true });
-                } else if (soundBeforeStory !== null) {
-                    channel.postMessage({ type: 'ecom_sound',
-                                          on: !!soundBeforeStory });
-                }
-                soundBeforeStory = null;
-            }
-            render();
-            return;
-        }
-
-        const step = STORY[index];
-
-        // First, because everything below describes a layer that has to be on.
-        // Harmless when it already is.
-        channel.postMessage({ type: 'ecom_activate' });
-
-        channel.postMessage({
-            type: 'ecom_filters',
-            filters: (step.kinds === null && step.pairs === null)
-                ? null
-                : { kinds: step.kinds || NODE_KINDS.map(function (k) { return k.key; }),
-                    pairs: step.pairs }
-        });
-
-        // A held hour for every step but the last, so only one thing is moving
-        // at a time. The last hands the clock back and lets the day run.
-        const hour = typeof step.hour === 'string'
-            ? busiestHour(step.hour, step.fallbackHour) : step.hour;
-        if (typeof hour === 'number') {
-            channel.postMessage({ type: 'ecom_hour', hour: hour });
-        } else {
-            channel.postMessage({ type: 'ecom_release' });
-        }
-
-        channel.postMessage({
-            type: 'ecom_uniform',
-            on: !!step.uniform,
-            reveal: step.reveal || null
-        });
-
-        channel.postMessage({
-            type: 'ecom_flows',
-            mode: step.flows === 'still' ? 'still' : 'running'
-        });
-
-        // Sound arrives with the community, not before it.
-        channel.postMessage({ type: 'ecom_sound', on: !!step.sound });
-
-        channel.postMessage({
-            type: 'ecom_caption',
-            caption: { title: step.title, line: storyText(step.line),
-                       figure: storyText(step.figure),
-                       step: index + 1, of: STORY.length }
-        });
-
-        render();
-    }
-
-    /**
-     * Space or right arrow for the next step, left for back, Escape to leave.
-     *
-     * Bound on the panel document, because that is the window the presenter has
-     * a hand on. Ignored while typing into a field, so renaming a charge point
-     * does not advance the story under you.
-     */
-    function onStoryKey(event) {
-        const tag = (event.target && event.target.tagName) || '';
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-        if (event.key === ' ' || event.key === 'ArrowRight') {
-            // Space scrolls a page by default, which on a panel this tall is
-            // the last thing wanted mid-sentence.
-            event.preventDefault();
-            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
-            return;
-        }
-        if (state.story < 0) return;          // the rest only while running
-        if (event.key === 'ArrowLeft') {
-            event.preventDefault();
-            storyGo(Math.max(0, state.story - 1));
-        } else if (event.key === 'Escape') {
-            storyGo(-1);
-        }
-    }
-
-    function storyMarkup() {
-        const running = state.story >= 0;
-        const step = running ? STORY[state.story] : null;
-        const last = state.story === STORY.length - 1;
-
-        const dots = STORY.map(function (item, index) {
-            return '<button type="button" class="ecom-ctl-dot' +
-                (index === state.story ? ' is-on' : '') +
-                (index < state.story ? ' is-done' : '') +
-                '" data-story-step="' + index + '" title="' + esc(item.title) +
-                '"></button>';
-        }).join('');
-
-        return '<div class="ecom-ctl-story' + (running ? ' is-running' : '') + '">' +
-            '<div class="ecom-ctl-story-head">' +
-                '<span class="ecom-ctl-story-label" title="Space or right arrow ' +
-                    'for the next step, left arrow to go back, Escape to leave.">' +
-                    (running
-                        ? esc(step.title) + ' &middot; ' + (state.story + 1) +
-                          ' of ' + STORY.length
-                        : 'Introduction') +
-                '</span>' +
-                '<div class="ecom-ctl-dots">' + dots + '</div>' +
-            '</div>' +
-            '<div class="ecom-ctl-story-bar">' +
-                (running
-                    ? '<button type="button" class="ecom-ctl-btn" ' +
-                          'data-action="story-back"' +
-                          (state.story === 0 ? ' disabled' : '') + '>Back</button>' +
-                      '<button type="button" class="ecom-ctl-btn ' +
-                          'ecom-ctl-btn--primary" data-action="story-next">' +
-                          (last ? 'Finish' : 'Next') + '</button>' +
-                      '<button type="button" class="ecom-ctl-btn" ' +
-                          'data-action="story-exit">Exit</button>'
-                    : '<button type="button" class="ecom-ctl-btn ' +
-                          'ecom-ctl-btn--primary" data-action="story-next">' +
-                          'Start the introduction</button>') +
-            '</div>' +
-        '</div>';
+    function resetPresentation() {
+        if (presentationReset) return;
+        presentationReset = true;
+        channel.postMessage({ type: 'ecom_caption', caption: null });
+        channel.postMessage({ type: 'ecom_uniform', on: false });
+        channel.postMessage({ type: 'ecom_flows', mode: 'running' });
+        channel.postMessage({ type: 'ecom_release' });
+        pushFilters();
     }
 
     // --------------------------------------------------------------- change
@@ -2087,52 +1796,99 @@
 
     let pollTimer = null;
 
+    const OPTIMIZER_MODE_LABELS = {
+        separate: 'As today',
+        community: 'As an energy community'
+    };
+    let optimizerRun = 0;
+
+    /** Tell the display what the optimizer is doing and what it found. */
+    function broadcastOptimization() {
+        const job = state.optimizer;
+        channel.postMessage({
+            type: 'ecom_optimization',
+            optimization: {
+                running: state.optimizerRunning || '',
+                error: job && job.status === 'error' ? (job.error || 'failed') : '',
+                label: currentSpan().label,
+                period: periodLabel(optimizerPeriod(currentSpan().days)),
+                results: state.optimizerResults
+            }
+        });
+    }
+
+    /** Wait for one job to finish, keeping the panel's clock moving. */
+    function waitForJob(jobId, token) {
+        return new Promise(function (resolve, reject) {
+            pollTimer = setInterval(async function () {
+                try {
+                    const job = await getJson('/api/optimize/' + encodeURIComponent(jobId));
+                    if (token !== optimizerRun) { stopPolling(); return; }
+                    state.optimizer = job;
+                    if (job.status === 'done') { stopPolling(); resolve(job); }
+                    else if (job.status === 'error') {
+                        stopPolling();
+                        reject(new Error(job.error || 'the optimizer failed'));
+                    }
+                    render();
+                } catch (error) {
+                    stopPolling();
+                    reject(error);
+                }
+            }, 2000);
+        });
+    }
+
     async function runOptimizer() {
         if (state.api === null) return;
         stopPolling();
+        const token = ++optimizerRun;
+        const modes = state.optimizerMode === 'both'
+            ? ['separate', 'community'] : [state.optimizerMode];
         state.optimizer = { status: 'queued', progress: 0 };
+        state.optimizerResults = {};
+        state.optimizerStartedAt = Date.now();
+        state.optimizerRunning = modes[0];
         render();
+        broadcastOptimization();
 
         try {
-            const span = OPTIMIZER_SPANS.find(function (option) {
-                return option.key === state.optimizerSpan;
-            }) || OPTIMIZER_SPANS[0];
+            const span = currentSpan();
             // The community as the panel has it, over the span being asked
             // for. The table's own period is left alone: it is showing a day,
             // and optimising a year should not move it off that day.
             const spec = clone(buildSpec());
             spec.analysis_period = optimizerPeriod(span.days);
-            const job = await postJson('/api/optimize', {
-                community: spec,
-                days: span.days,
-                horizon_hours: OPTIMIZER_LOOKAHEAD_H,
-                store_hours: OPTIMIZER_KEEP_H,
-                parameters: Object.keys(state.paramValues).length
-                    ? state.paramValues : null
-            });
-            state.optimizerStartedAt = Date.now();
-            state.optimizer = job;
+            for (const mode of modes) {
+                state.optimizerRunning = mode;
+                state.optimizerStartedAt = Date.now();
+                render();
+                broadcastOptimization();
+                const job = await postJson('/api/optimize', {
+                    community: spec,
+                    days: span.days,
+                    mode: mode,
+                    horizon_hours: OPTIMIZER_LOOKAHEAD_H,
+                    store_hours: OPTIMIZER_KEEP_H,
+                    parameters: Object.keys(state.paramValues).length
+                        ? state.paramValues : null
+                });
+                state.optimizer = job;
+                const done = await waitForJob(job.id, token);
+                if (token !== optimizerRun) return;
+                state.optimizerResults[mode] = done.result;
+                broadcastOptimization();
+            }
+            state.optimizerRunning = '';
             render();
-            poll(job.id);
+            broadcastOptimization();
         } catch (error) {
+            if (token !== optimizerRun) return;
+            state.optimizerRunning = '';
             state.optimizer = { status: 'error', error: String(error.message || error) };
             render();
+            broadcastOptimization();
         }
-    }
-
-    function poll(jobId) {
-        pollTimer = setInterval(async function () {
-            try {
-                const job = await getJson('/api/optimize/' + encodeURIComponent(jobId));
-                state.optimizer = job;
-                if (job.status === 'done' || job.status === 'error') stopPolling();
-                render();
-            } catch (error) {
-                state.optimizer = { status: 'error', error: String(error.message || error) };
-                stopPolling();
-                render();
-            }
-        }, 2000);
     }
 
     function stopPolling() {
@@ -2260,7 +2016,7 @@
     // clocks driving one hour is a stutter, so this one stands down.
     //
     // Keep in step with HOUR_MS in animations/ecom-energy.js.
-    const LOCAL_HOUR_MS = 5000;
+    const LOCAL_HOUR_MS = 3000;
     let localClock = null;
 
     function syncLocalClock() {
@@ -2576,43 +2332,79 @@
               diff: function (d) { return signed(d, 0) + ' SEK'; } }
         ];
 
-        const tiles = metrics.map(function (m) {
+        // One column per measure, one row per way of running the same buildings:
+        // with the community, each on its own, and what the difference is. Side by
+        // side the two figures can be read straight across, which two numbers
+        // folded into a tile could not.
+        const cols = metrics.map(function (m) {
             // The baseline's peak comes from its own sub-object, the rest from
             // its kpis; fold the peak in so every getter reads one shape.
             const mine = m.get(k);
             const theirs = m.get(Object.assign({}, bk,
                 { peak_grid_import_kw: base.peak_grid_import_kw }));
-            if (mine === null || mine === undefined || !isFinite(mine)) {
-                return tile('remove', 'N/A', m.label, m.tone, m.hint);
+            const have = function (v) {
+                return v !== null && v !== undefined && isFinite(v);
+            };
+
+            if (!have(mine)) {
+                // Not "N/A": that reads as a fault. The usual reason is simply
+                // that there is nothing to measure - no solar in this community
+                // means no share of it to be used.
+                return { m: m, none: true };
             }
-            let line = '';
-            if (theirs !== null && theirs !== undefined && isFinite(theirs)) {
+            const out = { m: m, mine: m.show(mine) };
+            if (have(theirs)) {
                 const d = mine - theirs;
                 // "No difference" rather than +0.0: one building, or members
                 // with nothing to share, genuinely are the same alone.
                 const same = Math.abs(d) < 1e-6 + Math.abs(theirs) * 5e-4;
-                const verdict = same || m.better === null ? 'neutral'
+                out.theirs = m.show(theirs);
+                out.diff = same ? 'no difference' : m.diff(d);
+                out.verdict = same || m.better === null ? 'neutral'
                     : ((d > 0) === (m.better === 'up') ? 'good' : 'bad');
-                line =
-                    '<span class="ecom-kpi-alone">alone ' + esc(m.show(theirs)) + '</span>' +
-                    '<span class="ecom-kpi-delta is-' + verdict + '">' +
-                        (same ? 'no difference' : esc(m.diff(d))) + '</span>';
             }
-            return '<div class="ecom-kpi-tile ecom-kpi-cmp ecom-kpi-tile--' + m.tone + '"' +
-                ' title="' + esc(m.hint) + '">' +
-                '<span class="ecom-kpi-label">' + esc(m.label) + '</span>' +
-                '<span class="ecom-kpi-value">' + esc(m.show(mine)) + '</span>' +
-                line +
-            '</div>';
+            return out;
+        });
+
+        const cell = function (cls, tone, content, title) {
+            return '<div class="ecom-kpi-cell ' + cls + ' tone-' + tone + '"' +
+                (title ? ' title="' + esc(title) + '"' : '') + '>' + content + '</div>';
+        };
+
+        const head = cols.map(function (c) {
+            return cell('is-colhead', c.m.tone, esc(c.m.label), c.m.hint);
         }).join('');
 
+        const row = function (name, cls, pick) {
+            return '<div class="ecom-kpi-rowhead ' + cls + '">' + name + '</div>' +
+                cols.map(function (c) {
+                    if (c.none) {
+                        return cell(cls, c.m.tone, '&ndash;',
+                                    'Nothing to measure for this in the community.');
+                    }
+                    return cell(cls, c.m.tone, pick(c));
+                }).join('');
+        };
+
+        const rows =
+            row('With the community', 'is-with', function (c) { return esc(c.mine); }) +
+            row('Each building alone', 'is-alone', function (c) {
+                return c.theirs === undefined ? '&ndash;' : esc(c.theirs);
+            }) +
+            row('Difference', 'is-diff', function (c) {
+                return c.diff === undefined ? '&ndash;'
+                    : '<span class="ecom-kpi-delta is-' + c.verdict + '">' +
+                      esc(c.diff) + '</span>';
+            });
+
         return '<div class="ecom-kpi-compare-head">' +
-                   '<span><b>With the community</b> against the same ' + members +
-                   ' building' + (members === 1 ? '' : 's') + ' <b>alone</b>' +
-                   ' &middot; ' + esc(mwh(k.total_demand)) + ' demand, ' +
-                   esc(mwh(k.total_pv_gen)) + ' solar</span>' +
+                   '<b>' + members + ' building' + (members === 1 ? '' : 's') + '</b>' +
+                   ' &middot; ' + esc(mwh(k.total_demand)) + ' demand &middot; ' +
+                   esc(mwh(k.total_pv_gen)) + ' solar' +
                '</div>' +
-               '<div class="ecom-kpi-tiles ecom-kpi-tiles--compare">' + tiles + '</div>';
+               '<div class="ecom-kpi-table" style="--kpi-cols:' + cols.length + '">' +
+                   '<div class="ecom-kpi-corner"></div>' + head + rows +
+               '</div>';
     }
 
     function renderKpis() {
@@ -3088,8 +2880,9 @@
         const xAt = function (i) { return L + (n > 1 ? i / (n - 1) : 0.5) * plotW; };
         const yAt = function (v) { return T + plotH - Math.min(v, top) / top * plotH; };
 
-        profileGeom = { width: W, left: L, plotW: plotW, top: T, bottom: T + plotH,
-                        n: n, lines: lines, share: share };
+        profileGeom = { width: W, height: H, left: L, plotW: plotW, top: T,
+                        bottom: T + plotH, n: n, lines: lines, share: share,
+                        yAt: yAt };
 
         // Horizontal gridlines: five equal steps up to a round number.
         let grid = '';
@@ -3136,6 +2929,7 @@
             }).join(' ');
             const dim = focus && line.name !== focus;
             return '<polyline class="ecom-prof-line' + (line.name === focus ? ' is-focus' : '') +
+                   '" data-name="' + esc(line.name) +
                    '" points="' + points + '" stroke="' + profileColour(line.name) +
                    '" style="opacity:' + (dim ? 0.12 : 1) + '"><title>' +
                    esc(line.name) + ' - peak ' + Math.round(line.peak).toLocaleString() +
@@ -3150,6 +2944,10 @@
                        xAt(state.hour % n).toFixed(1) + '"/>' +
                    '<line id="ecom-prof-hover" class="ecom-prof-hover" y1="' + T + '" y2="' +
                        (T + plotH) + '" x1="0" x2="0" style="display:none"/>' +
+                   // Which building the pointer is on: a dot on the line and its
+                   // name beside it, filled in by onProfileMove.
+                   '<g id="ecom-prof-tip" class="ecom-prof-tip" style="display:none">' +
+                       '<circle r="5"/><text></text></g>' +
                '</svg>';
     }
 
@@ -3256,30 +3054,107 @@
 
     /** Follow the pointer along the chart: the hour, and what the community
      *  draws at it. */
+    // How far from a line, in the chart's own units, the pointer still counts as
+    // being on it. A line is a pixel or two wide and a finger is not, so it is a
+    // reach rather than an exact hit.
+    const PROFILE_REACH = 16;
+
+    // The line last named, so the DOM is only touched when it changes.
+    let profileHovered = null;
+
+    function clearProfileHover(svg) {
+        profileHovered = null;
+        const tip = document.getElementById('ecom-prof-tip');
+        if (tip) tip.style.display = 'none';
+        const hover = document.getElementById('ecom-prof-hover');
+        if (hover) hover.style.display = 'none';
+        if (svg) {
+            svg.classList.remove('has-hover');
+            svg.querySelectorAll('.ecom-prof-line.is-hover').forEach(function (l) {
+                l.classList.remove('is-hover');
+            });
+        }
+    }
+
+    /** Follow the pointer along the chart: the hour, what the community draws
+     *  at it, and - when the pointer is on a line - whose line that is.
+     *
+     *  Every line is the same thin stroke in a different colour, and with thirty
+     *  of them the legend is a key to a pattern nobody can match by eye. So the
+     *  line under the pointer is found, lifted out of the rest, and named. */
     function onProfileMove(event) {
         const svg = event.target && event.target.closest
             ? event.target.closest('.ecom-prof-svg') : null;
-        const hover = document.getElementById('ecom-prof-hover');
         const readout = document.getElementById('ecom-prof-readout');
         if (!svg || !profileGeom) {
-            if (hover) hover.style.display = 'none';
+            clearProfileHover(document.querySelector('.ecom-prof-svg'));
             return;
         }
         const g = profileGeom;
         const box = svg.getBoundingClientRect();
-        if (!box.width) return;
+        if (!box.width || !box.height) return;
         const vx = (event.clientX - box.left) / box.width * g.width;
+        const vy = (event.clientY - box.top) / box.height * g.height;
         const frac = (vx - g.left) / g.plotW;
         const i = Math.max(0, Math.min(g.n - 1, Math.round(frac * (g.n - 1))));
         const x = g.left + (g.n > 1 ? i / (g.n - 1) : 0.5) * g.plotW;
 
+        const hover = document.getElementById('ecom-prof-hover');
         if (hover) {
             hover.setAttribute('x1', x.toFixed(1));
             hover.setAttribute('x2', x.toFixed(1));
             hover.style.display = '';
         }
-        if (!readout) return;
 
+        // The line nearest the pointer, at the hour the pointer is over.
+        let near = null;
+        let gap = Infinity;
+        g.lines.forEach(function (line) {
+            const y = g.yAt(line.values[i] || 0);
+            const d = Math.abs(y - vy);
+            if (d < gap) { gap = d; near = { line: line, y: y }; }
+        });
+        if (gap > PROFILE_REACH) near = null;
+
+        const tip = document.getElementById('ecom-prof-tip');
+        if (near) {
+            const unit = g.share ? '%' : ' kW';
+            const value = Math.round(near.line.values[i] || 0).toLocaleString() + unit;
+
+            if (profileHovered !== near.line.name) {
+                profileHovered = near.line.name;
+                svg.classList.add('has-hover');
+                svg.querySelectorAll('.ecom-prof-line').forEach(function (l) {
+                    const on = l.getAttribute('data-name') === near.line.name;
+                    l.classList.toggle('is-hover', on);
+                    // Drawn last, so it is not buried under the lines after it.
+                    if (on && tip) l.parentNode.insertBefore(l, tip);
+                });
+            }
+            if (tip) {
+                const colour = profileColour(near.line.name);
+                const circle = tip.querySelector('circle');
+                const label = tip.querySelector('text');
+                circle.setAttribute('cx', x.toFixed(1));
+                circle.setAttribute('cy', near.y.toFixed(1));
+                circle.setAttribute('fill', colour);
+                label.textContent = near.line.name + '  ' + value;
+                // On the side with room: a name running off the edge of the
+                // chart is a name nobody can read.
+                const right = x < g.width * 0.62;
+                label.setAttribute('x', (right ? x + 10 : x - 10).toFixed(1));
+                label.setAttribute('y', Math.max(14, near.y - 9).toFixed(1));
+                label.setAttribute('text-anchor', right ? 'start' : 'end');
+                label.setAttribute('fill', colour);
+                tip.style.display = '';
+            }
+        } else if (profileHovered !== null) {
+            clearProfileHover(svg);
+            // The cursor line belongs to the pointer, not to a building.
+            if (hover) hover.style.display = '';
+        }
+
+        if (!readout) return;
         let text = profileWhen(i);
         if (!g.share) {
             const total = g.lines.reduce(function (sum, line) {
@@ -3287,10 +3162,13 @@
             }, 0);
             text += ' &middot; community ' + Math.round(total).toLocaleString() + ' kW';
         }
+        // The building under the pointer wins over the one being followed.
         const focus = state.profileFocus;
-        const one = focus && g.lines.find(function (line) { return line.name === focus; });
+        const one = near ? near.line
+            : (focus && g.lines.find(function (line) { return line.name === focus; }));
         if (one) {
-            text += ' &middot; ' + esc(one.name) + ' ' +
+            text += ' &middot; <b style="color:' + profileColour(one.name) + '">' +
+                    esc(one.name) + '</b> ' +
                     Math.round(one.values[i] || 0).toLocaleString() +
                     (g.share ? '%' : ' kW');
         }
@@ -3754,8 +3632,9 @@
             chip('charger', chargers.length > 0, 'ev_station',
                  chargers.length ? chargers.length + ' charger' +
                      (chargers.length > 1 ? 's' : '') : 'Charger',
-                 'A charge point outside this building, placed clear of ' +
-                 'its neighbours. Tap again to remove.' +
+                 'A charge point outside this building, placed clear of its ' +
+                 'neighbours. Tap again to take them all away; the + and - below ' +
+                 'add or remove one at a time.' +
                  (isMember ? '' : ' Waits until the building joins.')) +
             // Whose panels they are, once there are some on a building outside
             // the community: its own, feeding nobody here, or rented by the
@@ -3788,9 +3667,30 @@
                           Math.round(battery.capacity) + ' kWh');
         }
         if (chargers.length) {
-            rows += sizer('charger', 'ev_station', 'Charger',
-                          Math.round(chargers[0].capacity), 3, 150, 1, 'kW',
-                          Math.round(chargers[0].capacity) + ' kW');
+            // How many, and how powerful each one is. The power slider sets all
+            // of this building's chargers at once: they are a bank of the same
+            // kind, and a slider per charger would be eight sliders for one
+            // answer.
+            const power = Math.round(chargers[0].capacity);
+            rows += '<div class="ecom-kit-size ecom-kit-chargers is-charger">' +
+                '<label><span class="material-icons">ev_station</span>' +
+                    (chargers.length > 1 ? 'Chargers' : 'Charger') + '</label>' +
+                '<span class="ecom-stepper" role="group" aria-label="Number of chargers">' +
+                    '<button type="button" data-charger-step="-1"' +
+                        ' data-kit-building="' + esc(name) + '"' +
+                        ' aria-label="One charger fewer">&minus;</button>' +
+                    '<b>' + chargers.length + '</b>' +
+                    '<button type="button" data-charger-step="1"' +
+                        ' data-kit-building="' + esc(name) + '"' +
+                        (chargers.length >= MAX_CHARGERS_PER_BUILDING ? ' disabled' : '') +
+                        ' aria-label="One charger more">+</button>' +
+                '</span>' +
+                '<input type="range" data-size="charger"' +
+                    ' data-size-building="' + esc(name) + '"' +
+                    ' min="3" max="150" step="1" value="' + power + '">' +
+                '<b data-size-readout="charger:' + esc(name) + '">' + power +
+                    ' kW' + (chargers.length > 1 ? ' each' : '') + '</b>' +
+                '</div>';
         }
         return rows;
     }
@@ -4002,10 +3902,11 @@
 
         const job = state.optimizer;
         let readout = '';
-        if (job && job.status === 'done' && job.result) {
-            const totals = job.result.totals || {};
-            readout =
-                '<div class="ecom-ctl-result">' +
+        const finished = Object.keys(state.optimizerResults || {});
+        const resultMarkup = finished.map(function (mode) {
+            const totals = (state.optimizerResults[mode] || {}).totals || {};
+            return '<div class="ecom-ctl-result">' +
+                    '<h5>' + esc(OPTIMIZER_MODE_LABELS[mode] || mode) + '</h5>' +
                     '<div><span>Overall cost</span><b>' +
                         Math.round(totals.overall_cost || 0).toLocaleString() + ' SEK</b></div>' +
                     '<div><span>Grid import</span><b>' +
@@ -4015,9 +3916,21 @@
                     '<div><span>Peak import</span><b>' +
                         Math.round(totals.peak_net_import_kw || 0).toLocaleString() + ' kW</b></div>' +
                 '</div>';
-        } else if (job && job.status === 'error') {
-            readout = '<p class="ecom-ctl-empty ecom-ctl-error">' +
+        }).join('');
+        const running = !!state.optimizerRunning;
+        if (job && job.status === 'error') {
+            readout = resultMarkup + '<p class="ecom-ctl-empty ecom-ctl-error">' +
                       esc(job.error || 'the optimizer failed') + '</p>';
+        } else if (running) {
+            const waiting = state.optimizerStartedAt
+                ? Math.round((Date.now() - state.optimizerStartedAt) / 1000) : 0;
+            readout = resultMarkup + '<p class="ecom-ctl-empty">Solving ' +
+                      currentSpan().label.toLowerCase() + ' ' +
+                      esc((OPTIMIZER_MODE_LABELS[state.optimizerRunning] || '').toLowerCase()) +
+                      '… ' + waiting + ' s</p>';
+        } else if (finished.length) {
+            readout = resultMarkup +
+                '<span class="ecom-ctl-hint">Shown at the bottom of the table too.</span>';
         } else if (job) {
             // Elapsed rather than a percentage: the rolling horizon reports
             // progress in steps that are not evenly spaced, and a bar that
@@ -4038,14 +3951,21 @@
             'starts on the date chosen above, in Day, and covers the span ' +
             'picked here; a year is the calendar year, because a period cannot ' +
             'wrap the new year.</span>' +
-            // Stated, not just done: the window is a modelling choice with a
-            // visible consequence, and it should be possible to read it off the
-            // panel rather than have to know it.
-            '<div class="ecom-ctl-window">' +
-                '<i class="material-icons">update</i>' +
-                '<span>Each day is solved <b>' + OPTIMIZER_LOOKAHEAD_H + ' hours</b> ' +
-                'ahead and the first <b>' + OPTIMIZER_KEEP_H + ' hours</b> are kept, ' +
-                'so the battery can see tomorrow morning coming at midnight.</span>' +
+            '<div class="ecom-ctl-span">' +
+                [['community', 'As an energy community'],
+                 ['separate', 'As today'],
+                 ['both', 'Compare both']].map(function (m) {
+                    return '<button type="button" class="ecom-ctl-chip' +
+                        (m[0] === state.optimizerMode ? ' is-on' : '') +
+                        '" data-optimizer-mode="' + m[0] + '">' + m[1] + '</button>';
+                }).join('') +
+                '<span class="ecom-ctl-hint">' +
+                    (state.optimizerMode === 'separate'
+                        ? 'Each building on its own connection: its own subscription and peak fee, no sharing.'
+                        : state.optimizerMode === 'both'
+                            ? 'Runs both and shows what the community saves.'
+                            : 'The buildings selected share solar, storage and the grid connection.') +
+                '</span>' +
             '</div>' +
             '<div class="ecom-ctl-span">' +
                 OPTIMIZER_SPANS.map(function (option) {
@@ -4060,7 +3980,7 @@
             '</div>' +
             '<div class="ecom-ctl-actions">' +
                 '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
-                    ' data-action="optimize"' + (job && job.status === 'running' ? ' disabled' : '') + '>' +
+                    ' data-action="optimize"' + (state.optimizerRunning ? ' disabled' : '') + '>' +
                     'Run ' + currentSpan().label.toLowerCase() + '</button>' +
                 (changed ? '<button type="button" class="ecom-ctl-btn" data-action="params-reset">' +
                     'Reset constants</button>' : '') +
@@ -4085,7 +4005,7 @@
             if (groupHost) groupHost.innerHTML = '';
             return;
         }
-        if (state.api === null || state.stale || !state.base) {
+        if (state.api === null || state.stale || !state.base || !state.working) {
             // The offline card belongs with the apply bar, not duplicated into
             // the band; the band simply has nothing to show.
             if (groupHost) groupHost.innerHTML = '';
@@ -4147,7 +4067,6 @@
                 '</div>' +
                 '<div id="ecom-ctl-status" class="ecom-ctl-status ecom-ctl-status--' +
                     state.statusKind + '">' + esc(state.status) + '</div>' +
-                storyMarkup() +
             '</div>';
 
         if (groupHost) {
@@ -4196,7 +4115,8 @@
                 readout.textContent =
                     size === 'pv' ? Math.round(roofKw(name)) + ' kW'
                     : size === 'battery' ? Math.round(value) + ' kWh'
-                    : Math.round(value) + ' kW';
+                    : Math.round(value) + ' kW' +
+                      (ownChargers(name).length > 1 ? ' each' : '');
             }
             markDirty();
             return;
@@ -4402,10 +4322,10 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step',
-        'data-optimizer-span', 'data-peak', 'data-kit', 'data-roofowner',
+        'data-members', 'data-roofs', 'data-cp-remove',
+        'data-optimizer-span', 'data-optimizer-mode', 'data-peak', 'data-kit', 'data-roofowner',
         'data-shared', 'data-profile-mode', 'data-profile-focus',
-        'data-param-info'
+        'data-param-info', 'data-charger-step'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
         return '[' + name + ']';
@@ -4426,21 +4346,12 @@
             return;
         }
 
-        const jump = el.getAttribute('data-story-step');
-        if (jump !== null) { storyGo(Number(jump)); return; }
-
         const action = el.getAttribute('data-action');
         if (action === 'kpi-more') {
             state.kpiDetails = !state.kpiDetails;
             renderKpis();
             return;
         }
-        if (action === 'story-next') {
-            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
-            return;
-        }
-        if (action === 'story-back') { storyGo(Math.max(0, state.story - 1)); return; }
-        if (action === 'story-exit') { storyGo(-1); return; }
         if (action === 'apply') { applyNow(); return; }
 
         // Jump to the busiest hour or the busiest day of a measured year.
@@ -4503,6 +4414,12 @@
             return;
         }
         if (action === 'optimize') { runOptimizer(); return; }
+        const optMode = el.getAttribute('data-optimizer-mode');
+        if (optMode) {
+            state.optimizerMode = optMode;
+            render();
+            return;
+        }
         const span = el.getAttribute('data-optimizer-span');
         if (span) {
             state.optimizerSpan = span;
@@ -4565,6 +4482,17 @@
                 state.roofOwner[roofOwner] === 'community' ? 'own' : 'community';
             render();
             markDirty();
+            return;
+        }
+
+        // One more charger at a building, or one fewer.
+        const step = el.getAttribute('data-charger-step');
+        if (step) {
+            const building = el.getAttribute('data-kit-building');
+            if (building) {
+                if (Number(step) > 0) addCharger(building);
+                else removeCharger(building);
+            }
             return;
         }
 
@@ -4811,7 +4739,6 @@
 
         // On the document, not on the panel: the keys have to work wherever the
         // focus happens to be in this window.
-        document.addEventListener('keydown', onStoryKey);
 
         // The chart is drawn at the size of its card, so a resized window
         // needs it drawn again. Waited out, because a window being dragged
@@ -4846,7 +4773,7 @@
         if (data.type === 'animation_state' &&
             data.animationId === 'ecom-energy-btn' && data.isActive &&
             state.base) {
-            offerStory();
+            resetPresentation();
         }
 
         if (data.type === 'ecom_summary' && data.summary && !state.layer) {
@@ -4933,10 +4860,9 @@
             state.link.at = Date.now();
             if (typeof data.hours === 'number') state.hours = data.hours;
             paintLink();
-            // The usual order of events: the table is already running and the
-            // panel is opened onto it. The introduction should start here too,
-            // not only when the layer is switched on with the panel watching.
-            if (state.link.active && state.base) offerStory();
+            // The table may already be running, possibly still holding the
+            // old introduction's last step; put it back to the running view.
+            resetPresentation();
         }
 
         // The display confirming it redrew. Reported instead of the dispatch

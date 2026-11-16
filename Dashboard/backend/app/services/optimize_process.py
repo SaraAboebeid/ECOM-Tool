@@ -61,6 +61,7 @@ def _child(payload: dict) -> dict:
         temperature_c=payload.get("temperature_c", 18.0),
         nordpool=nordpool,
         parameters=OptimizerParameters.model_validate(parameters) if parameters else None,
+        mode=payload.get("mode", "community"),
     )
 
 

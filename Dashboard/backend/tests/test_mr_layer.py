@@ -96,6 +96,114 @@ def layer(client):
     return response.json()
 
 
+# ------------------------------------------------- with and without a community
+
+def _spec(**overrides):
+    from app.schemas.community import CommunitySpec
+    return CommunitySpec(**definition(**overrides))
+
+
+def test_alone_removes_what_belongs_to_the_community_and_keeps_what_is_a_buildings():
+    """With no community, community-owned solar and storage have nobody to serve."""
+    from app.services.comparison import alone
+
+    spec = _spec(
+        pv_plants=[{"name": "RoofA", "surface_area": 1000.0, "slope": 30.0},
+                   {"name": "Ground", "surface_area": 3000.0, "slope": 30.0}],
+        batteries=[{"name": "Shared", "capacity": 500.0},
+                   {"name": "Own", "capacity": 50.0, "host": "Hall A", "attached": True},
+                   # Attached to a building that is not a member: pooled, so it
+                   # is community storage here too.
+                   {"name": "Orphan", "capacity": 20.0, "host": "Nowhere", "attached": True}],
+    )
+    baseline, removed = alone(spec)
+
+    assert baseline.dispatch_mode == "isolated"
+    assert [p.name for p in baseline.pv_plants] == ["RoofA"]       # the roof stays
+    assert [b.name for b in baseline.batteries] == ["Own"]
+    assert removed["community_pv"] == ["Ground"]
+    assert sorted(removed["community_batteries"]) == ["Orphan", "Shared"]
+    # The original is untouched: the comparison must not edit the community.
+    assert spec.dispatch_mode == "community"
+    assert len(spec.pv_plants) == 2 and len(spec.batteries) == 3
+
+
+def test_one_building_with_nothing_to_share_is_the_same_alone():
+    """The invariant that says the baseline is a fair one.
+
+    A single building has nobody to exchange with, so the community dispatch and
+    the isolated one must agree on every figure. If they did not, "alone" would
+    be measuring something other than the absence of a community.
+    """
+    from app.services.comparison import compare
+    from app.services.dispatch import run_dispatch
+
+    spec = _spec(batteries=[], charge_points=[])
+    spec.buildings = spec.buildings[:1]
+
+    together = run_dispatch(spec)["kpis"]
+    apart = compare(spec)["kpis"]
+    for key in ("total_demand", "total_pv_gen", "total_grid_import",
+                "total_grid_export", "self_sufficiency"):
+        assert apart[key] == pytest.approx(together[key]), key
+
+
+def test_sharing_turns_one_buildings_wasted_surplus_into_anothers_saved_import():
+    """The whole point of a community, in one assertion pair.
+
+    Hall A has far more roof than it can use at midday and Idealara has none.
+    Alone, Hall A's surplus is exported and Idealara buys everything. Together
+    the surplus goes next door: exports fall, and imports fall by the same kWh.
+    """
+    from app.services.comparison import compare
+    from app.services.dispatch import run_dispatch
+
+    spec = _spec(
+        pv_plants=[{"name": "RoofA", "surface_area": 20000.0, "slope": 30.0}],
+        batteries=[], charge_points=[])
+
+    together = run_dispatch(spec)["kpis"]
+    apart = compare(spec)["kpis"]
+
+    assert apart["total_grid_export"] > 0
+    assert together["total_grid_export"] < apart["total_grid_export"]
+    assert together["total_grid_import"] < apart["total_grid_import"]
+    saved = apart["total_grid_import"] - together["total_grid_import"]
+    spared = apart["total_grid_export"] - together["total_grid_export"]
+    assert saved == pytest.approx(spared, rel=1e-6)
+    assert together["self_sufficiency"] > apart["self_sufficiency"]
+
+
+def test_peak_grid_import_sums_the_grid_before_taking_the_maximum():
+    """The operator charges for the peak of the connection, not of each building."""
+    from app.services.comparison import peak_grid_import_kw
+
+    dispatch = {
+        "nodes": [{"id": "GRID", "type": "grid"}, {"id": "A", "type": "building"},
+                  {"id": "B", "type": "building"}],
+        "links": [
+            {"source": "GRID", "target": "A", "flow": [5.0, 1.0, 0.0]},
+            {"source": "GRID", "target": "B", "flow": [0.0, 6.0, 2.0]},
+            # Not from the grid: must not count.
+            {"source": "A", "target": "B", "flow": [100.0, 100.0, 100.0]},
+        ],
+    }
+    # Hour 1 is 1 + 6 = 7: higher than either building's own peak (5 and 6).
+    assert peak_grid_import_kw(dispatch) == 7.0
+
+
+def test_the_layer_carries_a_baseline_only_when_asked(client):
+    plain = client.post("/api/mr/layer", json=definition()).json()
+    assert "baseline" not in plain
+    # The peak is always there, so the community side can be compared later.
+    assert plain["kpis"]["peak_grid_import_kw"] >= 0
+
+    asked = client.post("/api/mr/layer?baseline=true", json=definition()).json()
+    assert asked["baseline"]["kpis"]["total_demand"] == pytest.approx(
+        asked["kpis"]["total_demand"])
+    assert "peak_grid_import_kw" in asked["baseline"]
+
+
 # --------------------------------------------------------------- geometry
 
 def test_has_footprint_folds_accents_and_punctuation():
