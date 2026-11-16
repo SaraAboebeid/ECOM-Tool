@@ -3928,7 +3928,13 @@
                 '<div class="ecom-ctl-subhead">Solar</div>' +
                 (arrays.length
                     ? sharedPv()
-                    : '<p class="ecom-ctl-empty">No community solar yet.</p>') +
+                    : '<p class="ecom-ctl-empty">No community solar.</p>') +
+                '<button type="button" class="ecom-add-shared" data-shared="pv"' +
+                    ' title="Panels the scheme owns, on no member\'s roof. They ' +
+                    'feed whoever needs them. Panels on a building are added from ' +
+                    'its row in Members.">' +
+                    '<span class="material-icons">add</span>Add solar array' +
+                '</button>' +
             '</div>';
 
         let battery_;
@@ -3972,8 +3978,14 @@
                         ? 'No community store. ' + inBuildings + ' ' +
                           (inBuildings > 1 ? 'batteries are' : 'battery is') +
                           ' owned by individual buildings - see Members.'
-                        : 'No community battery yet.') +
-                '</p>';
+                        : 'No battery in this community.') +
+                '</p>' +
+                '<button type="button" class="ecom-add-shared" data-shared="battery"' +
+                    ' title="A store the scheme owns, which answers any member ' +
+                    'rather than one building. Batteries added to a building ' +
+                    'from Members are that building\'s.">' +
+                    '<span class="material-icons">add</span>Add battery' +
+                '</button>';
         }
 
         const chargerCount = chargePoints().length;
@@ -3981,7 +3993,6 @@
             Math.round(arrayKw).toLocaleString() + ' kW · ' +
                 (store ? Math.round(store.capacity).toLocaleString() : '0') + ' kWh · ' +
                 chargerCount + (chargerCount === 1 ? ' charger' : ' chargers'),
-            buildMarkup(!!store) +
             solar +
             '<div class="ecom-community-assets">' +
                 '<div class="ecom-ctl-subhead">Battery</div>' +
@@ -4301,8 +4312,15 @@
     function chargingMarkup() {
         const points = chargePoints();
 
+        const addButton =
+            '<button type="button" class="ecom-add-shared" data-action="cp-add"' +
+                ' title="A charger the community owns, in the P-hus car park. ' +
+                'Chargers at a building are added from its row in Members.">' +
+                '<span class="material-icons">add</span>Add a charger' +
+            '</button>';
+
         if (!points.length) {
-            return '<p class="ecom-ctl-empty">No chargers yet.</p>';
+            return '<p class="ecom-ctl-empty">No chargers in this community.</p>' + addButton;
         }
 
         const rows = points.map(function (cp, index) {
@@ -4324,10 +4342,19 @@
                         name: 'cp_kw:' + index, label: 'Charger power',
                         value: cp.capacity, min: 4, max: 150, step: 1, unit: 'kW'
                     }) +
+                    // When the car is plugged in. Both models read this: the
+                    // table spreads the day's charging over these hours and the
+                    // optimizer makes one charging session of each stay.
                     slider({
-                        name: 'cp_km:' + index, label: 'Daily driving',
-                        value: (cp.ev && cp.ev.daily_distance) || 35,
-                        min: 0, max: 200, step: 5, unit: 'km'
+                        name: 'cp_arr:' + index, label: 'Arrives',
+                        value: plugWindow(cp).arrival, min: 0, max: 23, step: 1, unit: '',
+                        format: clockHour
+                    }) +
+                    slider({
+                        name: 'cp_dep:' + index, label: 'Leaves',
+                        value: plugWindow(cp).departure, min: 0, max: 23, step: 1, unit: '',
+                        format: clockHour,
+                        hint: plugHint(plugWindow(cp))
                     }) +
                     (bays
                         ? slider({
@@ -4348,44 +4375,53 @@
                 '</div>';
         }).join('');
 
-        return '<div class="ecom-cps">' + rows + '</div>';
+        return '<div class="ecom-cps">' + rows + '</div>' + addButton;
     }
 
-    /**
-     * The head of the Community tab: what can be built, as three buttons that
-     * look like the thing to do rather than footnotes under each list. Each
-     * adds an asset the community owns; equipment on one building is added
-     * from that building's row in Members.
-     */
-    function buildMarkup(hasStore) {
-        const button = function (cls, attr, icon, label, title) {
-            return '<button type="button" class="ecom-build-btn ' + cls + '" ' + attr +
-                ' title="' + esc(title) + '">' +
-                '<span class="material-icons">' + icon + '</span>' + esc(label) +
-            '</button>';
-        };
-        return '<div class="ecom-build">' +
-            '<div class="ecom-build-title">' +
-                '<span class="material-icons">hub</span>' +
-                'Add what the whole community shares' +
-            '</div>' +
-            '<p class="ecom-build-text">Add solar, storage and chargers that the ' +
-                'community owns together and every member can draw on. Equipment ' +
-                'for one building is added from its row in Members.</p>' +
-            '<div class="ecom-build-actions">' +
-                button('is-pv', 'data-shared="pv"', 'solar_power', 'Add solar',
-                       'A shared array on no member\'s roof. It feeds whoever ' +
-                       'needs it.') +
-                (hasStore
-                    ? ''
-                    : button('is-battery', 'data-shared="battery"',
-                             'battery_charging_full', 'Add battery',
-                             'A store the community owns, which answers any ' +
-                             'member rather than one building.')) +
-                button('is-charger', 'data-action="cp-add"', 'ev_station', 'Add charger',
-                       'A charger the community owns, in the P-hus car park.') +
-            '</div>' +
-        '</div>';
+    // ------------------------------------------------ plugged-in hours
+    //
+    // A car's availability is 24 hours of 0/1 - plugged in or not. The panel
+    // offers it as an arrival and a departure time: from arrival up to (not
+    // including) departure, wrapping past midnight when it leaves earlier in
+    // the day than it came. The same time for both means plugged in all day.
+
+    const DEFAULT_PLUG = { arrival: 18, departure: 7 };
+
+    function clockHour(h) { return String(h).padStart(2, '0') + ':00'; }
+
+    /** The arrival and departure the car's schedule describes. */
+    function plugWindow(cp) {
+        const a = (cp.ev && cp.ev.availability) || null;
+        if (!a || a.length !== 24) return DEFAULT_PLUG;
+        if (a.every(function (v) { return v; })) return { arrival: 0, departure: 0 };
+        let arrival = null;
+        let departure = null;
+        for (let h = 0; h < 24; h += 1) {
+            const before = a[(h + 23) % 24];
+            if (a[h] && !before && arrival === null) arrival = h;
+            if (!a[h] && before && departure === null) departure = h;
+        }
+        return (arrival === null || departure === null)
+            ? DEFAULT_PLUG : { arrival: arrival, departure: departure };
+    }
+
+    /** 24 hours of 0/1 from an arrival and a departure. */
+    function plugSchedule(arrival, departure) {
+        const out = [];
+        for (let h = 0; h < 24; h += 1) {
+            const on = arrival === departure ||
+                (arrival < departure ? (h >= arrival && h < departure)
+                                     : (h >= arrival || h < departure));
+            out.push(on ? 1 : 0);
+        }
+        return out;
+    }
+
+    function plugHint(window_) {
+        const hours = plugSchedule(window_.arrival, window_.departure)
+            .reduce(function (s, v) { return s + v; }, 0);
+        return 'Plugged in ' + hours + ' h a day' +
+            (window_.arrival > window_.departure ? ', overnight.' : '.');
     }
 
     /** A building's display name from a charger's host (a footprint id or a name). */
@@ -4624,24 +4660,7 @@
                     '<button type="button" class="ecom-mini" data-roofs="0">Clear</button>' +
                 '</span>' +
             '</div>' +
-            '<div class="ecom-ctl-members">' + rows + '</div>' +
-            // Folded away: it is explanation, not a control, and it was taking
-            // ninety pixels off the list on a laptop screen where the list is
-            // the one thing that wants every pixel it can get.
-            '<details class="ecom-ctl-about"><summary>How these work</summary>' +
-                '<span class="ecom-ctl-hint">Panels, a battery and a charger can be ' +
-                'given to any building. Outside the community they wait, and count ' +
-                'from the moment it is ticked in. Panels on a building outside can ' +
-                'be rented to the community instead - tap the dormant tag on its ' +
-                'row.</span>' +
-            '</details>' +
-            // Said rather than silently missing: a list of 33 against the 37 in
-            // the data reads as a bug unless it says where the four went.
-            (state.noGeometry.length
-                ? '<span class="ecom-ctl-hint">Not offered, because the table has no ' +
-                  'outline to draw for ' + (state.noGeometry.length > 1 ? 'them' : 'it') +
-                  ': ' + esc(state.noGeometry.join(', ')) + '.</span>'
-                : '')
+            '<div class="ecom-ctl-members">' + rows + '</div>'
         );
     }
 
@@ -5169,9 +5188,18 @@
             if (parts[0] === 'cp_kw') {
                 cp.capacity = value;
                 set(value + ' kW');
-            } else if (parts[0] === 'cp_km') {
-                if (cp.ev) cp.ev.daily_distance = Math.max(1, value);
-                set(value + ' km');
+            } else if (parts[0] === 'cp_arr' || parts[0] === 'cp_dep') {
+                if (cp.ev) {
+                    const now = plugWindow(cp);
+                    const arrival = parts[0] === 'cp_arr' ? value : now.arrival;
+                    const departure = parts[0] === 'cp_dep' ? value : now.departure;
+                    cp.ev.availability = plugSchedule(arrival, departure);
+                    // The "Plugged in N h" line under Leaves follows both sliders.
+                    const hint = document.querySelector(
+                        '[data-slider="cp_dep:' + parts[1] + '"] + .ecom-ctl-hint');
+                    if (hint) hint.textContent = plugHint({ arrival: arrival, departure: departure });
+                }
+                set(clockHour(value));
             } else if (parts[0] === 'cp_pos') {
                 const spot = alongHouse(value / 100);
                 if (spot) { cp.lon = spot[0]; cp.lat = spot[1]; }
