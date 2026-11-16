@@ -46,6 +46,31 @@ RHINO_AMBIGUOUS = {"karhus"}
 
 TYPICAL_FLOOR_HEIGHT = 3.5
 
+# Hourly SE3 day-ahead prices in SEK/kWh, written by import_spot_prices.py.
+SPOT_PRICES = ECOM_ROOT / "Data" / "prices"
+FALLBACK_BUYING_PRICE = 1.35
+
+
+def spot_buying_price(year, notes: list) -> dict:
+    """The year's real SE3 spot series, or the old flat price if it is missing.
+
+    The fallback is reported rather than silent: a flat price makes every hour
+    cost the same, so the optimizer has nothing to shift load or charge a
+    battery against.
+    """
+    path = SPOT_PRICES / f"se3_spot_{year}.csv"
+    if not path.exists():
+        notes.append(f"No {path.name}: buying price left FLAT at "
+                     f"{FALLBACK_BUYING_PRICE} SEK/kWh. Run "
+                     f"scripts/import_spot_prices.py --year {year}.")
+        return {"fixed": FALLBACK_BUYING_PRICE}
+    values = [float(line.split(",")[1]) for line in path.read_text().splitlines()[1:]]
+    if len(values) != 8760:
+        raise SystemExit(f"{path} has {len(values)} rows, expected 8760")
+    notes.append(f"Buying price: SE3 day-ahead spot {year} from {path.name} "
+                 f"(excludes grid fees, tax and VAT).")
+    return {"hourly": values}
+
 # Standalone PV arrays - ones graph.json lists without a host building. Off,
 # because the only such array sat as an unanchored node in the middle of the
 # campus with no building to belong to. Roof arrays are unaffected: they are
@@ -64,6 +89,21 @@ IMPLAUSIBLE_STOREY_HEIGHT = 5.5
 # implausible storey height is.
 IMPLAUSIBLE_ROUND_TRIP_PCT = 50.0
 DEFAULT_ROUND_TRIP_PCT = 90.0
+
+# Buildings whose PV is backed by a real meter. The rest of the PV in graph.json
+# and PV_OVERRIDES is modelled - Edit's arrays have default tilt and azimuth, AWL's
+# workbook sheet records zero production - so it is left out rather than shown
+# as installed. The meters are the el_925 files in
+# "New folder/OneDrive_2026-11-16 (11).zip" (SB2) and "(7).zip" (Bibliotek).
+# Bibliotek is not listed because it is not in the community: it has no demand
+# CSV in Data/energy_data and no plant in graph.json to size.
+PV_WITH_MEASUREMENTS = {"SB2"}
+
+# How much of each metered building's roof the panels cover. The model has SB2
+# at 93% (225 kW), but its meter recorded 35,507 kWh in 2022, which is about
+# 46 kW of panels at PVGIS's yield. 19.2% gives the two arrays 23.2 + 22.8 kW,
+# the reference capacity in app/services/pv_measured.py - keep the two in step.
+PV_MEASURED_COVERAGE = {"SB2": 19.2}
 
 # Roof PV that exists in the Rhino model but was never wired into the
 # Grasshopper definition, so it is absent from graph.json.
@@ -137,6 +177,11 @@ BATTERY_HOSTS = {"Battery-01": "AWL"}
 # in the building at table scale. Footprint: table_footprints.geojson, id
 # "p-hus".
 CHARGE_POINT_POSITIONS = {"CP": {"lat": 57.686356, "lon": 11.978857}}
+
+# The Grasshopper model's one charger (at the P-hus) is not a real installation
+# anyone has measured, and the campus starts with none: chargers are added from
+# the controller's Mobility tab or a building's row.
+INCLUDE_MODEL_CHARGERS = False
 
 # Coordinates are drawn in a ~1200 x 1200 image space with y increasing
 # downward; the graph canvas centres on the origin with y increasing upward.
@@ -376,6 +421,19 @@ def build(year: str, include_without_demand: bool,
                 f"(INCLUDE_COMMUNITY_PV is off). It has no host building, so it "
                 f"was drawn as a lone node in the middle of the campus.")
 
+    # Only buildings with a measured PV meter keep their panels.
+    for owner_name in sorted(set(pv_by_building) - PV_WITH_MEASUREMENTS):
+        dropped = pv_by_building.pop(owner_name)
+        notes.append(f"{owner_name}: {len(dropped)} modelled PV array(s) dropped - "
+                     f"not in PV_WITH_MEASUREMENTS (no PV meter behind them here).")
+
+    for owner_name, coverage in PV_MEASURED_COVERAGE.items():
+        for plant in pv_by_building.get(owner_name, []):
+            notes.append(f"{plant['name']}: coverage {plant['percentage']}% -> "
+                         f"{coverage}% to match the metered output "
+                         f"(see PV_MEASURED_COVERAGE).")
+            plant["percentage"] = coverage
+
     # --- buildings ----------------------------------------------------------
     buildings: list[dict] = []
     pv_plants: list[dict] = []
@@ -501,7 +559,7 @@ def build(year: str, include_without_demand: bool,
         }
 
         # Roof arrays present in Rhino but missing from graph.json.
-        override = PV_OVERRIDES.get(name)
+        override = PV_OVERRIDES.get(name) if name in PV_WITH_MEASUREMENTS else None
         if override:
             for plant in override["plants"]:
                 extra = dict(plant)
@@ -569,11 +627,19 @@ def build(year: str, include_without_demand: bool,
         host = BATTERY_HOSTS.get(battery_entry["name"])
         if host:
             battery_entry["host"] = host
+            # The building's own, installed battery - as SB2's panels are SB2's -
+            # not a community store that merely stands in it. It counts when its
+            # building is a member, and the panel shows it on that building's row.
+            battery_entry["attached"] = True
         batteries.append(battery_entry)
 
     charge_points = []
     for node_id, node in nodes.items():
         if not node_id.startswith("CP_"):
+            continue
+        if not INCLUDE_MODEL_CHARGERS:
+            notes.append(f"{node_id}: modelled charger left out (INCLUDE_MODEL_CHARGERS "
+                         f"is off) - chargers are added from the controller.")
             continue
         cp_entry = {
             "name": str(node.get("name") or node_id[3:]),
@@ -609,7 +675,7 @@ def build(year: str, include_without_demand: bool,
         "charge_points": charge_points,
         "grid": {
             "name": "SE3",
-            "buying_price": {"fixed": 1.35},
+            "buying_price": spot_buying_price(year, notes),
             "selling_price": {"fixed": 0.55},
             "carbon_intensity": {"fixed": 41.0},
             **({"location": grid_where} if (grid_where := position_for(coords, "GRID")) else {}),

@@ -92,6 +92,218 @@
         { key: 'charge_point', label: 'Charging', color: PALETTE.charge_point || '#00ff5e' }
     ];
 
+    // ----------------------------------------------------------- the story
+    //
+    // An introduction, for showing the community to a room. The entities are
+    // introduced one at a time and only then do they start trading, because
+    // sharing cannot be explained until there is something to share between.
+    //
+    // The order is demand, then supply, then the outside world, then the two
+    // new things, then the community. Buildings first because they are what
+    // the room already recognises; the grid third rather than last because it
+    // is the reference point - total dependency is what makes self-sufficiency
+    // mean anything two steps later.
+    //
+    // Nothing is connected to anything until the last step. The entities are
+    // introduced as objects on a campus - a building, a roof, a substation, a
+    // store, a charger - and only then does energy start moving between them.
+    // That is what makes the last step land: the community is not another
+    // object to add, it is the lines appearing between the ones already there.
+    //
+    // One new entity per step and nothing is ever taken away, so the picture
+    // accumulates instead of being replaced. The encodings arrive in order of
+    // how hard they grab attention - colour, then lines, then a moving level,
+    // then motion, then sound - because a car driving about and a transformer
+    // buzzing from the first step means nobody hears the first three sentences.
+    //
+    // The clock is held still until the last step. Time moving and a new
+    // entity appearing at once is where an audience loses the thread.
+    /**
+     * The hour at which one colour of line carries the most.
+     *
+     * A step that introduces a colour has to be shown at an hour when that
+     * colour exists. Typed in by hand it goes stale: the red step was set to
+     * seven in the evening, which reads right - a battery covering the evening
+     * - and in this community the battery discharges at midnight and nowhere
+     * else, so the step that introduces red had no red on it at all.
+     *
+     * Read off the dispatched layer instead, so it follows the data: resize
+     * the battery or put panels on every roof and the step moves with it.
+     */
+    function busiestHour(kind, fallback) {
+        // The introduction's own campus while it is running, not the panel's.
+        const shown = storyLayer || state.layer;
+        const flows = shown && shown.flows && shown.flows.features;
+        if (!flows) return fallback;
+        const total = [];
+        flows.forEach(function (feature) {
+            if (feature.properties.kind !== kind) return;
+            (feature.properties.flow_hourly || []).forEach(function (value, hour) {
+                total[hour] = (total[hour] || 0) + (value || 0);
+            });
+        });
+        let best = -1;
+        let most = 0;
+        total.forEach(function (value, hour) {
+            if (value > most) { most = value; best = hour; }
+        });
+        return best >= 0 ? best : fallback;
+    }
+
+    const STORY = [
+        {
+            key: 'buildings',
+            title: 'The buildings',
+            // Counts are filled in from the scenario when the step is sent -
+            // see storyText. They were typed in once, and went stale the day
+            // AWL's measurements arrived and the community grew by one.
+            line: '{members} buildings on campus, each with a year of measured ' +
+                  'electricity behind it. This is the demand the community has ' +
+                  'to cover.',
+            figure: 'Members of the energy community',
+            kinds: ['building'],
+            pairs: [],
+            hour: 12,
+            // Every member alike, faded in together. Shading them by demand
+            // here would answer a question nobody has asked yet, and answer it
+            // badly: one hall dwarfs the rest, so thirty-one of the thirty-two
+            // would come up nearly black on the very step that introduces them
+            // as the community.
+            uniform: true,
+            reveal: 'buildings'
+        },
+        {
+            key: 'solar',
+            title: 'The roofs',
+            // Arrays and roofs are counted separately: several roofs carry two
+            // arrays, and an earlier wording that counted arrays as buildings
+            // was contradicted by the table, where fewer footprints light up.
+            line: '{arrays} arrays on {roofs} of the {members} roofs. Brightest at ' +
+                  'midday, nothing at night - and never enough on its own.',
+            figure: 'Generation, where it is made',
+            kinds: ['building', 'pv'],
+            pairs: [],
+            hour: 12,
+            uniform: true,
+            reveal: 'solar'
+        },
+        {
+            key: 'grid',
+            title: 'The grid',
+            line: 'The connection to everything outside the campus, at ' +
+                  'Kraftcentralen. Today every building buys from it on ' +
+                  'its own account.',
+            figure: 'Where the electricity comes from today',
+            kinds: ['building', 'pv', 'grid'],
+            pairs: [],
+            hour: 12,
+            uniform: true
+        },
+        {
+            key: 'battery',
+            title: 'The battery',
+            line: 'The battery already installed in AWL. It fills when there ' +
+                  'is more sun than demand and empties again after dark.',
+            figure: 'Shifting energy through the day',
+            kinds: ['building', 'pv', 'grid', 'battery'],
+            pairs: [],
+            hour: 19,
+            uniform: true
+        },
+        {
+            key: 'charging',
+            title: 'The charge point',
+            line: 'A charger in the P-hus, where the cars on this campus ' +
+                  'park. It draws in the evening and overnight, when the ' +
+                  'roofs have nothing left to give.',
+            figure: 'A new load, on a schedule',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: [],
+            hour: 20,
+            uniform: true
+        },
+        {
+            key: 'lines-grid',
+            title: 'Teal: bought from the grid',
+            // The lines have a grammar and nobody is told it. Three steps, one
+            // colour each and only that colour - the previous one is taken
+            // away before the next arrives, because two colours on the table
+            // at once is a comparison, and this is a vocabulary.
+            //
+            // Teal first because it is the whole picture today: at this hour
+            // every building draws from Kraftcentralen and nothing else.
+            line: 'A teal line is electricity bought from outside. At this ' +
+                  'hour it is every line on the table - the campus as it is ' +
+                  'now, each building on its own account.',
+            figure: 'Teal - from the grid',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['grid>building', 'grid>charge_point'],
+            hour: 'grid',
+            fallbackHour: 20,
+            flows: 'still',
+            uniform: false
+        },
+        {
+            key: 'lines-sharing',
+            title: 'Pink: between members',
+            // Midday, because this is the one colour that needs sunshine to
+            // exist at all: at nineteen hundred there is nothing to share.
+            line: 'Pink runs between members: a roof with more than it needs ' +
+                  'supplying a neighbour, or filling the battery, or charging ' +
+                  'the car. The yellow roofs are where it comes from. This is ' +
+                  'what a community adds - the teal lines were the campus ' +
+                  'without one.',
+            figure: 'Pink - shared inside the community',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['building>building', 'building>battery',
+                    'building>charge_point', 'building>grid'],
+            hour: 'building',
+            fallbackHour: 12,
+            flows: 'still',
+            uniform: false
+        },
+        {
+            key: 'lines-battery',
+            title: 'Red: out of the battery',
+            line: 'Red is the battery giving back what the roofs made today. ' +
+                  'A few kilowatts against the grid\'s thousands, which is why ' +
+                  'the line is drawn heavier than its share - it is small, and ' +
+                  'it is the one thing on the table that moves energy through ' +
+                  'time rather than across the campus.',
+            figure: 'Red - out of the store',
+            kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
+            pairs: ['battery>building'],
+            hour: 'battery',
+            fallbackHour: 19,
+            flows: 'still',
+            uniform: false
+        },
+        {
+            key: 'community',
+            title: 'The energy community',
+            line: 'Now they are connected. A surplus roof supplies a ' +
+                  'neighbour before anyone buys from outside, the battery ' +
+                  'covers the evening, the car charges overnight, and the ' +
+                  'grid makes up whatever is left.',
+            figure: 'Press Finish to set it running',
+            kinds: null,          // everything
+            pairs: null,          // every flow, peer to peer included
+            // The hour is still held. This step is the community being wired
+            // up - the connections drawn one at a time and left standing - and
+            // the day only starts when the presenter says so. Forty-one lines
+            // appearing at once and immediately flowing is the moment the
+            // picture stops being followable.
+            hour: 19,
+            flows: 'still',
+            // The footprints hand back to their readings here: at a held hour
+            // the shading is a still reading of that hour, which is a fair
+            // thing to look at while the lines are being drawn.
+            uniform: false,
+            // Sound waits for the table to be running.
+            sound: false
+        }
+    ];
+
     const state = {
         api: undefined,        // '' same origin, a URL, or null when unreachable
         stale: false,          // reachable, but too old to have /api/mr/layer
@@ -136,6 +348,7 @@
         hours: 24,
         playing: true,        // whether the table is running its own clock
         sound: false,         // the table's sonification, off until asked for
+        story: -1,            // which step of the introduction, -1 for none
         flash: null,          // the control keeping time with a change on the table
         layer: null,          // the last layer dispatched, for the hourly PV readout
         openGroup: 'members',
@@ -147,7 +360,11 @@
         live: null,            // the real battery's last reading
         optimizer: null,       // last optimizer run, or an in-flight job
         optimizerSpan: 'day',  // how much of the year to solve
-        optimizerMode: 'community', // community | separate | both
+        optimizerMode: 'both', // community | separate | both
+        // Re-solve whenever something changes, and show the answer against the
+        // one before the change. Off, the optimizer runs only when asked.
+        autoOptimize: true,
+        optimizerPrevious: null, // the last complete set of results, before this run
         optimizerResults: {},  // finished runs by mode, for the display
         optimizerRunning: '',  // the mode being solved right now
         optimizerStartedAt: 0  // when the run began, for the clock while it waits
@@ -552,24 +769,36 @@
         return state.base.buildings.length - state.excluded.size;
     }
 
+    /**
+     * Whether a building outside the community shares its equipment with it.
+     *
+     * Panels, a battery or chargers put on a building that is not ticked are
+     * shared by default: they feed the community and are drawn on the table, on
+     * that building, so equipment can be placed before the building joins. The
+     * SHARED / DORMANT badge on its row turns that off ('own'), and then they
+     * wait, unseen, until the building is a member.
+     */
+    function sharesAssets(name) {
+        return state.roofOwner[name] !== 'own';
+    }
+
     /** The definition to dispatch: the working copy minus excluded members. */
     function buildSpec() {
         const spec = clone(state.working);
 
         if (state.excluded.size) {
-            // Which non-members' roofs the community rents, and which keep
-            // their panels to themselves. A rented array stays in the spec
+            // Which non-members' roofs the community uses, and which keep
+            // their panels to themselves. A shared array stays in the spec
             // attached to nobody, which is how the builder recognises a
             // community plant, and carries a host so the table still draws it
-            // on the right roof. A building's own array leaves with it.
+            // on the right roof. A dormant one leaves with its building.
             const rented = new Set();
             const dormant = new Set();
             spec.buildings.forEach(function (b) {
                 if (!state.excluded.has(b.name)) return;
                 const names = b.pv_plants || [];
                 if (!names.length) return;
-                const target = state.roofOwner[b.name] === 'community'
-                    ? rented : dormant;
+                const target = sharesAssets(b.name) ? rented : dormant;
                 names.forEach(function (name) { target.add(name); });
             });
 
@@ -598,14 +827,21 @@
                 return p;
             });
 
-            // A battery belongs to its building: out it goes with it. Community
-            // storage - the unattached kind - stays whatever happens.
+            // A battery in a building outside the community: shared, it becomes
+            // a store the community uses - unattached, which is what makes it
+            // everyone's - still drawn in its building by its host. Dormant, it
+            // leaves with the building. Community storage stays regardless.
             spec.batteries = (spec.batteries || []).filter(function (b) {
-                return !(b.attached && b.host && state.excluded.has(b.host));
+                return !(b.attached && b.host && state.excluded.has(b.host) &&
+                         !sharesAssets(b.host));
+            }).map(function (b) {
+                if (b.attached && b.host && state.excluded.has(b.host)) b.attached = false;
+                return b;
             });
-            // So does a charger: it is mounted on that building's wall.
+            // Chargers the same: shared, they stay and the community supplies
+            // them; dormant, they go with the building.
             spec.charge_points = (spec.charge_points || []).filter(function (cp) {
-                return !(cp.host && state.excluded.has(cp.host));
+                return !(cp.host && state.excluded.has(cp.host) && !sharesAssets(cp.host));
             });
         }
 
@@ -1196,6 +1432,28 @@
         } else {
             setStatus('Edited - press Apply.', 'idle');
         }
+        scheduleOptimize();
+    }
+
+    // How long to wait after the last change before solving. A slider drag is
+    // dozens of changes a second and each solve is seconds long; this lets go of
+    // it first, and runOptimizer drops the answer of any run that a newer one
+    // has overtaken.
+    const AUTO_OPTIMIZE_DEBOUNCE_MS = 1800;
+    let optimizeTimer = null;
+
+    function scheduleOptimize() {
+        if (!state.autoOptimize || state.api === null || state.api === undefined) return;
+        // Not while the introduction is on the table: a solve in the middle of
+        // it would hold the room's picture up for something they did not ask for.
+        if (state.story >= 0) return;
+        if (optimizeTimer !== null) clearTimeout(optimizeTimer);
+        optimizeTimer = setTimeout(function () {
+            optimizeTimer = null;
+            // Nobody in the community is nothing to optimise.
+            if (!memberCount() || state.story >= 0) return;
+            runOptimizer();
+        }, AUTO_OPTIMIZE_DEBOUNCE_MS);
     }
 
     function scheduleApply() {
@@ -1375,22 +1633,300 @@
         });
     }
 
-    // ------------------------------------------------------- presentation
+    // -------------------------------------------------------------- story
 
-    // The guided introduction is gone, but a display opened while it was
-    // running can still be holding its last step: flows frozen at one hour,
-    // buildings shaded flat, a caption up, a filter on the lines. Said once per
-    // session so such a display goes back to showing the running community.
-    let presentationReset = false;
+    // Once per session. Coming back out of the introduction is a decision, and
+    // the next display ping should not undo it.
+    let storyOffered = false;
 
-    function resetPresentation() {
-        if (presentationReset) return;
-        presentationReset = true;
-        channel.postMessage({ type: 'ecom_caption', caption: null });
-        channel.postMessage({ type: 'ecom_uniform', on: false });
-        channel.postMessage({ type: 'ecom_flows', mode: 'running' });
-        channel.postMessage({ type: 'ecom_release' });
-        pushFilters();
+    /**
+     * Start at the first step when the layer comes up.
+     *
+     * The introduction is the first thing the room sees, so the table opens on
+     * the buildings rather than on the finished community - the whole point is
+     * to arrive at that, not to begin with it. Exit or Finish leaves it, and it
+     * does not come back until the page does.
+     */
+    function offerStory() {
+        if (storyOffered || state.story >= 0) return;
+        storyOffered = true;
+        storyGo(0);
+    }
+
+    // What the sound was doing before the introduction muted it.
+    let soundBeforeStory = null;
+
+    /**
+     * A step's words with the community's own numbers in them.
+     *
+     * Members are the buildings the table actually colours - the layer's
+     * match count - not every building in the definition: four of those have
+     * a demand and no footprint, and a figure the table cannot show is a
+     * figure the room can check against the table and find wrong.
+     */
+    function storyText(text) {
+        if (!text) return text;
+        // While the introduction runs, its own example campus: those are the
+        // roofs and arrays the table is showing.
+        const base = storySpec || state.base || {};
+        const buildings = base.buildings || [];
+        const shown = storyLayer || state.layer;
+        const members = (shown && shown.matched) || buildings.length;
+        const roofs = buildings.filter(function (b) {
+            return (b.pv_plants || []).length > 0;
+        }).length;
+        const arrays = (base.pv_plants || []).length;
+        return String(text)
+            .replace(/\{members\}/g, members)
+            .replace(/\{roofs\}/g, roofs)
+            .replace(/\{arrays\}/g, arrays);
+    }
+
+    // The whole campus, dispatched for the introduction alone. The panel's own
+    // community is not touched: it opens empty and stays empty, because building
+    // it up is the room's to do once the introduction has shown what there is.
+    let storyLayer = null;
+    let storySpec = null;
+    let storyLoading = false;
+
+    // The introduction is an example, not the campus as measured. With only
+    // the panels that are really there (SB2's), there is almost no surplus at
+    // midday and the pink step - the one that shows what a community adds -
+    // had next to nothing on it. So the example puts panels on every roof that
+    // has none, at the same share of the roof the Members list gives one, and
+    // keeps the measured arrays as they are.
+    const STORY_ROOF_COVERAGE = ADDED_ROOF_COVERAGE;
+
+    /** The campus the introduction shows: everyone in, panels on every roof. */
+    function storyExampleSpec() {
+        const keptWorking = state.working;
+        const keptExcluded = state.excluded;
+        state.working = clone(keptWorking);
+        state.excluded = new Set();
+        try {
+            (state.working.buildings || []).forEach(function (b) {
+                if (!roofPlants(b.name).length) setRoofCoverage(b.name, STORY_ROOF_COVERAGE);
+            });
+            // The campus has no chargers until someone adds one, but the
+            // introduction has a step for the charge point: the example gets
+            // one at the P-hus, where Mobility's Add would put it.
+            if (!chargePoints().length) addChargePoint();
+            return buildSpec();
+        } finally {
+            state.working = keptWorking;
+            state.excluded = keptExcluded;
+        }
+    }
+
+    /**
+     * Fetch the campus with every building in it, hand it to the table, then
+     * show the step.
+     *
+     * The introduction paints every building pink, then brings in the roofs,
+     * the grid, the battery and the charger, then the flows between them. An
+     * empty community has none of that - the table drops it all when told the
+     * campus is empty - so the introduction needs a full one to show. It gets
+     * one of its own, and the members list in the panel stays as it was.
+     */
+    function loadStoryLayer(index) {
+        if (storyLoading) return;
+        storyLoading = true;
+        const spec = storyExampleSpec();
+        setStatus('Preparing the introduction…', 'busy');
+        postJson('/api/mr/layer?baseline=true', spec).then(function (layer) {
+            storyLayer = layer;
+            storySpec = spec;
+            channel.postMessage({ type: 'ecom_layer', layer: layer });
+        }, function (error) {
+            setStatus('The introduction could not load the campus: ' +
+                      String(error.message || error), 'error');
+        }).then(function () {
+            storyLoading = false;
+            if (storyLayer) storyGo(index);
+        });
+    }
+
+    /** Back to the community the panel actually has, once the introduction ends. */
+    function restorePanelCommunity() {
+        storyLayer = null;
+        storySpec = null;
+        if (!memberCount()) {
+            // Empty, as the panel is: the table goes back to a campus nobody
+            // has joined yet.
+            state.layer = null;
+            channel.postMessage({ type: 'ecom_empty' });
+            setStatus('No members yet - tick a building to start.', 'idle');
+        } else {
+            // Someone ticked buildings before or during the introduction; the
+            // table shows theirs, not the introduction's.
+            applyNow();
+        }
+    }
+
+    function storyGo(index) {
+        const from = state.story;
+        const leaving = state.story >= 0 && index < 0;
+        const starting = state.story < 0 && index >= 0;
+
+        if (starting && !storyLayer) {
+            loadStoryLayer(index);
+            return;
+        }
+        // Finishing the introduction is not the same as walking out of it. The
+        // last step ends with a community wired up and standing still, and
+        // Finish is the moment it starts running - so that hands the table over
+        // with the day going and the sound up, where Exit puts back whatever
+        // was there before.
+        const finishing = leaving && from === STORY.length - 1;
+        if (starting) soundBeforeStory = state.sound;
+        state.story = index;
+
+        if (index < 0) {
+            // Back to whatever the panel's own view filters say, the table's
+            // own clock, and no caption.
+            channel.postMessage({ type: 'ecom_caption', caption: null });
+            channel.postMessage({ type: 'ecom_uniform', on: false });
+            channel.postMessage({ type: 'ecom_flows', mode: 'running' });
+            pushFilters();
+            if (leaving) {
+                channel.postMessage({ type: 'ecom_release' });
+                // Every step mutes the sound, so quitting at step three used to
+                // leave the table silent with no way to tell why. Finishing
+                // hands over to a running table and brings it up; exiting part
+                // way puts back whatever was there before.
+                // An empty community has nothing to play, so Finish only brings
+                // the sound up when there are members to hear.
+                if (finishing && memberCount()) {
+                    channel.postMessage({ type: 'ecom_sound', on: true });
+                } else if (soundBeforeStory !== null) {
+                    channel.postMessage({ type: 'ecom_sound',
+                                          on: !!soundBeforeStory });
+                }
+                soundBeforeStory = null;
+                // The introduction's example campus goes; the panel's own
+                // community - empty unless someone has ticked buildings -
+                // comes back.
+                restorePanelCommunity();
+            }
+            render();
+            return;
+        }
+
+        const step = STORY[index];
+
+        // First, because everything below describes a layer that has to be on.
+        // Harmless when it already is.
+        channel.postMessage({ type: 'ecom_activate' });
+
+        channel.postMessage({
+            type: 'ecom_filters',
+            filters: (step.kinds === null && step.pairs === null)
+                ? null
+                : { kinds: step.kinds || NODE_KINDS.map(function (k) { return k.key; }),
+                    pairs: step.pairs }
+        });
+
+        // A held hour for every step but the last, so only one thing is moving
+        // at a time. The last hands the clock back and lets the day run.
+        const hour = typeof step.hour === 'string'
+            ? busiestHour(step.hour, step.fallbackHour) : step.hour;
+        if (typeof hour === 'number') {
+            channel.postMessage({ type: 'ecom_hour', hour: hour });
+        } else {
+            channel.postMessage({ type: 'ecom_release' });
+        }
+
+        channel.postMessage({
+            type: 'ecom_uniform',
+            on: !!step.uniform,
+            reveal: step.reveal || null
+        });
+
+        channel.postMessage({
+            type: 'ecom_flows',
+            mode: step.flows === 'still' ? 'still' : 'running'
+        });
+
+        // Sound arrives with the community, not before it.
+        channel.postMessage({ type: 'ecom_sound', on: !!step.sound });
+
+        channel.postMessage({
+            type: 'ecom_caption',
+            caption: { title: step.title, line: storyText(step.line),
+                       figure: storyText(step.figure),
+                       step: index + 1, of: STORY.length }
+        });
+
+        render();
+    }
+
+    /**
+     * Space or right arrow for the next step, left for back, Escape to leave.
+     *
+     * Bound on the panel document, because that is the window the presenter has
+     * a hand on. Ignored while typing into a field, so renaming a charge point
+     * does not advance the story under you.
+     */
+    function onStoryKey(event) {
+        const tag = (event.target && event.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+        if (event.key === ' ' || event.key === 'ArrowRight') {
+            // Space scrolls a page by default, which on a panel this tall is
+            // the last thing wanted mid-sentence.
+            event.preventDefault();
+            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
+            return;
+        }
+        if (state.story < 0) return;          // the rest only while running
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            storyGo(Math.max(0, state.story - 1));
+        } else if (event.key === 'Escape') {
+            storyGo(-1);
+        }
+    }
+
+    function storyMarkup() {
+        const running = state.story >= 0;
+        const step = running ? STORY[state.story] : null;
+        const last = state.story === STORY.length - 1;
+
+        const dots = STORY.map(function (item, index) {
+            return '<button type="button" class="ecom-ctl-dot' +
+                (index === state.story ? ' is-on' : '') +
+                (index < state.story ? ' is-done' : '') +
+                '" data-story-step="' + index + '" title="' + esc(item.title) +
+                '"></button>';
+        }).join('');
+
+        return '<div class="ecom-ctl-story' + (running ? ' is-running' : '') + '">' +
+            '<div class="ecom-ctl-story-head">' +
+                '<span class="ecom-ctl-story-label" title="Space or right arrow ' +
+                    'for the next step, left arrow to go back, Escape to leave.">' +
+                    (running
+                        ? esc(step.title) + ' &middot; ' + (state.story + 1) +
+                          ' of ' + STORY.length
+                        : 'Introduction') +
+                '</span>' +
+                '<div class="ecom-ctl-dots">' + dots + '</div>' +
+            '</div>' +
+            '<div class="ecom-ctl-story-bar">' +
+                (running
+                    ? '<button type="button" class="ecom-ctl-btn" ' +
+                          'data-action="story-back"' +
+                          (state.story === 0 ? ' disabled' : '') + '>Back</button>' +
+                      '<button type="button" class="ecom-ctl-btn ' +
+                          'ecom-ctl-btn--primary" data-action="story-next">' +
+                          (last ? 'Finish' : 'Next') + '</button>' +
+                      '<button type="button" class="ecom-ctl-btn" ' +
+                          'data-action="story-exit">Exit</button>'
+                    : '<button type="button" class="ecom-ctl-btn ' +
+                          'ecom-ctl-btn--primary" data-action="story-next">' +
+                          'Start the introduction</button>') +
+            '</div>' +
+        '</div>';
     }
 
     // --------------------------------------------------------------- change
@@ -1812,7 +2348,8 @@
                 error: job && job.status === 'error' ? (job.error || 'failed') : '',
                 label: currentSpan().label,
                 period: periodLabel(optimizerPeriod(currentSpan().days)),
-                results: state.optimizerResults
+                results: state.optimizerResults,
+                previous: state.optimizerPrevious
             }
         });
     }
@@ -1825,6 +2362,11 @@
                     const job = await getJson('/api/optimize/' + encodeURIComponent(jobId));
                     if (token !== optimizerRun) { stopPolling(); return; }
                     state.optimizer = job;
+                    // A heartbeat for the display. It lightens itself while a run
+                    // is solving and must be able to tell "still solving" from "the
+                    // controller went away" - which it cannot if the only message
+                    // is the one that says the run started.
+                    if (state.optimizerRunning) broadcastOptimization();
                     if (job.status === 'done') { stopPolling(); resolve(job); }
                     else if (job.status === 'error') {
                         stopPolling();
@@ -1846,6 +2388,12 @@
         const modes = state.optimizerMode === 'both'
             ? ['separate', 'community'] : [state.optimizerMode];
         state.optimizer = { status: 'queued', progress: 0 };
+        // What the last finished run found, kept to set this one against. Only
+        // a complete set counts: a run cut short by a newer change has half an
+        // answer, and comparing against half of one would mislead.
+        if (modes.every(function (m) { return state.optimizerResults[m]; })) {
+            state.optimizerPrevious = state.optimizerResults;
+        }
         state.optimizerResults = {};
         state.optimizerStartedAt = Date.now();
         state.optimizerRunning = modes[0];
@@ -2101,14 +2649,27 @@
 
     function slider(opts) {
         const value = opts.value;
+        // `typed`: the figure beside the slider is a box that can be typed in,
+        // not just a readout. Applied on commit, up to the slider's own maximum.
+        const figure = opts.typed
+            ? '<span class="ecom-kw-field">' +
+                  '<input type="number" inputmode="decimal" min="0"' +
+                      ' step="' + opts.step + '"' +
+                      ' data-slider-typed="' + esc(opts.name) + '"' +
+                      ' data-readout="' + esc(opts.name) + '"' +
+                      ' data-typed-max="' + opts.max + '"' +
+                      ' aria-label="' + esc(opts.label) + '"' +
+                      ' value="' + Math.round(value) + '">' +
+                  '<i>' + esc(opts.unit || '') + '</i></span>'
+            : '<b data-readout="' + esc(opts.name) + '">' +
+                  esc(opts.format ? opts.format(value) : value) +
+                  ' ' + esc(opts.unit || '') +
+              '</b>';
         return '' +
             '<label class="ecom-ctl-slider">' +
                 '<span class="ecom-ctl-slider-head">' +
                     '<span>' + esc(opts.label) + '</span>' +
-                    '<b data-readout="' + esc(opts.name) + '">' +
-                        esc(opts.format ? opts.format(value) : value) +
-                        ' ' + esc(opts.unit || '') +
-                    '</b>' +
+                    figure +
                 '</span>' +
                 '<input type="range" data-slider="' + esc(opts.name) + '"' +
                     ' min="' + opts.min + '" max="' + opts.max + '"' +
@@ -3222,11 +3783,10 @@
                 const reading = await getJson('/api/live/battery');
                 const was = JSON.stringify(state.live);
                 state.live = reading;
-                // Only when something changed: this fires every five seconds,
-                // and re-rendering the panel under a finger moves the slider
-                // it is resting on.
-                if (JSON.stringify(reading) !== was &&
-                    state.openGroup === 'community') render();
+                // Only when something changed, and only the reading itself: this
+                // fires every five seconds, and re-rendering the members list
+                // under a finger moves the slider it is resting on.
+                if (JSON.stringify(reading) !== was) paintLive();
             } catch (error) {
                 state.live = { available: false, detail: String(error.message || error) };
             }
@@ -3235,7 +3795,22 @@
         liveTimer = setInterval(tick, LIVE_EVERY_MS);
     }
 
-    /** The live reading, as a line of the Storage group. */
+    // The building the gateway reports for. The readout sits on its row in
+    // Members, under its battery, because that is the battery it is reading.
+    const LIVE_BATTERY_HOST = 'AWL';
+
+    /** The readout with the wrapper paintLive finds it by. */
+    function liveBlock() {
+        return '<div id="ecom-live-battery" class="ecom-kit-live">' + liveBattery() + '</div>';
+    }
+
+    /** Swap in a new reading without redrawing the panel around it. */
+    function paintLive() {
+        const el = document.getElementById('ecom-live-battery');
+        if (el) el.innerHTML = liveBattery();
+    }
+
+    /** The live reading of the real battery. */
     function liveBattery() {
         const live = state.live;
         if (!live) return '';
@@ -3336,10 +3911,10 @@
         let battery_;
         if (store) {
             battery_ =
-                liveBattery() +
                 slider({
                     name: 'battery_kwh', label: 'Battery capacity',
                     value: store.capacity, min: 0, max: 5000, step: 50, unit: 'kWh',
+                    typed: true,
                     format: function (v) { return Number(v).toLocaleString(); }
                 }) +
                 slider({
@@ -3369,7 +3944,6 @@
                 '</button>';
         } else {
             battery_ =
-                liveBattery() +
                 '<p class="ecom-ctl-empty">' +
                     (inBuildings
                         ? 'No community store. ' + inBuildings + ' ' +
@@ -3575,6 +4149,28 @@
         };
 
         const sizer = function (kind, icon, label, value, min, max, step, unit, readout) {
+            // Panels can be typed as well as dragged: the slider moves the share
+            // of the roof covered, the box beside it is the capacity that share
+            // comes to, and typing there sets the share to match.
+            const end = kind === 'pv'
+                ? '<span class="ecom-kw-field">' +
+                      '<input type="number" inputmode="decimal" min="0" step="1"' +
+                          ' data-size-kw="' + esc(name) + '"' +
+                          ' data-size-readout="pv:' + esc(name) + '"' +
+                          ' aria-label="Panel capacity in kW"' +
+                          ' value="' + Math.round(roofKw(name)) + '">' +
+                      '<i>kW</i></span>'
+                : kind === 'battery'
+                ? '<span class="ecom-kw-field">' +
+                      '<input type="number" inputmode="decimal" min="0" step="10"' +
+                          ' data-size-kwh="' + esc(name) + '"' +
+                          ' data-size-max="' + max + '"' +
+                          ' data-size-readout="battery:' + esc(name) + '"' +
+                          ' aria-label="Battery capacity in kWh"' +
+                          ' value="' + Math.round(value) + '">' +
+                      '<i>kWh</i></span>'
+                : '<b data-size-readout="' + kind + ':' + esc(name) + '">' +
+                      esc(readout) + '</b>';
             return '<div class="ecom-kit-size is-' + kind + '">' +
                 '<label><span class="material-icons">' + icon + '</span>' +
                     esc(label) + '</label>' +
@@ -3582,8 +4178,7 @@
                     ' data-size-building="' + esc(name) + '"' +
                     ' min="' + min + '" max="' + max + '" step="' + step + '"' +
                     ' value="' + value + '">' +
-                '<b data-size-readout="' + kind + ':' + esc(name) + '">' +
-                    esc(readout) + '</b>' +
+                end +
                 '</div>';
         };
 
@@ -3628,30 +4223,34 @@
                  'A battery in this building. It takes this building\'s ' +
                  'surplus before the neighbours see it and covers its own ' +
                  'demand first. Community storage is separate.' +
-                 (isMember ? '' : ' Waits until the building joins.')) +
+                 (isMember ? '' : ' The building is not a member: while its ' +
+                  'equipment is SHARED the community uses it.')) +
             chip('charger', chargers.length > 0, 'ev_station',
                  chargers.length ? chargers.length + ' charger' +
                      (chargers.length > 1 ? 's' : '') : 'Charger',
                  'A charge point outside this building, placed clear of its ' +
                  'neighbours. Tap again to take them all away; the + and - below ' +
                  'add or remove one at a time.' +
-                 (isMember ? '' : ' Waits until the building joins.')) +
-            // Whose panels they are, once there are some on a building outside
-            // the community: its own, feeding nobody here, or rented by the
-            // community. It was a tag on the Solar group's row; that group is
-            // gone and the row it described is this one.
-            (!isMember && coverage > 0
+                 (isMember ? '' : ' The building is not a member: while its ' +
+                  'equipment is SHARED the community uses it.')) +
+            // Whose equipment it is, once a building outside the community has
+            // any - panels, a battery or chargers. SHARED (the default): the
+            // community uses it and the table draws it on this building.
+            // DORMANT: it is the building's own and waits, unseen, until the
+            // building joins.
+            (!isMember && (coverage > 0 || battery || chargers.length)
                 ? '<button type="button" class="ecom-roof-owner' +
-                      (state.roofOwner[name] === 'community' ? ' is-rented' : '') +
+                      (sharesAssets(name) ? ' is-rented' : '') +
                       '" data-roofowner="' + esc(name) + '" title="' +
-                      (state.roofOwner[name] === 'community'
-                          ? 'The community rents this roof: the panels feed the ' +
-                            'members even though this building is not one. Tap to ' +
-                            'hand them back.'
-                          : 'The panels are this building\'s own and it is not a ' +
-                            'member, so they feed nobody in the community. Tap to ' +
-                            'rent the roof.') + '">' +
-                      (state.roofOwner[name] === 'community' ? 'rented' : 'dormant') +
+                      (sharesAssets(name)
+                          ? 'Shared: this building is not a member, but its ' +
+                            'panels, battery and chargers feed the community and ' +
+                            'are drawn on the table. Tap to keep them dormant ' +
+                            'until it joins.'
+                          : 'Dormant: the equipment is this building\'s own and it ' +
+                            'is not a member, so nothing here uses it and the table ' +
+                            'does not draw it. Tap to share it with the community.') + '">' +
+                      (sharesAssets(name) ? 'shared' : 'dormant') +
                   '</button>'
                 : '') +
             '</div>';
@@ -3665,6 +4264,8 @@
             rows += sizer('battery', 'battery_charging_full', 'Storage',
                           Math.round(battery.capacity), 0, 1000, 10, 'kWh',
                           Math.round(battery.capacity) + ' kWh');
+            // What the real one is doing right now, under the modelled one.
+            if (sameBuilding(name, LIVE_BATTERY_HOST)) rows += liveBlock();
         }
         if (chargers.length) {
             // How many, and how powerful each one is. The power slider sets all
@@ -3712,16 +4313,11 @@
             return '' +
                 '<div class="ecom-ctl-member-row' + (on ? '' : ' is-off') + '">' +
                     '<label class="ecom-ctl-member' + (on ? '' : ' is-off') + '"' +
-                    // The owner is in the tooltip as well as beside the name:
-                    // on a narrow column it is hidden to keep a building to one
-                    // line, and it should not vanish from the panel with it.
-                    ' title="' + esc(b.name + (b.owner ? ' - ' + b.owner : '')) + '"' +
+                    ' title="' + esc(b.name) + '"' +
                     ' data-member="' + esc(b.name) + '">' +
                         '<input type="checkbox" data-member="' + esc(b.name) + '"' +
                             (on ? ' checked' : '') + '>' +
                         '<span class="ecom-ctl-member-name">' + esc(b.name) + '</span>' +
-                        '<span class="ecom-ctl-member-owner">' +
-                            esc(b.owner || '') + '</span>' +
                     '</label>' +
                     kit +
                 '</div>';
@@ -3978,6 +4574,12 @@
                     esc(periodLabel(optimizerPeriod(currentSpan().days))) +
                     ' &middot; ' + optimizerEstimate(currentSpan().days) + '</span>' +
             '</div>' +
+            '<label class="ecom-ctl-check ecom-ctl-check--inline">' +
+                '<input type="checkbox" data-toggle="autoopt"' +
+                    (state.autoOptimize ? ' checked' : '') + '>' +
+                '<span>Run automatically when something changes, and compare ' +
+                    'with the run before</span>' +
+            '</label>' +
             '<div class="ecom-ctl-actions">' +
                 '<button type="button" class="ecom-ctl-btn ecom-ctl-btn--primary"' +
                     ' data-action="optimize"' + (state.optimizerRunning ? ' disabled' : '') + '>' +
@@ -4067,6 +4669,7 @@
                 '</div>' +
                 '<div id="ecom-ctl-status" class="ecom-ctl-status ecom-ctl-status--' +
                     state.statusKind + '">' + esc(state.status) + '</div>' +
+                storyMarkup() +
             '</div>';
 
         if (groupHost) {
@@ -4111,7 +4714,27 @@
             setKitSize(size, name, value);
             const readout = document.querySelector(
                 '[data-size-readout="' + size + ':' + String(name).replace(/"/g, '') + '"]');
-            if (readout) {
+            if (size === 'pv' || size === 'battery') {
+                // The chip above the slider carries the same figure. Patched
+                // with it, or it keeps the old number until something redraws.
+                const chip = document.querySelector('[data-kit="' + size +
+                    '"][data-kit-building="' + String(name).replace(/"/g, '') + '"]');
+                if (chip && chip.lastChild) {
+                    const figure = size === 'pv' ? Math.round(roofKw(name))
+                                                 : Math.round(value);
+                    chip.lastChild.textContent = figure > 0
+                        ? figure + (size === 'pv' ? ' kW' : ' kWh')
+                        : (size === 'pv' ? 'PV' : 'Battery');
+                }
+            }
+            if (readout && readout.tagName === 'INPUT') {
+                // The typed capacity follows the slider. Not while it has focus,
+                // so a number half-typed is not overwritten.
+                if (document.activeElement !== readout) {
+                    readout.value = size === 'pv' ? Math.round(roofKw(name))
+                                                  : Math.round(value);
+                }
+            } else if (readout) {
                 readout.textContent =
                     size === 'pv' ? Math.round(roofKw(name)) + ' kW'
                     : size === 'battery' ? Math.round(value) + ' kWh'
@@ -4169,6 +4792,8 @@
             if (raw === '') delete state.paramValues[param];
             else state.paramValues[param] = Number(raw);
             target.parentElement.classList.toggle('is-changed', raw !== '');
+            // An optimizer constant changes the answer, so it counts as a change.
+            scheduleOptimize();
             // The optimizer constants are inputs to a separate run, not to the
             // dispatch the table draws, so nothing is re-sent here.
             return;
@@ -4245,7 +4870,16 @@
     }
 
     function applySlider(name, value, readout) {
-        const set = function (text) { if (readout) readout.textContent = text; };
+        const set = function (text) {
+            if (!readout) return;
+            if (readout.tagName === 'INPUT') {
+                // A typed figure follows the slider, but not out from under a
+                // number being typed.
+                if (document.activeElement !== readout) readout.value = String(Math.round(value));
+            } else {
+                readout.textContent = text;
+            }
+        };
         const w = state.working;
 
         // Per-charger sliders carry their index: `cp_kw:2`. One handler for
@@ -4322,7 +4956,7 @@
     // closest() had nothing to match.
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
-        'data-members', 'data-roofs', 'data-cp-remove',
+        'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step',
         'data-optimizer-span', 'data-optimizer-mode', 'data-peak', 'data-kit', 'data-roofowner',
         'data-shared', 'data-profile-mode', 'data-profile-focus',
         'data-param-info', 'data-charger-step'
@@ -4346,12 +4980,21 @@
             return;
         }
 
+        const jump = el.getAttribute('data-story-step');
+        if (jump !== null) { storyGo(Number(jump)); return; }
+
         const action = el.getAttribute('data-action');
         if (action === 'kpi-more') {
             state.kpiDetails = !state.kpiDetails;
             renderKpis();
             return;
         }
+        if (action === 'story-next') {
+            storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
+            return;
+        }
+        if (action === 'story-back') { storyGo(Math.max(0, state.story - 1)); return; }
+        if (action === 'story-exit') { storyGo(-1); return; }
         if (action === 'apply') { applyNow(); return; }
 
         // Jump to the busiest hour or the busiest day of a measured year.
@@ -4478,8 +5121,7 @@
         // Who owns the panels on a roof outside the community.
         const roofOwner = el.getAttribute('data-roofowner');
         if (roofOwner) {
-            state.roofOwner[roofOwner] =
-                state.roofOwner[roofOwner] === 'community' ? 'own' : 'community';
+            state.roofOwner[roofOwner] = sharesAssets(roofOwner) ? 'own' : 'community';
             render();
             markDirty();
             return;
@@ -4572,6 +5214,61 @@
             return;
         }
 
+        // A panel capacity typed in kW. Applied on commit (Enter or leaving the
+        // box), not per keystroke: "1" on the way to "150" is not a request for
+        // 1 kW. The roof's share of panels is set to give that capacity, within
+        // the same ceiling as the slider, and the panel is redrawn so the
+        // slider and the box both show what was actually applied.
+        const kwBuilding = target.getAttribute && target.getAttribute('data-size-kw');
+        if (kwBuilding) {
+            const typed = Number(target.value);
+            const percent = roofCoverage(kwBuilding);
+            const kw = roofKw(kwBuilding);
+            if (target.value === '' || !isFinite(typed) || typed < 0 || percent <= 0 || kw <= 0) {
+                render();                       // nothing usable: put the old value back
+                return;
+            }
+            const perPercent = kw / percent;    // kW for each point of roof covered
+            const next = typed === 0
+                ? 0
+                : Math.min(Math.max(Math.round(typed / perPercent * 10) / 10, 0.1),
+                           MAX_ROOF_COVERAGE);
+            setRoofCoverage(kwBuilding, next);
+            render();
+            markDirty();
+            return;
+        }
+
+        // A building's battery capacity typed in kWh. Same rules as the panels:
+        // on commit, capped at the slider's maximum, 0 takes the battery out.
+        const kwhBuilding = target.getAttribute && target.getAttribute('data-size-kwh');
+        if (kwhBuilding) {
+            const typed = Number(target.value);
+            const cap = Number(target.getAttribute('data-size-max')) || 1000;
+            if (target.value === '' || !isFinite(typed) || typed < 0) {
+                render();
+                return;
+            }
+            setKitSize('battery', kwhBuilding, Math.min(typed, cap));
+            render();
+            markDirty();
+            return;
+        }
+
+        // The community battery's capacity typed in the Community tab.
+        const typedSlider = target.getAttribute && target.getAttribute('data-slider-typed');
+        if (typedSlider) {
+            const typed = Number(target.value);
+            const cap = Number(target.getAttribute('data-typed-max')) || 5000;
+            if (target.value === '' || !isFinite(typed) || typed < 0) {
+                render();
+                return;
+            }
+            applySlider(typedSlider, Math.min(Math.max(typed, 1), cap), null);
+            render();
+            return;
+        }
+
         const toggle = target.getAttribute && target.getAttribute('data-toggle');
         const v2gIndex = target.getAttribute && target.getAttribute('data-cp-v2g');
         if (v2gIndex !== null && v2gIndex !== undefined) {
@@ -4588,6 +5285,15 @@
         if (toggle === 'auto') {
             state.autoApply = target.checked;
             if (state.autoApply && state.dirty) scheduleApply();
+            return;
+        }
+        if (toggle === 'autoopt') {
+            state.autoOptimize = target.checked;
+            // Switching it off must not leave a queued run to fire anyway.
+            if (!state.autoOptimize && optimizeTimer !== null) {
+                clearTimeout(optimizeTimer);
+                optimizeTimer = null;
+            }
             return;
         }
     }
@@ -4739,6 +5445,15 @@
 
         // On the document, not on the panel: the keys have to work wherever the
         // focus happens to be in this window.
+        document.addEventListener('keydown', onStoryKey);
+
+        // A controller that has just opened is not solving anything. If the last
+        // one was closed or reloaded mid-run, the display is still lightened and
+        // still waiting to be told the run is over; say so.
+        channel.postMessage({
+            type: 'ecom_optimization',
+            optimization: { running: '', error: '', results: {}, previous: null }
+        });
 
         // The chart is drawn at the size of its card, so a resized window
         // needs it drawn again. Waited out, because a window being dragged
@@ -4773,7 +5488,7 @@
         if (data.type === 'animation_state' &&
             data.animationId === 'ecom-energy-btn' && data.isActive &&
             state.base) {
-            resetPresentation();
+            offerStory();
         }
 
         if (data.type === 'ecom_summary' && data.summary && !state.layer) {
@@ -4860,9 +5575,10 @@
             state.link.at = Date.now();
             if (typeof data.hours === 'number') state.hours = data.hours;
             paintLink();
-            // The table may already be running, possibly still holding the
-            // old introduction's last step; put it back to the running view.
-            resetPresentation();
+            // The usual order of events: the table is already running and the
+            // panel is opened onto it. The introduction should start here too,
+            // not only when the layer is switched on with the panel watching.
+            if (state.link.active && state.base) offerStory();
         }
 
         // The display confirming it redrew. Reported instead of the dispatch

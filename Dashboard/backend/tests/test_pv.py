@@ -140,6 +140,66 @@ def test_offline_without_cache_raises(tmp_path):
         c.profile_per_kwp(Orientation(57.7, 12.0, 30.0, 0.0, 14.0))
 
 
+# ---------------------------------------------------------------- measured plants
+
+def _write_meter(folder, kwh):
+    pd.DataFrame({"hoy": range(1, HOURS_PER_YEAR + 1), "kwh": kwh}).to_csv(
+        folder / "sb2_pv_2022.csv", index=False)
+
+
+@pytest.fixture
+def meter(tmp_path, monkeypatch):
+    """A tiny meter file: 2 kWh in every hour, 17,520 kWh a year."""
+    from app.services import pv_measured
+    _write_meter(tmp_path, [2.0] * HOURS_PER_YEAR)
+    monkeypatch.setenv("ECOM_PV_DIR", str(tmp_path))
+    monkeypatch.setattr(pv_measured, "_cache", {})
+    return tmp_path
+
+
+def test_a_metered_plant_uses_its_meter_not_pvgis(cache, meter):
+    from app.services import pv_measured
+    c, calls = cache
+    plant = build_pv_plant(make_spec(name="SB2-PV_1", surface_area=1000.0))
+    ref = pv_measured.MEASURED[0]["reference_kwp"]
+
+    assert calls == [], "a metered plant must not ask PVGIS for anything"
+    # At the reference capacity the plant is the meter; elsewhere it scales.
+    assert plant.annual_production == pytest.approx(
+        17520.0 * plant.installed_capacity / ref)
+
+
+def test_a_metered_plant_resizes_linearly(cache, meter):
+    small = build_pv_plant(make_spec(name="SB2-PV_1", surface_area=1000.0))
+    big = build_pv_plant(make_spec(name="SB2-PV_2", surface_area=2000.0))
+    assert big.annual_production == pytest.approx(
+        small.annual_production * big.installed_capacity / small.installed_capacity)
+
+
+def test_other_plants_still_use_pvgis(cache, meter):
+    c, calls = cache
+    build_pv_plant(make_spec(name="Roof-A"))
+    assert len(calls) == 1
+
+
+def test_a_missing_meter_file_is_an_error_not_a_fallback(cache, tmp_path, monkeypatch):
+    from app.services import pv_measured
+    monkeypatch.setenv("ECOM_PV_DIR", str(tmp_path / "nowhere"))
+    monkeypatch.setattr(pv_measured, "_cache", {})
+    with pytest.raises(Exception, match="does not exist"):
+        build_pv_plant(make_spec(name="SB2-PV_1"))
+
+
+def test_the_real_sb2_meter_file_is_a_full_clean_year():
+    """The shipped file, not a stub: right length, no spike, no negatives."""
+    from app.services import pv_measured
+    kwh = pd.read_csv(pv_measured.data_dir() / "sb2_pv_2022.csv")["kwh"]
+    assert len(kwh) == HOURS_PER_YEAR
+    assert kwh.min() >= 0
+    assert kwh.sum() == pytest.approx(35507, rel=0.001)
+    assert kwh.max() < 60, "a counter catch-up has leaked through as a spike"
+
+
 # ---------------------------------------------------------------- failure modes
 
 def test_pvgis_failure_is_an_error_not_zero_production(monkeypatch, tmp_path):

@@ -23,6 +23,12 @@
     const GOOD = '#5fd48a';
     const BAD = '#ff8a7a';
 
+    // How faint the picture goes while a run is solving.
+    const DIM_OPACITY = 0.3;
+    // How long without a "still solving" from the controller before the picture
+    // is let go. It sends one every two seconds while a run is going.
+    const DIM_WATCHDOG_MS = 15 * 1000;
+
     const LABELS = { separate: 'As today', community: 'As an energy community' };
     const ORDER = ['separate', 'community'];
 
@@ -59,7 +65,15 @@
         'line-height:1.1}',
         '.ecom-opt-save span{font-size:11px;opacity:0.6;text-transform:uppercase;',
         'letter-spacing:0.05em}',
-        '.ecom-opt-err{align-self:center;color:' + BAD + ';font-size:14px}'
+        '.ecom-opt-err{align-self:center;color:' + BAD + ';font-size:14px}',
+        '.ecom-opt-delta{font-size:12px;opacity:0.85;margin-top:2px}',
+        // While the optimizer is solving, the picture behind it is stale or about
+        // to be: lighten it so the wait reads as a wait. !important because some
+        // layers set their own inline opacity while they fade. The bar and the
+        // KPI strip are not part of the picture and stay at full strength.
+        '#map,body>canvas,#table-overlay{transition:opacity 700ms ease}',
+        'body.ecom-optimizing #map,body.ecom-optimizing>canvas,',
+        'body.ecom-optimizing #table-overlay{opacity:' + DIM_OPACITY + '!important}'
     ].join('');
     document.head.appendChild(style);
 
@@ -81,6 +95,18 @@
             unit + '</small></b><span>' + label + '</span></div>';
     }
 
+    // What this run's cost is against the run before the change: lower is better.
+    function delta(mode, result) {
+        const before = payload && payload.previous && payload.previous[mode];
+        if (!before || !before.totals || !result || !result.totals) return '';
+        const change = (result.totals.overall_cost || 0) - (before.totals.overall_cost || 0);
+        if (Math.abs(change) < 0.5) {
+            return '<div class="ecom-opt-delta">no change from before</div>';
+        }
+        return '<div class="ecom-opt-delta" style="color:' + (change < 0 ? GOOD : BAD) + '">' +
+            (change < 0 ? '−' : '+') + num(Math.abs(change)) + ' SEK vs before the change</div>';
+    }
+
     function card(mode, result) {
         const t = (result && result.totals) || {};
         return '<div class="ecom-opt-card" data-mode="' + mode + '">' +
@@ -90,7 +116,7 @@
                 metric('Grid import', t.grid_import_kwh, 'kWh') +
                 metric('Grid export', t.grid_export_kwh, 'kWh') +
                 metric('Peak import', t.peak_net_import_kw, 'kW') +
-            '</div></div>';
+            '</div>' + delta(mode, result) + '</div>';
     }
 
     function render() {
@@ -132,12 +158,43 @@
         bar.innerHTML = html;
     }
 
+    let dimTimer = null;
+    let dimWanted = false;
+
+    /**
+     * Lightened while a run is solving, and never during the introduction: that
+     * is the one thing on the table that has to be seen at full strength, and a
+     * solve started by a change made a moment ago is not what the room is there
+     * for.
+     */
+    function applyDim() {
+        document.body.classList.toggle('ecom-optimizing', dimWanted && !inIntroduction);
+    }
+
+    /** A run is solving (true) or is not (false). Restored on its own if it goes quiet. */
+    function setDim(wanted) {
+        dimWanted = wanted;
+        if (dimTimer !== null) { clearTimeout(dimTimer); dimTimer = null; }
+        if (wanted) {
+            // The controller repeats "still solving" every couple of seconds. If
+            // it stops - closed, reloaded, crashed - the picture must not stay
+            // faint waiting for an end that is never announced.
+            dimTimer = setTimeout(function () {
+                dimTimer = null;
+                dimWanted = false;
+                applyDim();
+            }, DIM_WATCHDOG_MS);
+        }
+        applyDim();
+    }
+
     const channel = new BroadcastChannel('map_controller_channel');
     channel.addEventListener('message', function (event) {
         const data = event.data || {};
         if (data.type === 'ecom_optimization') {
             payload = data.optimization || null;
             layerOn = true;
+            setDim(!!(payload && payload.running));
             render();
             return;
         }
@@ -149,18 +206,21 @@
         }
         if (data.type === 'ecom_caption') {
             inIntroduction = !!(data.caption && typeof data.caption.step === 'number');
+            applyDim();
             render();
             return;
         }
         if (data.type === 'ecom_release' || data.type === 'ecom_change') {
             inIntroduction = false;
+            applyDim();
             render();
             return;
         }
-        if (data.type === 'ecom_empty') { layerOn = false; render(); }
+        if (data.type === 'ecom_empty') { layerOn = false; setDim(false); render(); }
     });
 
     window.ecomOptimization = {
+        isDimmed: function () { return document.body.classList.contains('ecom-optimizing'); },
         isShowing: function () { return bar.classList.contains('is-on'); },
         reading: function () { return { text: bar.innerText, payload: payload }; }
     };

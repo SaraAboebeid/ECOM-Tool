@@ -22,6 +22,7 @@ from typing import Optional
 import pandas as pd
 
 from app import toolkit  # noqa: F401  - puts ECOMToolkit on sys.path
+from app.services import pv_measured
 
 from ECOMToolkit.entities import pv_plant as pv_plant_module
 
@@ -127,14 +128,18 @@ class PVGISCache:
         """Return a callable suitable for ECOMToolkit's PVGIS_PROVIDER hook."""
 
         def _provide(plant) -> tuple[pd.DataFrame, float]:
-            orientation = Orientation(
-                lat=float(plant.lat),
-                lon=float(plant.lon),
-                slope=float(plant.slope),
-                azimuth=float(plant.azimuth),
-                system_loss=float(plant.system_loss),
-            )
-            per_kwp = self.profile_per_kwp(orientation)
+            # A plant with its own meter takes the measured profile, not a
+            # simulation; see pv_measured.
+            per_kwp = pv_measured.profile_per_kwp_wh(getattr(plant, "name", ""))
+            if per_kwp is None:
+                orientation = Orientation(
+                    lat=float(plant.lat),
+                    lon=float(plant.lon),
+                    slope=float(plant.slope),
+                    azimuth=float(plant.azimuth),
+                    system_loss=float(plant.system_loss),
+                )
+                per_kwp = self.profile_per_kwp(orientation)
             capacity = float(plant.installed_capacity)
             scaled = [v * capacity for v in per_kwp]
             df = pd.DataFrame({"hoy": range(1, len(scaled) + 1), "value": scaled})

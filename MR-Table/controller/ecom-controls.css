@@ -201,7 +201,6 @@
 .ecom-ctl-member input { width: 18px; height: 18px; accent-color: #ff00a6; }
 .ecom-ctl-member.is-off { color: #6d6d6d; }
 .ecom-ctl-member-name { flex: 1; }
-.ecom-ctl-member-owner { font-size: 0.72rem; color: #7d7d7d; }
 
 /* ---------------------------------------------------------------- chips */
 
@@ -860,6 +859,52 @@
 .ecom-kit-size.is-pv input[type=range] { accent-color: #eaff00; }
 .ecom-kit-size.is-battery input[type=range] { accent-color: #fb7185; }
 .ecom-kit-size.is-charger input[type=range] { accent-color: #34d399; }
+
+/* The chargers row has four parts - name, stepper, power slider, figure - but
+   the member-row rule above gives every sizer three columns, so the slider was
+   squeezed to a stub at the end and the figure fell onto a line of its own. */
+.ecom-ctl-member-row .ecom-kit-size.ecom-kit-chargers {
+    grid-template-columns: 5.4rem auto minmax(60px, 1fr) 5.4rem;
+}
+
+/* The real battery's live reading, on its building's row under the modelled
+   battery. A line of its own, the full width of the row, indented with the
+   sliders above it. */
+.ecom-kit-live {
+    flex: 1 1 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.2rem 0.3rem 0.35rem 0.6rem;
+}
+.ecom-kit-live:empty { display: none; }
+.ecom-kit-live .ecom-ctl-live { margin: 0; }
+
+/* The panel capacity, typed. Sits where the other sizes show a read-only figure. */
+.ecom-kw-field {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.ecom-kw-field input {
+    width: 3.4rem;
+    min-width: 0;
+    padding: 0.15rem 0.3rem;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    background: #27272a;
+    color: #e4e4e7;
+    font: inherit;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+}
+.ecom-kw-field input::-webkit-outer-spin-button,
+.ecom-kw-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ecom-kw-field input:focus { outline: none; border-color: #eaff00; }
+.ecom-kw-field i { font-style: normal; color: #9b9b9b; }
 
 .ecom-kit-size b {
     text-align: right;
@@ -1845,15 +1890,6 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
 
 .ecom-tabpanel .ecom-ctl-member input { width: 20px; height: 20px; }
 .ecom-tabpanel .ecom-ctl-member-name { font-weight: 500; }
-.ecom-tabpanel .ecom-ctl-member-owner {
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    flex: 0 1 auto;
-}
-
 .ecom-tabpanel .ecom-ctl-member-row > .ecom-ctl-member-kit {
     flex: 0 0 auto;
     align-items: center;
@@ -1893,12 +1929,7 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     color: #34d399;
 }
 
-/* On a narrower screen the column is too tight for the owner as well, and a
-   building wraps to a second line to make room for it. Dropped from the line
-   there; it is still in the tooltip on the name. */
 @media (max-width: 1700px) {
-    .ecom-tabpanel .ecom-ctl-member-owner { display: none; }
-
     /* Name, roof and three buttons have about 560px between them. The name only
        needs room for its longest word, not the 215px it is given at full width,
        and the buttons can be a little snugger. */
@@ -1995,11 +2026,19 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
     grid-template-columns: 220px minmax(0, 1fr) minmax(310px, 380px);
     grid-template-areas:
         "sky when bar"
-        "sky when status";
-    grid-template-rows: auto 1fr;
+        "sky when status"
+        "sky when story";
+    grid-template-rows: auto auto 1fr;
     gap: 0.45rem 0.9rem;
     align-items: stretch;
 }
+
+#main-panel.ecom-mode .ecom-ctl-story {
+    grid-area: story;
+    margin-top: 0;
+    padding: 0.45rem 0.65rem;
+}
+#main-panel.ecom-mode .ecom-ctl-story-head { margin-bottom: 0.3rem; }
 
 /* The sky shrinks to a clock: the hour, the date, daylight and the sun. */
 #main-panel.ecom-mode .ecom-sky-card {
@@ -2273,4 +2312,58 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
 
 @media (prefers-reduced-motion: reduce) {
     .ecom-tab { transition: none; }
+}
+
+/* The introduction: one button the presenter can find without looking down. */
+.ecom-ctl-story {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.ecom-ctl-story.is-running {
+    border-color: rgba(232, 238, 246, 0.28);
+    background: rgba(232, 238, 246, 0.05);
+}
+.ecom-ctl-story-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.ecom-ctl-story-label {
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    opacity: 0.78;
+}
+.ecom-ctl-dots {
+    display: flex;
+    gap: 5px;
+}
+/* Each dot is a jump, for the question asked out of order. */
+.ecom-ctl-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.22);
+    transition: width 160ms ease, background 160ms ease;
+}
+.ecom-ctl-dot.is-done { background: rgba(232, 238, 246, 0.55); }
+.ecom-ctl-dot.is-on {
+    width: 20px;
+    background: var(--ecom-action, #e8eef6);
+}
+.ecom-ctl-story-bar {
+    display: flex;
+    gap: 8px;
+}
+.ecom-ctl-story-bar .ecom-ctl-btn { flex: 1; }
+.ecom-ctl-story-bar .ecom-ctl-btn[disabled] {
+    opacity: 0.35;
+    cursor: default;
 }
