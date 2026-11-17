@@ -154,9 +154,12 @@ def test_ev_sessions_are_built_from_availability():
 
 
 def test_availability_blocks_wrap_and_filter():
-    assert _availability_blocks([1, 1, 0, 0], 8) == [(0, 2), (4, 6)]
+    day = [0] * 24
+    day[8] = day[9] = 1          # 08:00-10:00
+    day[12] = 1                  # a lone hour at noon
+    assert _availability_blocks(day, 48) == [(8, 10), (32, 34)]
     # One-hour blocks are dropped: they trip the toolkit's feasibility assert.
-    assert _availability_blocks([1, 0, 1, 0], 8) == []
+    assert _availability_blocks([1, 0] * 12, 24) == []
     assert _availability_blocks(None, 8) == []
 
 
@@ -347,3 +350,31 @@ def test_ev_totals_count_the_cars_and_not_the_batteries():
     t = _totals(frame)
     assert t["ev_charge_kwh"] == 6.0
     assert t["ev_discharge_kwh"] == 2.0
+
+
+def test_sessions_are_workplace_charging_within_the_day():
+    """06:00-24:00, cut at midnight: a run cannot carry a session into tomorrow."""
+    from app.services.optimize import _availability_blocks
+    overnight = [1] * 7 + [0] * 11 + [1] * 6          # 18:00 -> 07:00
+    blocks = _availability_blocks(overnight, 48)
+    # The evening part of each day; the 00:00-07:00 part is before 06:00 or
+    # crosses into it, so only 06:00-07:00 would remain - one hour, dropped.
+    assert blocks == [(18, 24), (42, 48)]
+    for start, end in blocks:
+        assert start % 24 >= 6, "nothing starts before 06:00"
+        assert start // 24 == (end - 1) // 24, "no session crosses midnight"
+    work = [0] * 8 + [1] * 9 + [0] * 7                 # 08:00 -> 17:00
+    assert _availability_blocks(work, 48) == [(8, 17), (32, 41)]
+
+
+def test_subscription_is_one_fee_per_connection_with_vat():
+    """As today each building pays one; a community shares one connection."""
+    from app.services.optimize import _add_subscription
+    t = {"dso_cost": 100.0, "tax_cost": 50.0, "overall_cost": 400.0}
+    _add_subscription(t, connections=2, hours=24, fee_per_hour=605 / 30 / 24, vat=0.25)
+    fee = 2 * 605 / 30
+    assert abs(t["subscription_cost"] - fee) < 1e-9
+    assert abs(t["dso_cost"] - (100.0 + fee)) < 1e-9
+    assert abs(t["tax_cost"] - (50.0 + 0.25 * fee)) < 1e-9
+    assert abs(t["overall_cost"] - (400.0 + 1.25 * fee)) < 1e-9
+    assert t["connections"] == 2

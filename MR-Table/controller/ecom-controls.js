@@ -137,7 +137,10 @@
         if (!flows) return fallback;
         const total = [];
         flows.forEach(function (feature) {
-            if (feature.properties.kind !== kind) return;
+            // By the node a line leaves: a building's shared solar is drawn
+            // yellow but is still a building's line.
+            const from = feature.properties.origin || feature.properties.kind;
+            if (from !== kind) return;
             (feature.properties.flow_hourly || []).forEach(function (value, hour) {
                 total[hour] = (total[hour] || 0) + (value || 0);
             });
@@ -245,15 +248,14 @@
         },
         {
             key: 'lines-sharing',
-            title: 'Pink: between members',
-            // Midday, because this is the one colour that needs sunshine to
-            // exist at all: at nineteen hundred there is nothing to share.
-            line: 'Pink runs between members: a roof with more than it needs ' +
-                  'supplying a neighbour, or filling the battery, or charging ' +
-                  'the car. The yellow roofs are where it comes from. This is ' +
-                  'what a community adds - the teal lines were the campus ' +
-                  'without one.',
-            figure: 'Pink - shared inside the community',
+            title: 'Yellow: solar shared between members',
+            // Midday, because sharing needs sunshine to exist at all: at
+            // nineteen hundred there is nothing to share.
+            line: 'Yellow between buildings is solar being shared: a roof with ' +
+                  'more than it needs supplying a neighbour, filling the ' +
+                  'battery, or charging the car. This is what a community adds ' +
+                  '- the teal lines were the campus without one.',
+            figure: 'Yellow - solar shared inside the community',
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
             pairs: ['building>building', 'building>battery',
                     'building>charge_point', 'building>grid'],
@@ -338,7 +340,9 @@
         // For a building that is not a member: whether the community rents its
         // roof ('community') or the panels are the building's own and sit
         // dormant ('own', the default - it changes no numbers).
-        roofOwner: {},
+        // Equipment of buildings outside the community that it rents, by kind and
+        // building: 'pv:SB2', 'battery:AWL', 'charger:HC'. Absent is own use.
+        rented: {},
         // Whether a display is actually listening. Without this the panel looks
         // identical whether the table is following along or the two are on
         // different origins and nothing is getting through.
@@ -700,7 +704,7 @@
                 max_charging_power: 11,
                 daily_distance: 40,
                 v2g_enabled: false,
-                availability: [1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+                availability: plugSchedule(DEFAULT_PLUG.arrival, DEFAULT_PLUG.departure)
             }
         });
         render();
@@ -772,16 +776,36 @@
     }
 
     /**
-     * Whether a building outside the community shares its equipment with it.
+     * Whether a building outside the community rents its equipment to it.
      *
-     * Panels, a battery or chargers put on a building that is not ticked are
-     * shared by default: they feed the community and are drawn on the table, on
-     * that building, so equipment can be placed before the building joins. The
-     * SHARED / DORMANT badge on its row turns that off ('own'), and then they
-     * wait, unseen, until the building is a member.
+     * By default a building that is not ticked keeps its panels, battery and
+     * chargers for its own use: they serve that building, which is not part of
+     * the community, so they are not in its dispatch. The OWN USE / RENTED
+     * badge on its row rents them to the community instead ('community'): they
+     * then feed the members and are drawn on that building, panels with their
+     * halo. A member's equipment is always its own and always in.
      */
-    function sharesAssets(name) {
-        return state.roofOwner[name] !== 'own';
+    function sharesAssets(name, kind) {
+        return !!state.rented[kind + ':' + name];
+    }
+
+    /**
+     * OWN USE / RENTED for one kind of equipment on a building outside the
+     * community. Own use: it serves the building, which is not a member, so the
+     * community does not have it. Rented: the community uses it and the table
+     * draws it on the building.
+     */
+    function ownerBadge(name, kind, label, noun) {
+        const rented = sharesAssets(name, kind);
+        return '<button type="button" class="ecom-roof-owner' + (rented ? ' is-rented' : '') +
+            '" data-roofowner="' + esc(name) + '" data-owner-kind="' + kind + '" title="' +
+            esc(rented
+                ? 'Rented: the community uses this building\'s ' + noun + ', although ' +
+                  'the building is not a member. Tap to give them back to it.'
+                : 'Own use: the ' + noun + ' serve this building, which is not in ' +
+                  'the community. Tap to rent them to the community.') + '">' +
+            esc(label) + ' · ' + (rented ? 'rented' : 'own use') +
+        '</button>';
     }
 
     /** The definition to dispatch: the working copy minus excluded members. */
@@ -800,7 +824,7 @@
                 if (!state.excluded.has(b.name)) return;
                 const names = b.pv_plants || [];
                 if (!names.length) return;
-                const target = sharesAssets(b.name) ? rented : dormant;
+                const target = sharesAssets(b.name, 'pv') ? rented : dormant;
                 names.forEach(function (name) { target.add(name); });
             });
 
@@ -835,7 +859,7 @@
             // leaves with the building. Community storage stays regardless.
             spec.batteries = (spec.batteries || []).filter(function (b) {
                 return !(b.attached && b.host && state.excluded.has(b.host) &&
-                         !sharesAssets(b.host));
+                         !sharesAssets(b.host, 'battery'));
             }).map(function (b) {
                 if (b.attached && b.host && state.excluded.has(b.host)) b.attached = false;
                 return b;
@@ -843,7 +867,7 @@
             // Chargers the same: shared, they stay and the community supplies
             // them; dormant, they go with the building.
             spec.charge_points = (spec.charge_points || []).filter(function (cp) {
-                return !(cp.host && state.excluded.has(cp.host) && !sharesAssets(cp.host));
+                return !(cp.host && state.excluded.has(cp.host) && !sharesAssets(cp.host, 'charger'));
             });
         }
 
@@ -1191,7 +1215,7 @@
                 v2g_enabled: false,
                 availability: template && template.ev && template.ev.availability
                     ? template.ev.availability.slice()
-                    : [1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+                    : plugSchedule(DEFAULT_PLUG.arrival, DEFAULT_PLUG.departure)
             }
         };
         if (spot[0] != null) { cp.lon = spot[0]; cp.lat = spot[1]; }
@@ -4347,13 +4371,13 @@
                     // optimizer makes one charging session of each stay.
                     slider({
                         name: 'cp_arr:' + index, label: 'Arrives',
-                        value: plugWindow(cp).arrival, min: 0, max: 23, step: 1, unit: '',
-                        format: clockHour
+                        value: plugWindow(cp).arrival, min: WORK_FROM, max: WORK_TO - 1,
+                        step: 1, unit: '', format: clockHour
                     }) +
                     slider({
                         name: 'cp_dep:' + index, label: 'Leaves',
-                        value: plugWindow(cp).departure, min: 0, max: 23, step: 1, unit: '',
-                        format: clockHour,
+                        value: plugWindow(cp).departure, min: WORK_FROM + 1, max: WORK_TO,
+                        step: 1, unit: '', format: clockHour,
                         hint: plugHint(plugWindow(cp))
                     }) +
                     (bays
@@ -4385,43 +4409,42 @@
     // including) departure, wrapping past midnight when it leaves earlier in
     // the day than it came. The same time for both means plugged in all day.
 
-    const DEFAULT_PLUG = { arrival: 18, departure: 7 };
+    // Workplace charging: the car comes and goes within one day, between 06:00
+    // and midnight. The optimizer starts each run fresh and cannot carry a
+    // session over midnight into the next day, so - as the optimization team
+    // advised - arrival is from 06:00 and departure by 24:00, same day.
+    const WORK_FROM = 6;
+    const WORK_TO = 24;
+    const DEFAULT_PLUG = { arrival: 8, departure: 17 };
 
     function clockHour(h) { return String(h).padStart(2, '0') + ':00'; }
 
-    /** The arrival and departure the car's schedule describes. */
+    /** The arrival and departure the car's schedule describes, inside 06-24. */
     function plugWindow(cp) {
         const a = (cp.ev && cp.ev.availability) || null;
         if (!a || a.length !== 24) return DEFAULT_PLUG;
-        if (a.every(function (v) { return v; })) return { arrival: 0, departure: 0 };
-        let arrival = null;
-        let departure = null;
-        for (let h = 0; h < 24; h += 1) {
-            const before = a[(h + 23) % 24];
-            if (a[h] && !before && arrival === null) arrival = h;
-            if (!a[h] && before && departure === null) departure = h;
+        let first = null;
+        let last = null;
+        for (let h = WORK_FROM; h < WORK_TO; h += 1) {
+            if (a[h]) {
+                if (first === null) first = h;
+                last = h;
+            }
         }
-        return (arrival === null || departure === null)
-            ? DEFAULT_PLUG : { arrival: arrival, departure: departure };
+        return first === null ? DEFAULT_PLUG : { arrival: first, departure: last + 1 };
     }
 
-    /** 24 hours of 0/1 from an arrival and a departure. */
+    /** 24 hours of 0/1: plugged in from arrival up to, not including, departure. */
     function plugSchedule(arrival, departure) {
         const out = [];
-        for (let h = 0; h < 24; h += 1) {
-            const on = arrival === departure ||
-                (arrival < departure ? (h >= arrival && h < departure)
-                                     : (h >= arrival || h < departure));
-            out.push(on ? 1 : 0);
-        }
+        for (let h = 0; h < 24; h += 1) out.push(h >= arrival && h < departure ? 1 : 0);
         return out;
     }
 
     function plugHint(window_) {
-        const hours = plugSchedule(window_.arrival, window_.departure)
-            .reduce(function (s, v) { return s + v; }, 0);
-        return 'Plugged in ' + hours + ' h a day' +
-            (window_.arrival > window_.departure ? ', overnight.' : '.');
+        return 'Plugged in ' + (window_.departure - window_.arrival) + ' h, ' +
+            clockHour(window_.arrival) + '-' + clockHour(window_.departure) +
+            ' - workplace charging, within the day.';
     }
 
     /** A building's display name from a charger's host (a footprint id or a name). */
@@ -4531,7 +4554,7 @@
                  'surplus before the neighbours see it and covers its own ' +
                  'demand first. Community storage is separate.' +
                  (isMember ? '' : ' The building is not a member: while its ' +
-                  'equipment is SHARED the community uses it.')) +
+                  'equipment is RENTED the community uses it; by default it serves the building itself.')) +
             chip('charger', chargers.length > 0, 'ev_station',
                  chargers.length ? chargers.length + ' charger' +
                      (chargers.length > 1 ? 's' : '') : 'Charger',
@@ -4539,26 +4562,17 @@
                  'neighbours. Tap again to take them all away; the + and - below ' +
                  'add or remove one at a time.' +
                  (isMember ? '' : ' The building is not a member: while its ' +
-                  'equipment is SHARED the community uses it.')) +
-            // Whose equipment it is, once a building outside the community has
-            // any - panels, a battery or chargers. SHARED (the default): the
-            // community uses it and the table draws it on this building.
-            // DORMANT: it is the building's own and waits, unseen, until the
-            // building joins.
-            (!isMember && (coverage > 0 || battery || chargers.length)
-                ? '<button type="button" class="ecom-roof-owner' +
-                      (sharesAssets(name) ? ' is-rented' : '') +
-                      '" data-roofowner="' + esc(name) + '" title="' +
-                      (sharesAssets(name)
-                          ? 'Shared: this building is not a member, but its ' +
-                            'panels, battery and chargers feed the community and ' +
-                            'are drawn on the table. Tap to keep them dormant ' +
-                            'until it joins.'
-                          : 'Dormant: the equipment is this building\'s own and it ' +
-                            'is not a member, so nothing here uses it and the table ' +
-                            'does not draw it. Tap to share it with the community.') + '">' +
-                      (sharesAssets(name) ? 'shared' : 'dormant') +
-                  '</button>'
+                  'equipment is RENTED the community uses it; by default it serves the building itself.')) +
+            // Who uses the equipment of a building outside the community, once
+            // it has any. OWN USE (the default): the building itself - it is not
+            // a member, so none of it is in the community. RENTED: the community
+            // uses it, and the table draws it on this building.
+            // One per kind, so the panels can be rented while the battery stays
+            // with the building, or the other way round.
+            (!isMember
+                ? (coverage > 0 ? ownerBadge(name, 'pv', 'PV', 'panels') : '') +
+                  (battery ? ownerBadge(name, 'battery', 'Battery', 'battery') : '') +
+                  (chargers.length ? ownerBadge(name, 'charger', 'Chargers', 'chargers') : '')
                 : '') +
             '</div>';
 
@@ -5191,9 +5205,23 @@
             } else if (parts[0] === 'cp_arr' || parts[0] === 'cp_dep') {
                 if (cp.ev) {
                     const now = plugWindow(cp);
-                    const arrival = parts[0] === 'cp_arr' ? value : now.arrival;
-                    const departure = parts[0] === 'cp_dep' ? value : now.departure;
+                    let arrival = parts[0] === 'cp_arr' ? value : now.arrival;
+                    let departure = parts[0] === 'cp_dep' ? value : now.departure;
+                    // Always at least an hour plugged in, and leaving after it
+                    // arrives: the slider not being moved gives way.
+                    if (departure <= arrival) {
+                        if (parts[0] === 'cp_arr') departure = Math.min(WORK_TO, arrival + 1);
+                        else arrival = Math.max(WORK_FROM, departure - 1);
+                    }
                     cp.ev.availability = plugSchedule(arrival, departure);
+                    const other = parts[0] === 'cp_arr' ? 'cp_dep' : 'cp_arr';
+                    const otherValue = other === 'cp_dep' ? departure : arrival;
+                    const otherSlider = document.querySelector('[data-slider="' + other + ':' + parts[1] + '"]');
+                    if (otherSlider && Number(otherSlider.value) !== otherValue) {
+                        otherSlider.value = otherValue;
+                        const otherReadout = document.querySelector('[data-readout="' + other + ':' + parts[1] + '"]');
+                        if (otherReadout) otherReadout.textContent = clockHour(otherValue) + ' ';
+                    }
                     // The "Plugged in N h" line under Leaves follows both sliders.
                     const hint = document.querySelector(
                         '[data-slider="cp_dep:' + parts[1] + '"] + .ecom-ctl-hint');
@@ -5431,7 +5459,10 @@
         // Who owns the panels on a roof outside the community.
         const roofOwner = el.getAttribute('data-roofowner');
         if (roofOwner) {
-            state.roofOwner[roofOwner] = sharesAssets(roofOwner) ? 'own' : 'community';
+            const ownerKind = el.getAttribute('data-owner-kind') || 'pv';
+            const key = ownerKind + ':' + roofOwner;
+            if (state.rented[key]) delete state.rented[key];
+            else state.rented[key] = true;
             render();
             markDirty();
             return;

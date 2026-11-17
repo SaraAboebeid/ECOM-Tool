@@ -105,11 +105,14 @@
     // What the lines mean. The introduction teaches this one colour at a
     // time; the key is for everyone who walks up to the table afterwards,
     // which is most of the room.
+    // A line is coloured by what it carries: solar going next door is yellow
+    // and a battery's discharge red, wherever it is passed on from. There is
+    // no separate "between members" colour any more - the colours say what the
+    // members are sharing.
     const KEY = [
         { label: 'From the grid', colour: COLOURS.grid },
-        { label: 'Between members', colour: COLOURS.building },
-        { label: 'From the battery', colour: '#fa3600' },
-        { label: 'Solar on the roof', colour: COLOURS.pv }
+        { label: 'Solar', colour: COLOURS.pv },
+        { label: 'From the battery', colour: '#fa3600' }
     ];
 
     // ------------------------------------------------------------------ DOM

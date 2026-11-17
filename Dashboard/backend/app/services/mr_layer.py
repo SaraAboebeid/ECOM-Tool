@@ -745,6 +745,31 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
 
     by_key = {canonical(bid): bid for bid in nodes}
 
+    # Panels the community rents on a roof outside it: a community plant with a
+    # host. The building is not a member, so its footprint carries no `ecom`
+    # block and its roof had no halo - the panels were a marker on top of it
+    # while the roof they sit on stayed dark. What they generate each hour is
+    # what leaves the plant, so the halo follows the real output.
+    pv_out: dict = {}
+    for link in dispatch["links"]:
+        source = _endpoint(link["source"])
+        if type_of.get(source) != "pv":
+            continue
+        series = pv_out.setdefault(source, [0.0] * hours)
+        for hour, raw in enumerate(link.get("flow") or []):
+            if hour < hours:
+                series[hour] += max(0.0, float(raw or 0.0))
+    rented_on: dict = {}
+    for node in dispatch["nodes"]:
+        if node.get("type") != "pv" or "_PV_" in node["id"] or not node.get("host"):
+            continue
+        entry = rented_on.setdefault(canonical(node["host"]),
+                                     {"pv_kw": 0.0, "solar_hourly": [0.0] * hours})
+        entry["pv_kw"] += float(node.get("total_pv_capacity") or node.get("capacity")
+                                or node.get("installed_capacity") or 0.0)
+        for hour, value in enumerate(pv_out.get(node["id"], [])):
+            entry["solar_hourly"][hour] += value
+
     geo = load_footprints()
     matched = 0
     unmatched = []
@@ -755,6 +780,11 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
         if bid is None:
             unmatched.append(props.get("id"))
             props["ecom"] = None
+            rented = rented_on.get(canonical(props.get("id", "")))
+            props["rented_pv"] = ({
+                "pv_kw": round(rented["pv_kw"], 1),
+                "solar_hourly": [round(v, 2) for v in rented["solar_hourly"]],
+            } if rented else None)
             continue
 
         matched += 1
@@ -920,6 +950,47 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
     # it has no business in - it is the cable coming out of its own plant room.
     host_of = {node["id"]: canonical(node.get("host") or "")
                for node in dispatch["nodes"] if node.get("host")}
+    # What a building sends on is made of what it was given: its own panels'
+    # output and a battery's discharge into it. A line leaving a building used
+    # to be one pink "between members" line whatever it carried, so a roof's
+    # surplus going next door looked like a building powering a building. Each
+    # such line is now split, hour by hour, in proportion to what came in from
+    # the panels and from the battery that hour, and drawn as solar (yellow)
+    # and battery (red). Only what neither explains - a building passing on
+    # what it received from a neighbour - stays a member's line.
+    flow_hours = max((len(link.get("flow") or []) for link in dispatch["links"]), default=0)
+    solar_in = {bid: [0.0] * flow_hours for bid in nodes}
+    battery_in = {bid: [0.0] * flow_hours for bid in nodes}
+    for link in dispatch["links"]:
+        target = _endpoint(link["target"])
+        if target not in nodes:
+            continue
+        kind = type_of.get(_endpoint(link["source"]))
+        bucket = solar_in if kind == "pv" else battery_in if kind == "battery" else None
+        if bucket is None:
+            continue
+        for hour, raw in enumerate(link.get("flow") or []):
+            bucket[target][hour] += max(0.0, float(raw or 0.0))
+
+    def split_by_origin(source, series):
+        """[(kind, hourly)] for a building's outgoing line, by what fed it."""
+        if source not in nodes:
+            return [(type_of.get(source) or "unknown", series)]
+        parts = {"pv": [], "battery": [], "building": []}
+        for hour, value in enumerate(series):
+            sun = solar_in[source][hour] if hour < flow_hours else 0.0
+            store = battery_in[source][hour] if hour < flow_hours else 0.0
+            known = sun + store
+            if value <= 0 or known <= 0:
+                parts["pv"].append(0.0)
+                parts["battery"].append(0.0)
+                parts["building"].append(value)
+                continue
+            parts["pv"].append(round(value * sun / known, 2))
+            parts["battery"].append(round(value * store / known, 2))
+            parts["building"].append(0.0)
+        return [(kind, hourly) for kind, hourly in parts.items() if any(hourly)]
+
     # One line per link that has both ends placed. Roof array to its own host is
     # dropped: it is internal, so the line would have zero length.
     flow_features = []
@@ -958,23 +1029,29 @@ def build_layer(dispatch: dict, placements: dict | None = None) -> dict:
                 _trim_to_wall(list(reversed(route)),
                               rings_by_id.get(canonical(source), []))))
 
-        flow_features.append({
-            "type": "Feature",
-            "geometry": {"type": "LineString", "coordinates": route},
-            "properties": {
-                "source": source,
-                "target": target,
-                "kind": type_of.get(source) or "unknown",
-                # Both ends, so the table can run a line as a gradient from the
-                # colour of what it leaves to the colour of what it reaches.
-                # `kind` alone said only where it came from.
-                "target_kind": type_of.get(target) or "unknown",
-                "source_owner": owner_of.get(source, ""),
-                "target_owner": owner_of.get(target, ""),
-                "peak": round(max(series), 2),
-                "flow_hourly": series,
-            },
-        })
+        # `kind` is what the line carries and sets its colour; `origin` is the
+        # kind of node it leaves, which the view filters and the introduction's
+        # steps match on (a "building>building" pair is still that, whatever
+        # the energy in it was made by).
+        for kind, part in split_by_origin(source, series):
+            flow_features.append({
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": route},
+                "properties": {
+                    "source": source,
+                    "target": target,
+                    "kind": kind,
+                    "origin": type_of.get(source) or "unknown",
+                    # Both ends, so the table can run a line as a gradient from
+                    # the colour of what it leaves to the colour of what it
+                    # reaches. `kind` alone said only where it came from.
+                    "target_kind": type_of.get(target) or "unknown",
+                    "source_owner": owner_of.get(source, ""),
+                    "target_owner": owner_of.get(target, ""),
+                    "peak": round(max(part), 2),
+                    "flow_hourly": part,
+                },
+            })
 
     meta = {
         "period": dispatch["meta"]["period"],

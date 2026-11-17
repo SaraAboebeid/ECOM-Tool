@@ -353,7 +353,15 @@
             feature.properties.solarNow = 0;
             // The solar halo and the owner filter both read these off the
             // polygon, and neither can reach inside the nested `ecom` block.
-            feature.properties.has_pv = (ecom && ecom.pv_kw > 0) ? 1 : 0;
+            // A roof outside the community whose panels it rents glows too,
+            // from what those panels make (rented_pv, from the backend).
+            const rented = feature.properties.rented_pv;
+            feature.properties.has_pv = ((ecom && ecom.pv_kw > 0) ||
+                                         (rented && rented.pv_kw > 0)) ? 1 : 0;
+            (rented && rented.solar_hourly ? rented.solar_hourly : []).forEach(
+                function (value) {
+                    if (value > solarCeiling) solarCeiling = value;
+                });
             feature.properties.owner = (ecom && ecom.owner) || '';
             // Which side of the outline is the roof, so the solar halo can be
             // pushed onto it rather than straddling the wall.
@@ -2675,7 +2683,9 @@
                 ? MEMBER_FLOOR + (1 - MEMBER_FLOOR) * shade
                 : 0;
 
-            const sun = ((ecom && ecom.solar_hourly) || [])[hour] || 0;
+            const rentedPv = feature.properties.rented_pv;
+            const sun = ((ecom && ecom.solar_hourly) ||
+                         (rentedPv && rentedPv.solar_hourly) || [])[hour] || 0;
             const glow = solarCeiling > 0
                 ? Math.sqrt(sun / solarCeiling) : 0;
             // The wave: a roof lights once the sweep has passed its place on
@@ -3181,6 +3191,7 @@
                     const copy = JSON.parse(JSON.stringify(feature));
                     copy.properties = copy.properties || {};
                     delete copy.properties.ecom;
+                    delete copy.properties.rented_pv;
                     copy.properties.has_pv = 0;
                     copy.properties.pv_kw = 0;
                     copy.properties.demandNow = 0;
@@ -3414,7 +3425,11 @@
             // from and somewhere to go: with only the source tested, unticking
             // Charging left the grid's line to the charger drawn, running to a
             // marker that was no longer on the table.
-            flowTests.push(['in', ['get', 'kind'], ['literal', kinds]]);
+            // The node a line leaves, not what it carries: a member's solar
+            // surplus going next door is drawn yellow but still runs between
+            // two buildings. Older layers have no `origin` and fall back.
+            flowTests.push(['in', ['coalesce', ['get', 'origin'], ['get', 'kind']],
+                            ['literal', kinds]]);
             flowTests.push(['in', ['get', 'target_kind'], ['literal', kinds]]);
         }
         if (owners && owners.length) {
@@ -3442,7 +3457,7 @@
                 flowTests.push(['any'].concat(pairs.map(function (pair) {
                     const ends = String(pair).split('>');
                     return ['all',
-                        ['==', ['get', 'kind'], ends[0]],
+                        ['==', ['coalesce', ['get', 'origin'], ['get', 'kind']], ends[0]],
                         ['==', ['get', 'target_kind'], ends[1]]
                     ];
                 })));

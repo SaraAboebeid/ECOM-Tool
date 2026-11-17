@@ -85,8 +85,34 @@ def _import_lec():
         ) from err
 
 
+_SOLVER_OK: dict | None = None
+_SOLVER_CHECK_LOCK = threading.Lock()
+
+
 def solver_status() -> dict:
-    """Which solver the optimizer would use, and whether it is usable."""
+    """Which solver the optimizer would use, and whether it is usable.
+
+    A good answer is remembered for the life of the process. Every optimizer
+    request asks this first, and the check imports Pyomo and asks the solver
+    to start. Once, in a long-running server, that check hung for a minute and
+    then reported a working HiGHS as unavailable: every automatic run after it
+    was refused, and the comparison never reached the display. A solver that
+    worked once keeps working, so it is not asked again. A bad answer is not
+    remembered, so installing a solver does not need a restart.
+    """
+    global _SOLVER_OK
+    if _SOLVER_OK is not None:
+        return _SOLVER_OK
+    with _SOLVER_CHECK_LOCK:
+        if _SOLVER_OK is not None:
+            return _SOLVER_OK
+        status = _check_solver()
+        if status.get("available"):
+            _SOLVER_OK = status
+        return status
+
+
+def _check_solver() -> dict:
     try:
         functions1 = _import_lec()
     except OptimizerUnavailable as err:
@@ -388,16 +414,29 @@ def build_optimizer_inputs(
                 if departure <= arrival:
                     continue
                 hours = (departure - arrival).total_seconds() / 3600.0
+                # As the optimization team set it: the car leaves with what the
+                # time it was plugged in can put in, at the charger's power and
+                # 0.93 charging efficiency, up to a full battery. So arrival and
+                # departure decide how much it charges, not only when. Arrival
+                # SOC stays 0.3: LEC-Opt works between 0.2 and 1, and refuses an
+                # arrival below 0.2.
+                # LEC-Opt charges only in the hours strictly between arrival and
+                # departure (arrival < t < departure), one fewer than the stay,
+                # and holds departure SOC to exactly the target - so a target
+                # counted over every hour of the stay was out of reach for a
+                # short one and the solve had no solution at all. Counted over
+                # the hours it can charge, less a hair for rounding.
+                charging_hours = max(0.0, hours - 1.0)
                 reachable = cp.ev.capacity and (
-                    0.3 + (min(cp.capacity, cp.ev.max_charging_power) * hours * 0.93)
-                    / cp.ev.capacity)
+                    0.3 + (min(cp.capacity, cp.ev.max_charging_power) * charging_hours * 0.93)
+                    / cp.ev.capacity - 0.001)
                 rows.append({
                     "Arrival": arrival,
                     "Departure": departure,
                     "Capacity": float(cp.ev.capacity),
                     "Max_Power": float(min(cp.capacity, cp.ev.max_charging_power)),
                     "Arrival SOC": 0.3,
-                    "Desired SOC": round(min(0.8, reachable or 0.8), 3),
+                    "Desired SOC": round(min(1.0, reachable or 1.0), 3),
                     "ev_id": cp.ev.name,
                     "session_id": session_id,
                 })
@@ -417,15 +456,32 @@ def build_optimizer_inputs(
     }
 
 
+# Charging is modelled as workplace charging: plugged in between 06:00 and
+# midnight, never across it. LEC-Opt handles an overnight session within one
+# run, but each run here starts fresh and does not remember a session left open
+# by the day before - so, as the optimization team advised, a session ends at
+# midnight and none starts before six.
+WORKPLACE_FROM_HOUR = 6
+
+
 def _availability_blocks(availability, horizon: int) -> list[tuple[int, int]]:
-    """Contiguous plugged-in blocks, as (start_hour, end_hour) within horizon."""
+    """Contiguous plugged-in blocks, as (start_hour, end_hour) within horizon.
+
+    Clipped to the working day (06:00-24:00) and cut at midnight, so a
+    schedule that runs overnight becomes the part of it inside each day.
+    """
     if not availability:
         return []
     pattern = list(availability)
     full = (pattern * (horizon // len(pattern) + 2))[:horizon]
+    full = [value if hour % 24 >= WORKPLACE_FROM_HOUR else 0
+            for hour, value in enumerate(full)]
 
     blocks, start = [], None
     for hour, value in enumerate(full):
+        if value and start is not None and hour % 24 == 0:
+            blocks.append((start, hour))     # midnight ends a session
+            start = None
         if value and start is None:
             start = hour
         elif not value and start is not None:
@@ -585,6 +641,13 @@ def run_optimization(
     sites: list[dict] = []
     with _RUN_LOCK, quiet.capture() as sink, \
             _applied_parameters(functions1, effective):
+        # The grid subscription: a fixed fee per connection, so it changes no
+        # decision and is left out of the solve - but it is a real cost, and the
+        # number of connections is the one thing a community changes about it.
+        # Read here, inside the parameter override, so an edited fee counts.
+        fee_per_hour = float(functions1.SUBSCRIPTION_FEE_SEK_PER_MONTH) / 30.0 / 24.0
+        vat = float(functions1.VAT_RATE)
+
         if mode == "community":
             frame = solve(inputs["building_data"], inputs["charging_point_data"])
             if frame is None or len(frame) == 0:
@@ -593,6 +656,9 @@ def run_optimization(
                     "server output")
             totals, series = _totals(frame), _series(frame)
             hours = len(frame)
+            # One shared connection for the whole community.
+            _add_subscription(totals, connections=1, hours=hours,
+                              fee_per_hour=fee_per_hour, vat=vat)
         else:
             frames = []
             to_solve = _separate_sites(spec, inputs, notes)
@@ -608,6 +674,12 @@ def run_optimization(
                         f"solver log is in the server output")
                 frames.append(one)
                 t = _totals(one)
+                # As today every building has its own connection and pays its
+                # own subscription. A site with no building (chargers only)
+                # does not count as one.
+                if site.get("building_on", 1):
+                    _add_subscription(t, connections=1, hours=len(one),
+                                      fee_per_hour=fee_per_hour, vat=vat)
                 sites.append({
                     "name": site["name"],
                     "overall_cost": t["overall_cost"],
@@ -617,6 +689,9 @@ def run_optimization(
                 })
             totals, series = _combine_totals(frames), _combine_series(frames)
             hours = len(frames[0])
+            connections = sum(1 for site in to_solve if site.get("building_on", 1))
+            _add_subscription(totals, connections=connections, hours=hours,
+                              fee_per_hour=fee_per_hour, vat=vat)
 
     return {
         "solver": status["solver"],
@@ -740,6 +815,24 @@ def _num(frame: pd.DataFrame, column: str) -> float:
         return 0.0
     value = float(frame[column].fillna(0.0).sum())
     return value if math.isfinite(value) else 0.0
+
+
+def _add_subscription(totals: dict, connections: int, hours: int,
+                      fee_per_hour: float, vat: float) -> None:
+    """Put the grid subscription into a run's reported costs, in place.
+
+    functions1 keeps the subscription in its objective but leaves it out of the
+    costs it reports: its grid (DSO) cost is transmission plus peak fee only.
+    Added here as one fee per connection over the hours run - every building's
+    own as today, one shared one for a community - into the grid cost, with
+    VAT on it as functions1 puts VAT on the rest of the grid cost.
+    """
+    fee = fee_per_hour * hours * connections
+    totals["subscription_cost"] = totals.get("subscription_cost", 0.0) + fee
+    totals["connections"] = connections
+    totals["dso_cost"] = totals.get("dso_cost", 0.0) + fee
+    totals["tax_cost"] = totals.get("tax_cost", 0.0) + fee * vat
+    totals["overall_cost"] = totals.get("overall_cost", 0.0) + fee * (1.0 + vat)
 
 
 def _ev_total(frame: pd.DataFrame, suffix: str) -> float:
