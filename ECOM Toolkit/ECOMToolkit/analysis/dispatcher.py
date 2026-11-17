@@ -42,7 +42,9 @@ class ECOMDispatcher:
                  dispatch_mode: str = "community",
                  analysis_period: tuple[int, int] = None,
                  community_internal_price_buying: float = 1.0,
-                 community_internal_price_selling: float = 1.0):
+                 community_internal_price_selling: float = 1.0,
+                 sharing_rule: str = "order",
+                 positions: dict = None):
         """
         Initialize the dispatcher.
 
@@ -52,7 +54,21 @@ class ECOMDispatcher:
             analysis_period: (start_hour, end_hour), default full year (0..8759)
             community_internal_price_buying: Internal energy trade price in the community (buying)
             community_internal_price_selling: Internal energy trade price in the community (selling)
+            sharing_rule: how a building's surplus is shared between members
+                that are short in the same hour:
+                  "order"        in the order the members are listed (the
+                                 original behaviour, and the default)
+                  "proportional" split in proportion to how short each one is
+                  "nearest"      the closest member first, then the next
+            positions: building name -> (x, y), for "nearest". A member with no
+                position is served after every member that has one.
         """
+        if sharing_rule not in ("order", "proportional", "nearest"):
+            raise ValueError(f"sharing_rule must be order, proportional or nearest, "
+                             f"got {sharing_rule!r}")
+        self.sharing_rule = sharing_rule
+        self.positions = dict(positions or {})
+
         from ECOMToolkit.entities.energy_community import EnergyCommunity
         from ECOMToolkit.entities.grid import Grid
 
@@ -393,7 +409,9 @@ class ECOMDispatcher:
                  dispatch_mode: str = "community",
                  analysis_period: tuple[int, int] = None,
                  community_internal_price_buying: float = 1.0,
-                 community_internal_price_selling: float = 1.0):
+                 community_internal_price_selling: float = 1.0,
+                 sharing_rule: str = "order",
+                 positions: dict = None):
         """
         Initialize the dispatcher.
 
@@ -403,7 +421,21 @@ class ECOMDispatcher:
             analysis_period: (start_hour, end_hour), default full year (0..8759)
             community_internal_price_buying: Internal energy trade price in the community (buying)
             community_internal_price_selling: Internal energy trade price in the community (selling)
+            sharing_rule: how a building's surplus is shared between members
+                that are short in the same hour:
+                  "order"        in the order the members are listed (the
+                                 original behaviour, and the default)
+                  "proportional" split in proportion to how short each one is
+                  "nearest"      the closest member first, then the next
+            positions: building name -> (x, y), for "nearest". A member with no
+                position is served after every member that has one.
         """
+        if sharing_rule not in ("order", "proportional", "nearest"):
+            raise ValueError(f"sharing_rule must be order, proportional or nearest, "
+                             f"got {sharing_rule!r}")
+        self.sharing_rule = sharing_rule
+        self.positions = dict(positions or {})
+
         from ECOMToolkit.entities.energy_community import EnergyCommunity
         from ECOMToolkit.entities.grid import Grid
 
@@ -846,13 +878,41 @@ class ECOMDispatcher:
             print()
 
     def _dispatch_peer_to_peer(self, t, state):
-        """Surplus from one building supplies deficit in another (P2P exchange)."""
+        """Surplus from one building supplies deficit in another (P2P exchange).
+
+        Who is served first is the sharing rule (see __init__): the members in
+        list order, the closest first, or everyone at once in proportion to
+        how short they are. Every rule moves the same energy in total when the
+        surplus covers every deficit; they differ only when it does not.
+        """
         deficit_buildings = [b for b, d in state["deficit"].items() if d > 0]
         surplus_buildings = [b for b, s in state["surplus"].items() if s > 0]
 
+        if getattr(self, "sharing_rule", "order") == "proportional":
+            for surplus_building in surplus_buildings:
+                surplus = state["surplus"][surplus_building]
+                short = {b: state["deficit"][b] for b in deficit_buildings
+                         if state["deficit"][b] > 0}
+                need = sum(short.values())
+                if surplus <= 0 or need <= 0:
+                    continue
+                # Everyone short gets the same share of their need; when the
+                # surplus covers it all, everyone is covered in full.
+                fraction = min(1.0, surplus / need)
+                for deficit_building, deficit in short.items():
+                    transfer = deficit * fraction
+                    if transfer > 0:
+                        self._update_flow(surplus_building, deficit_building, t, transfer)
+                        state["surplus"][surplus_building] -= transfer
+                        state["deficit"][deficit_building] -= transfer
+            return
+
         for surplus_building in surplus_buildings:
             surplus = state["surplus"][surplus_building]
-            for deficit_building in deficit_buildings:
+            order = deficit_buildings
+            if getattr(self, "sharing_rule", "order") == "nearest":
+                order = self._nearest_first(surplus_building, deficit_buildings)
+            for deficit_building in order:
                 deficit = state["deficit"][deficit_building]
                 transfer = min(surplus, deficit)
                 if transfer > 0:
@@ -862,6 +922,24 @@ class ECOMDispatcher:
                     surplus -= transfer
                     if state["surplus"][surplus_building] <= 0:
                         break
+
+    def _nearest_first(self, source, candidates):
+        """The candidates ordered by distance from source, closest first.
+
+        Stable: equal distances, and members with no position (served last),
+        keep their list order.
+        """
+        origin = self.positions.get(source)
+        if origin is None:
+            return list(candidates)
+
+        def distance(name):
+            where = self.positions.get(name)
+            if where is None:
+                return float("inf")
+            return ((where[0] - origin[0]) ** 2 + (where[1] - origin[1]) ** 2) ** 0.5
+
+        return sorted(candidates, key=distance)
 
     def _dispatch_community_pv(self, t, state, community_pv):
         """Community PV plants supply remaining deficits."""

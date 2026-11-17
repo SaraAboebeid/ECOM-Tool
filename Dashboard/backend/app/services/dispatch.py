@@ -57,6 +57,8 @@ def run_dispatch(
             analysis_period=spec.analysis_period.as_tuple,
             community_internal_price_buying=spec.internal_price_buying,
             community_internal_price_selling=spec.internal_price_selling,
+            sharing_rule=spec.sharing_rule,
+            positions=built.node_positions,
         )
         dispatcher.run()
 

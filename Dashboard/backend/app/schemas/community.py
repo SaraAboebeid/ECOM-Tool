@@ -48,6 +48,13 @@ class CommunitySpec(BaseModel):
     )
     internal_price_selling: Annotated[float, Field(ge=0)] = 1.0
 
+    # How a member's surplus is shared between members short in the same hour.
+    # "order": in the order the buildings are listed (the original behaviour,
+    # so the default). "proportional": split by how short each one is.
+    # "nearest": the closest building first. Only the dispatch the table draws
+    # follows it - the optimizer decides sharing for itself.
+    sharing_rule: Literal["order", "proportional", "nearest"] = "order"
+
     # ------------------------------------------------------------- validation
 
     @model_validator(mode="after")

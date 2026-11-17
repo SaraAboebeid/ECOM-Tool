@@ -322,6 +322,8 @@
         kpiDetails: false,    // the three detail columns under the KPI tiles, folded away
         paramInfo: {},        // optimizer constants whose explanation is open, by name
         profileMode: 'kw',    // load profiles in kW, or each as a share of its own peak
+        profileView: 'profiles', // the card beside the parameters: 'profiles' or 'sharing'
+        shareMode: 'period',     // the sharing graph: totals over the period, or this 'hour'
         profileFocus: null,   // the one building being followed on that chart
         // For a building that is not a member: whether the community rents its
         // roof ('community') or the panels are the building's own and sit
@@ -1452,6 +1454,22 @@
     let pendingWaiters = [];
 
     function markDirty() {
+        // Someone is building a community: the introduction gives way. It starts
+        // by itself when the page loads and can take a while to prepare, and
+        // arriving at step one over a community already being built - members
+        // ticked, panels added - took the table away from the person using it.
+        if (storyLoading) storySkipRequested = true;
+        if (state.story >= 0) {
+            state.story = -1;
+            storyLayer = null;
+            storySpec = null;
+            channel.postMessage({ type: 'ecom_caption', caption: null });
+            channel.postMessage({ type: 'ecom_uniform', on: false });
+            channel.postMessage({ type: 'ecom_flows', mode: 'running' });
+            pushFilters();
+            channel.postMessage({ type: 'ecom_release' });
+            render();
+        }
         state.dirty = true;
         renderKpis();       // dims them, rather than leaving last run looking live
         paintProfiles();    // and so does the load-profile chart
@@ -3430,6 +3448,13 @@
         // The spot chart keeps the table's hour too. Here, because every hour
         // change already comes through this function.
         paintSpotNow();
+        // And the sharing graph, when it is showing one hour: it is that hour's
+        // picture, so it is redrawn as the hour moves on.
+        if (state.profileView === 'sharing' && state.shareMode === 'hour' &&
+            state.hour !== lastSharingHour) {
+            lastSharingHour = state.hour;
+            paintProfiles();
+        }
         const sky = document.getElementById('ecom-sky');
         // sun-study-ui.js owns the solar maths and loads after this file. If it
         // is missing the panel is still usable - the sky just stays flat.
@@ -3754,13 +3779,22 @@
     }
 
     function profilesCard() {
+        const sharingView = state.profileView === 'sharing';
         return '<div class="ecom-ctl-group ecom-ctl-group--pink is-open ecom-profiles-card">' +
             '<div class="ecom-ctl-head ecom-profiles-head">' +
-                '<span class="material-icons ecom-ctl-head-icon">timeline</span>' +
-                '<span>Load profiles</span>' +
+                '<span class="material-icons ecom-ctl-head-icon">' +
+                    (sharingView ? 'hub' : 'timeline') + '</span>' +
+                // Two views in one card: the space is there, and a second card
+                // would squeeze both.
+                '<span class="ecom-seg ecom-view-tabs">' +
+                    '<button type="button" data-profile-view="profiles"' +
+                        (sharingView ? '' : ' class="is-on"') + '>Load profiles</button>' +
+                    '<button type="button" data-profile-view="sharing"' +
+                        (sharingView ? ' class="is-on"' : '') + '>Sharing</button>' +
+                '</span>' +
             '</div>' +
             '<div id="ecom-profiles" class="ecom-ctl-body ecom-profiles-body">' +
-                profilesBody() +
+                (sharingView ? sharingBody() : profilesBody()) +
             '</div>' +
         '</div>';
     }
@@ -3769,9 +3803,292 @@
      *  finger is inside it. */
     function paintProfiles() {
         const body = document.getElementById('ecom-profiles');
-        if (body) body.innerHTML = profilesBody();
+        if (body) body.innerHTML = state.profileView === 'sharing' ? sharingBody() : profilesBody();
     }
 
+    // ------------------------------------------------------- sharing graph
+    //
+    // Who gives energy to whom inside the community, over the period on the
+    // table: a weighted directed graph. Each member sits where it is on the
+    // campus, shrunk to the card, so "nearest first" can be seen for what it
+    // is; an arrow A -> B is what A gave B, as thick as the kWh, yellow where
+    // it was mostly solar and red where it was mostly a battery's. Only the
+    // strongest connections are drawn - thirty buildings all linked is a
+    // hairball - and the ones left out are counted.
+    const SHARE_W = 600;
+    const SHARE_H = 300;
+    const SHARE_PAD = 34;
+    const SHARE_MAX_EDGES = 12;
+    const SHARING_RULE_LABELS = {
+        order: 'in list order',
+        proportional: 'in proportion to need',
+        nearest: 'nearest first'
+    };
+
+    /**
+     * Totals per link from the layer, [{from, to, kwh, solar, battery, origin}]:
+     * member to member (the sharing), and the grid, a community battery and
+     * community solar to the members - so a community with nothing to share
+     * still shows where its energy comes from.
+     */
+    /** A series summed over the period, or its value at one hour. */
+    function shareAmount(series, hour) {
+        const s = series || [];
+        if (hour !== null && hour !== undefined) return Math.max(0, s[hour] || 0);
+        return s.reduce(function (t, v) { return t + Math.max(0, v || 0); }, 0);
+    }
+
+    function sharingEdges(layer, hour) {
+        const pairs = {};
+        ((layer && layer.flows && layer.flows.features) || []).forEach(function (f) {
+            const p = f.properties || {};
+            const origin = p.origin || p.kind;
+            const into = p.target_kind;
+            const wanted = origin === 'building'
+                ? into === 'building'
+                : (origin === 'grid' || origin === 'battery' || origin === 'pv') &&
+                  (into === 'building' || into === 'charge_point');
+            if (!wanted) return;
+            const kwh = shareAmount(p.flow_hourly, hour);
+            if (!(kwh > 0.0005)) return;
+            const key = p.source + '>' + p.target;
+            const e = pairs[key] || (pairs[key] = {
+                from: p.source, to: p.target, kwh: 0, solar: 0, battery: 0, origin: origin
+            });
+            e.kwh += kwh;
+            if (p.kind === 'battery') e.battery += kwh;
+            else if (p.kind === 'pv') e.solar += kwh;
+        });
+        return Object.keys(pairs).map(function (k) { return pairs[k]; })
+            .sort(function (a, b) { return b.kwh - a.kwh; });
+    }
+
+    // The grid supplies far more than members pass between them: on one scale
+    // every sharing arrow would be a hairline next to it. So the grid's arrows
+    // are scaled among themselves, drawn thinner and fainter, and capped.
+    const SHARE_MAX_GRID_EDGES = 10;
+    // The hour the sharing graph was last drawn for, so a repaint of the sky
+    // that is not an hour change does not redraw it.
+    let lastSharingHour = null;
+    const SHARE_COLOURS = { grid: '#00ffe5', battery: '#fa3600', solar: '#eaff00', building: '#ff2bd6' };
+
+    function sharingBody() {
+        const layer = state.layer;
+        const rule = (state.working && state.working.sharing_rule) || 'order';
+        const ruleLine = '<span class="ecom-ctl-hint">Sharing rule: <b>' +
+            esc(SHARING_RULE_LABELS[rule] || rule) + '</b> - change it in the Community tab.</span>';
+        if (!layer || !layer.flows) {
+            return '<p class="ecom-ctl-empty">Tick buildings in Members and the energy they ' +
+                'share with each other appears here.</p>' + ruleLine;
+        }
+        // The whole period, or the hour the table is on - which then redraws
+        // as the clock moves (see paintSky).
+        const hours = (layer.meta && layer.meta.hours) || state.hours || 24;
+        const hourMode = state.shareMode === 'hour';
+        const hour = hourMode ? ((state.hour || 0) % Math.max(1, hours)) : null;
+        const when = hourMode
+            ? 'at ' + String(hour % 24).padStart(2, '0') + ':00, day ' + (Math.floor(hour / 24) + 1)
+            : 'over ' + ((layer.meta && layer.meta.period) || 'the period');
+        const toggle = '<span class="ecom-seg">' +
+            '<button type="button" data-share-mode="period"' + (hourMode ? '' : ' class="is-on"') +
+                ' title="Totals over the days on the table.">Whole period</button>' +
+            '<button type="button" data-share-mode="hour"' + (hourMode ? ' class="is-on"' : '') +
+                ' title="The hour the table is on, following its clock.">This hour</button>' +
+            '</span>';
+
+        const everything = sharingEdges(layer, hour);
+        const all = everything.filter(function (e) { return e.origin === 'building'; });
+        const supply = everything.filter(function (e) { return e.origin !== 'building'; });
+
+        // Each member's own solar, used where it was made - never an arrow,
+        // because it never leaves the building. The ring around a member.
+        const ownSolar = {};
+        ((layer.nodes && layer.nodes.features) || []).forEach(function (f) {
+            const p = f.properties || {};
+            if (p.kind === 'building') ownSolar[p.id] = shareAmount(p.solar_hourly, hour);
+        });
+        if (!everything.length && !Object.keys(ownSolar).some(function (k) { return ownSolar[k] > 0; })) {
+            return '<div class="ecom-share-top">' + toggle + '</div>' +
+                '<p class="ecom-ctl-empty">Nothing flowed ' + esc(when) + '.</p>' + ruleLine;
+        }
+        const gridEdges = supply.filter(function (e) { return e.origin === 'grid'; })
+            .slice(0, SHARE_MAX_GRID_EDGES);
+        const localEdges = supply.filter(function (e) { return e.origin !== 'grid'; });
+        const edges = all.slice(0, SHARE_MAX_EDGES).concat(localEdges);
+
+        // Where everything is, from the layer's own markers, and what it is.
+        const where = {};
+        const kindOf = {};
+        ((layer.nodes && layer.nodes.features) || []).forEach(function (f) {
+            if (f.properties && f.geometry) {
+                where[f.properties.id] = f.geometry.coordinates;
+                kindOf[f.properties.id] = f.properties.kind;
+            }
+        });
+        // Every member, arrows or not - at an hour when a building only uses its
+        // own solar it still belongs on the picture, with its ring.
+        const names = Object.keys(ownSolar);
+        edges.concat(gridEdges).forEach(function (e) {
+            [e.from, e.to].forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); });
+        });
+        const pts = names.map(function (n) { return where[n]; }).filter(Boolean);
+        const lat0 = pts.length ? pts.reduce(function (s, c) { return s + c[1]; }, 0) / pts.length : 57.69;
+        const kx = Math.cos(lat0 * Math.PI / 180);
+        const xs = pts.map(function (c) { return c[0] * kx; });
+        const ys = pts.map(function (c) { return c[1]; });
+        const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+        const minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+        // One scale for both directions, the largest that fits the card both
+        // ways - so the campus keeps its shape and nothing falls off an edge.
+        const scale = Math.min((SHARE_W - 2 * SHARE_PAD) / Math.max(maxX - minX, 1e-6),
+                               (SHARE_H - 2 * SHARE_PAD) / Math.max(maxY - minY, 1e-6));
+        const pos = {};
+        names.forEach(function (n, i) {
+            const c = where[n];
+            if (c) {
+                pos[n] = {
+                    x: SHARE_W / 2 + ((c[0] * kx) - (minX + maxX) / 2) * scale,
+                    y: SHARE_H / 2 - (c[1] - (minY + maxY) / 2) * scale + 6
+                };
+            } else {
+                // No marker for it: on a ring, so it is still shown.
+                const a = 2 * Math.PI * i / names.length;
+                pos[n] = { x: SHARE_W / 2 + 0.4 * SHARE_W * Math.cos(a), y: SHARE_H / 2 + 0.4 * SHARE_H * Math.sin(a) };
+            }
+        });
+
+        const maxShare = Math.max(1e-6, edges.reduce(function (m, e) { return Math.max(m, e.kwh); }, 0));
+        const maxGrid = Math.max(1e-6, gridEdges.reduce(function (m, e) { return Math.max(m, e.kwh); }, 0));
+        const given = {}, received = {}, bought = {};
+        all.forEach(function (e) {
+            given[e.from] = (given[e.from] || 0) + e.kwh;
+            received[e.to] = (received[e.to] || 0) + e.kwh;
+        });
+        supply.forEach(function (e) {
+            if (e.origin === 'grid') bought[e.to] = (bought[e.to] || 0) + e.kwh;
+        });
+
+        // What an arrow carries decides its colour: the grid teal, a battery red,
+        // solar yellow. A member's line takes the colour of what it mostly carried.
+        const colourOf = function (e) {
+            if (e.origin === 'grid') return 'grid';
+            if (e.origin === 'battery' || e.battery > e.solar) return 'battery';
+            return 'solar';
+        };
+        const R = 7;
+        const arrow = function (e, isGrid) {
+            const a = pos[e.from], b = pos[e.to];
+            if (!a || !b) return '';
+            const dx = b.x - a.x, dy = b.y - a.y, len = Math.max(1, Math.hypot(dx, dy));
+            // Curved, so A->B and B->A are two arcs rather than one line, and
+            // stopped short of the circles so the arrowhead shows.
+            const ux = dx / len, uy = dy / len;
+            const sx = a.x + ux * R, sy = a.y + uy * R, ex = b.x - ux * (R + 3), ey = b.y - uy * (R + 3);
+            const bend = Math.min(40, len * 0.2);
+            const cx = (sx + ex) / 2 - uy * bend, cy = (sy + ey) / 2 + ux * bend;
+            const c = colourOf(e);
+            const width = isGrid ? 0.8 + 3.2 * e.kwh / maxGrid : 1.2 + 6 * e.kwh / maxShare;
+            const label = e.from + ' -> ' + e.to + ': ' + Math.round(e.kwh).toLocaleString() + ' kWh' +
+                (e.origin === 'building'
+                    ? ' (' + Math.round(e.solar).toLocaleString() + ' solar, ' +
+                      Math.round(e.battery).toLocaleString() + ' battery)' : '');
+            return '<path d="M' + sx.toFixed(1) + ' ' + sy.toFixed(1) + ' Q' + cx.toFixed(1) + ' ' +
+                cy.toFixed(1) + ' ' + ex.toFixed(1) + ' ' + ey.toFixed(1) + '" fill="none" stroke="' +
+                SHARE_COLOURS[c] + '" stroke-opacity="' + (isGrid ? 0.5 : 0.88) +
+                '" stroke-width="' + width.toFixed(1) + '" marker-end="url(#share-arrow-' + c + ')">' +
+                '<title>' + esc(label) + '</title></path>';
+        };
+        // Grid first, underneath; what members share on top.
+        const lines = gridEdges.map(function (e) { return arrow(e, true); }).join('') +
+                      edges.map(function (e) { return arrow(e, false); }).join('');
+
+        const maxOwn = Math.max(1e-6, Object.keys(ownSolar).reduce(function (m, k) {
+            return Math.max(m, ownSolar[k]);
+        }, 0));
+        const fmt = function (v) { return (hourMode ? v.toFixed(1) : Math.round(v).toLocaleString()) + ' kWh'; };
+        const dots = names.map(function (n) {
+            const p = pos[n];
+            if (!p) return '';
+            const kind = kindOf[n] || 'building';
+            const fill = kind === 'grid' ? SHARE_COLOURS.grid
+                : kind === 'battery' ? SHARE_COLOURS.battery
+                : kind === 'pv' ? SHARE_COLOURS.solar
+                : kind === 'charge_point' ? '#34d399' : SHARE_COLOURS.building;
+            const label = kind === 'grid' ? 'Grid' : n;
+            const tip = kind === 'building'
+                ? n + ' ' + when + ': own solar ' + fmt(ownSolar[n] || 0) +
+                  ', from members ' + fmt(received[n] || 0) +
+                  ', from the grid ' + fmt(bought[n] || 0) +
+                  ', gave to members ' + fmt(given[n] || 0)
+                : label;
+            // Own solar, used where it was made: a yellow ring round the member,
+            // wider the more it used. It never leaves the building, so it is
+            // not an arrow - but it is used first, before anything is shared.
+            const own = kind === 'building' ? (ownSolar[n] || 0) : 0;
+            const ring = own > 0
+                ? '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' +
+                  (R + 2 + 7 * own / maxOwn).toFixed(1) + '" fill="' + SHARE_COLOURS.solar +
+                  '" fill-opacity="0.28" stroke="' + SHARE_COLOURS.solar + '" stroke-opacity="0.7"' +
+                  ' stroke-width="1"><title>' + esc(n + ' used ' + fmt(own) + ' of its own solar ' + when) +
+                  '</title></circle>'
+                : '';
+            if (ring) return '<g>' + ring + dotShape(n, p, kind, fill, tip, label) + '</g>';
+            return '<g>' + dotShape(n, p, kind, fill, tip, label) + '</g>';
+        }).join('');
+        function dotShape(n, p, kind, fill, tip, label) {
+            // The grid, a battery and community solar are squares: sources, not members.
+            const shape = kind === 'building'
+                ? '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + R + '"'
+                : '<rect x="' + (p.x - R).toFixed(1) + '" y="' + (p.y - R).toFixed(1) +
+                  '" width="' + (2 * R) + '" height="' + (2 * R) + '" rx="2"';
+            return shape + ' fill="' + fill + '" stroke="#1a1a1e" stroke-width="2">' +
+                '<title>' + esc(tip) + '</title></' + (kind === 'building' ? 'circle' : 'rect') + '>' +
+                '<text x="' + p.x.toFixed(1) + '" y="' + (p.y - R - 11).toFixed(1) +
+                '" text-anchor="middle" fill="#e4e4e7" font-size="12">' + esc(label) + '</text>';
+        }
+        const marker = function (id, colour) {
+            return '<marker id="share-arrow-' + id + '" viewBox="0 0 10 10" refX="8" refY="5" ' +
+                'markerWidth="5" markerHeight="5" orient="auto-start-reverse">' +
+                '<path d="M0 0 L10 5 L0 10 z" fill="' + colour + '"/></marker>';
+        };
+
+        const top = function (map, n) {
+            return Object.keys(map).filter(function (k) { return map[k] > 0.0005; })
+                .sort(function (a, b) { return map[b] - map[a]; }).slice(0, n)
+                .map(function (k) { return '<b>' + esc(k) + '</b> ' + fmt(map[k]); })
+                .join(' &middot; ');
+        };
+        const stale = state.dirty || state.busy;
+        const rank =
+            '<span>Own solar used first: ' + (top(ownSolar, 5) || 'none ' + esc(when)) + '</span>' +
+            (all.length
+                ? '<span>Receives most from members: ' + top(received, 3) + '</span>' +
+                  '<span>Gives most to members: ' + top(given, 3) + '</span>'
+                : '<span>No member gave energy to another ' + esc(when) + ' - that needs ' +
+                  'solar left over after a building has covered itself.</span>');
+        return '<div class="ecom-share-top">' +
+                '<span>' + all.length + ' sharing link' + (all.length === 1 ? '' : 's') +
+                    (all.length > SHARE_MAX_EDGES ? ' &middot; strongest ' + SHARE_MAX_EDGES + ' shown' : '') +
+                    ' &middot; ' + esc(when) +
+                    (stale ? ' &middot; <em>updating…</em>' : '') + '</span>' +
+                toggle +
+            '</div>' +
+            '<svg class="ecom-share-svg' + (stale ? ' is-stale' : '') + '" viewBox="0 0 ' + SHARE_W + ' ' + SHARE_H + '"' +
+                ' role="img" aria-label="Where the members\' energy comes from">' +
+                '<defs>' + marker('solar', SHARE_COLOURS.solar) + marker('battery', SHARE_COLOURS.battery) +
+                    marker('grid', SHARE_COLOURS.grid) + '</defs>' +
+                lines + dots +
+            '</svg>' +
+            '<div class="ecom-share-rank">' + rank +
+                '<span>Buys most from the grid: ' + (top(bought, 3) || '-') + '</span>' +
+            '</div>' +
+            '<span class="ecom-ctl-hint">The yellow ring is a member\'s own solar, used ' +
+                'first and never shared. Arrows show where the rest of its energy came from; ' +
+                'thicker is more. Teal from the grid (on a scale of its own, ' +
+                'it is much larger), yellow solar, red battery - between members or from the ' +
+                'community\'s own. Members are circles, sources squares, where they are on the campus.</span>' +
+            ruleLine;
+    }
     /** Move the clock line to the hour the table is on. */
     function paintProfileCursor() {
         const line = document.getElementById('ecom-prof-now');
@@ -4130,10 +4447,39 @@
         }
 
         const chargerCount = chargePoints().length;
+        // Who gets a member's spare solar first when there is not enough for
+        // everyone short at that hour. It decides the table's lines, not the
+        // optimizer's costs: the optimizer shares however is cheapest.
+        const rule = state.working.sharing_rule || 'order';
+        const sharing =
+            '<div class="ecom-community-assets">' +
+                '<div class="ecom-ctl-subhead">Sharing between members</div>' +
+                '<div class="ecom-ctl-span">' +
+                    [['order', 'In list order'],
+                     ['proportional', 'In proportion to need'],
+                     ['nearest', 'Nearest first']].map(function (r) {
+                        return '<button type="button" class="ecom-ctl-chip' +
+                            (r[0] === rule ? ' is-on' : '') + '" data-sharing-rule="' +
+                            r[0] + '">' + r[1] + '</button>';
+                    }).join('') +
+                '</div>' +
+                '<span class="ecom-ctl-hint">' +
+                    (rule === 'proportional'
+                        ? 'A member\'s spare solar is split between everyone short ' +
+                          'at that hour, in proportion to how short each one is.'
+                        : rule === 'nearest'
+                            ? 'A member\'s spare solar goes to the closest building ' +
+                              'first, then the next closest, until it runs out.'
+                            : 'A member\'s spare solar goes to the members in the ' +
+                              'order they are listed, until it runs out.') +
+                    ' The total shared is the same; only who gets it changes.' +
+                '</span>' +
+            '</div>';
         return group('community', 'Community',
             Math.round(arrayKw).toLocaleString() + ' kW · ' +
                 (store ? Math.round(store.capacity).toLocaleString() : '0') + ' kWh · ' +
                 chargerCount + (chargerCount === 1 ? ' charger' : ' chargers'),
+            sharing +
             solar +
             '<div class="ecom-community-assets">' +
                 '<div class="ecom-ctl-subhead">Battery</div>' +
@@ -5413,8 +5759,10 @@
     const CLICK_ATTRIBUTES = [
         'data-group', 'data-action', 'data-kind',
         'data-members', 'data-roofs', 'data-cp-remove', 'data-story-step', 'data-price-mode',
+        'data-sharing-rule',
         'data-optimizer-span', 'data-optimizer-mode', 'data-peak', 'data-kit', 'data-roofowner',
-        'data-shared', 'data-profile-mode', 'data-profile-focus',
+        'data-shared', 'data-profile-mode', 'data-profile-focus', 'data-profile-view',
+        'data-share-mode',
         'data-param-info', 'data-charger-step'
     ];
     const CLICK_SELECTOR = CLICK_ATTRIBUTES.map(function (name) {
@@ -5441,6 +5789,16 @@
 
         const priceMode = el.getAttribute('data-price-mode');
         if (priceMode) { setPriceMode(priceMode); return; }
+
+        // How members share a surplus. Re-dispatches: the lines change.
+        const sharingRule = el.getAttribute('data-sharing-rule');
+        if (sharingRule) {
+            if ((state.working.sharing_rule || 'order') === sharingRule) return;
+            state.working.sharing_rule = sharingRule;
+            render();
+            markDirty();
+            return;
+        }
 
         const action = el.getAttribute('data-action');
         if (action === 'kpi-more') {
@@ -5617,6 +5975,22 @@
         if (infoFor) {
             event.preventDefault();       // it sits inside the constant's label
             state.paramInfo[infoFor] = !state.paramInfo[infoFor];
+            render();
+            return;
+        }
+
+        // The sharing graph: the whole period, or the hour on the table.
+        const shareMode = el.getAttribute('data-share-mode');
+        if (shareMode) {
+            state.shareMode = shareMode === 'hour' ? 'hour' : 'period';
+            paintProfiles();
+            return;
+        }
+
+        // Load profiles or the sharing graph, in the same card.
+        const profileView = el.getAttribute('data-profile-view');
+        if (profileView) {
+            state.profileView = profileView === 'sharing' ? 'sharing' : 'profiles';
             render();
             return;
         }

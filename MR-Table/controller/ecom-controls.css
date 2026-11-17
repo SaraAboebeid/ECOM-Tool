@@ -2398,6 +2398,42 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
 
 .ecom-kpi-tiles--compare { margin-bottom: 0; }
 
+/* Load profiles | Sharing, in the card's head. */
+.ecom-view-tabs { margin-left: 0.2rem; }
+.ecom-view-tabs button { font-size: 0.85rem; }
+
+/* The sharing graph. */
+.ecom-share-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3rem 0.8rem;
+    font-size: 0.78rem;
+    color: #a1a1aa;
+    margin-bottom: 0.3rem;
+}
+.ecom-share-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 330px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid #2f2f35;
+    border-radius: 8px;
+    transition: opacity 0.2s ease;
+}
+.ecom-share-svg.is-stale { opacity: 0.5; }
+.ecom-share-rank {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0.45rem 0 0.2rem;
+    font-size: 0.8rem;
+    color: #c4c4cc;
+}
+.ecom-share-rank b { color: #fdf4ff; }
+
 /* An optimizer column with no figures yet: "calculating…" or "run the
    optimizer", said quietly so it does not read as a value. */
 .ecom-kpi-cell.is-pending {
