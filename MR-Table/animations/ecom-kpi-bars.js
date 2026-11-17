@@ -15,8 +15,6 @@
 //
 //   bottom   Self-sufficiency   share of demand met on campus
 //            Self-consumption   share of the solar used on campus
-//            Grid import        kWh a day
-//            Grid export        kWh a day
 //
 // Why not only the results: measured one change at a time, a charge point
 // moves grid import by about 15 kWh a day against 62,000 and self-sufficiency
@@ -92,13 +90,10 @@
             // generation it manages to use.
             { key: 'self_consumption', label: 'Self-consumption', unit: 'of solar used on campus',
               kind: 'share', colour: COLOURS.pv, better: 'up',
-              value: function (k) { return k.self_consumption || 0; } },
-            { key: 'import', label: 'Grid import', unit: 'kWh / day', kind: 'amount',
-              colour: COLOURS.grid, better: 'down',
-              value: function (k, days) { return (k.total_grid_import || 0) / days; } },
-            { key: 'export', label: 'Grid export', unit: 'kWh / day', kind: 'amount',
-              colour: COLOURS.pv, better: 'up',
-              value: function (k, days) { return (k.total_grid_export || 0) / days; } }
+              value: function (k) { return k.self_consumption || 0; } }
+            // Grid import and export were here. The optimization bar reports
+            // both, from the optimizer, and two different figures for the same
+            // thing on one screen read as an error.
         ]
     };
 

@@ -259,6 +259,9 @@
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
             pairs: ['building>building', 'building>battery',
                     'building>charge_point', 'building>grid'],
+            // Only the solar in them: a building's line can carry the battery
+            // too, and red has its own step next.
+            carries: ['pv'],
             hour: 'building',
             fallbackHour: 12,
             flows: 'still',
@@ -272,38 +275,21 @@
                   'the line is drawn heavier than its share - it is small, and ' +
                   'it is the one thing on the table that moves energy through ' +
                   'time rather than across the campus.',
-            figure: 'Red - out of the store',
+            figure: 'Red - out of the store. Press Finish to build your own.',
             kinds: ['building', 'pv', 'grid', 'battery', 'charge_point'],
-            pairs: ['battery>building'],
+            // From the battery itself, and the battery's share of what a
+            // building passes on.
+            pairs: ['battery>building', 'battery>charge_point',
+                    'building>building', 'building>charge_point', 'building>grid'],
+            carries: ['battery'],
             hour: 'battery',
             fallbackHour: 19,
             flows: 'still',
             uniform: false
-        },
-        {
-            key: 'community',
-            title: 'The energy community',
-            line: 'Now they are connected. A surplus roof supplies a ' +
-                  'neighbour before anyone buys from outside, the battery ' +
-                  'covers the evening, the car charges overnight, and the ' +
-                  'grid makes up whatever is left.',
-            figure: 'Press Finish to set it running',
-            kinds: null,          // everything
-            pairs: null,          // every flow, peer to peer included
-            // The hour is still held. This step is the community being wired
-            // up - the connections drawn one at a time and left standing - and
-            // the day only starts when the presenter says so. Forty-one lines
-            // appearing at once and immediately flowing is the moment the
-            // picture stops being followable.
-            hour: 19,
-            flows: 'still',
-            // The footprints hand back to their readings here: at a held hour
-            // the shading is a still reading of that hour, which is a fair
-            // thing to look at while the lines are being drawn.
-            uniform: false,
-            // Sound waits for the table to be running.
-            sound: false
         }
+        // There used to be a ninth step, the whole community wired up and set
+        // running. The introduction now ends on the last colour and hands the
+        // table back empty: the point is for the room to build one themselves.
     ];
 
     const state = {
@@ -797,15 +783,25 @@
      */
     function ownerBadge(name, kind, label, noun) {
         const rented = sharesAssets(name, kind);
-        return '<button type="button" class="ecom-roof-owner' + (rented ? ' is-rented' : '') +
-            '" data-roofowner="' + esc(name) + '" data-owner-kind="' + kind + '" title="' +
-            esc(rented
-                ? 'Rented: the community uses this building\'s ' + noun + ', although ' +
-                  'the building is not a member. Tap to give them back to it.'
-                : 'Own use: the ' + noun + ' serve this building, which is not in ' +
-                  'the community. Tap to rent them to the community.') + '">' +
-            esc(label) + ' · ' + (rented ? 'rented' : 'own use') +
-        '</button>';
+        // A two-sided switch, both choices always visible, the one in force lit:
+        // a single tag read as a status, and nobody guessed it could be tapped.
+        const side = function (value, text, on, title) {
+            return '<button type="button" class="ecom-owner-side' + (on ? ' is-on' : '') +
+                (value === 'rented' ? ' is-rented' : ' is-own') + '"' +
+                ' data-roofowner="' + esc(name) + '" data-owner-kind="' + kind + '"' +
+                ' data-owner-set="' + value + '" aria-pressed="' + on + '"' +
+                ' title="' + esc(title) + '">' + esc(text) + '</button>';
+        };
+        return '<span class="ecom-owner-switch is-' + kind + '" role="group"' +
+                ' aria-label="' + esc(label) + ': own use or rented">' +
+            '<span class="ecom-owner-kind">' + esc(label) + '</span>' +
+            side('own', 'Own use', !rented,
+                 'The ' + noun + ' serve this building only. It is not in the ' +
+                 'community, so they do not count in the KPIs or the optimization.') +
+            side('rented', 'Rented', rented,
+                 'The community rents the ' + noun + ': they feed the members, ' +
+                 'count in the KPIs and the optimization, and their lines are drawn.') +
+        '</span>';
     }
 
     /** The definition to dispatch: the working copy minus excluded members. */
@@ -1758,7 +1754,13 @@
             // introduction has a step for the charge point: the example gets
             // one at the P-hus, where Community's "Add a charger" would put it.
             if (!chargePoints().length) addChargePoint();
-            return buildSpec();
+            const spec = buildSpec();
+            // The red step needs red lines. AWL's battery belongs to AWL, so it
+            // only ever discharges into AWL itself - a line with no length,
+            // drawn nowhere. In the example it is a store the whole community
+            // shares, so its discharge runs out to the members and can be seen.
+            (spec.batteries || []).forEach(function (b) { b.attached = false; });
+            return spec;
         } finally {
             state.working = keptWorking;
             state.excluded = keptExcluded;
@@ -1775,20 +1777,34 @@
      * campus is empty - so the introduction needs a full one to show. It gets
      * one of its own, and the members list in the panel stays as it was.
      */
+    // Skip pressed while the introduction is still being prepared: when the
+    // example arrives it is dropped instead of shown.
+    let storySkipRequested = false;
+
     function loadStoryLayer(index) {
         if (storyLoading) return;
         storyLoading = true;
+        storySkipRequested = false;
         const spec = storyExampleSpec();
         setStatus('Preparing the introduction…', 'busy');
+        render();          // the strip shows "Preparing" with a Skip button
         postJson('/api/mr/layer?baseline=true', spec).then(function (layer) {
+            if (storySkipRequested) return;
             storyLayer = layer;
             storySpec = spec;
             channel.postMessage({ type: 'ecom_layer', layer: layer });
         }, function (error) {
+            if (storySkipRequested) return;
             setStatus('The introduction could not load the campus: ' +
                       String(error.message || error), 'error');
         }).then(function () {
             storyLoading = false;
+            if (storySkipRequested) {
+                storySkipRequested = false;
+                setStatus('No members yet - tick a building to start.', 'idle');
+                render();
+                return;
+            }
             if (storyLayer) storyGo(index);
         });
     }
@@ -1870,7 +1886,10 @@
             filters: (step.kinds === null && step.pairs === null)
                 ? null
                 : { kinds: step.kinds || NODE_KINDS.map(function (k) { return k.key; }),
-                    pairs: step.pairs }
+                    pairs: step.pairs,
+                    // What the lines may carry - solar for the yellow step,
+                    // battery for the red - so a step shows its own colour only.
+                    carries: step.carries || null }
         });
 
         // A held hour for every step but the last, so only one thing is moving
@@ -1955,7 +1974,8 @@
                     (running
                         ? esc(step.title) + ' &middot; ' + (state.story + 1) +
                           ' of ' + STORY.length
-                        : 'Introduction') +
+                        : (storyLoading && !storySkipRequested)
+                            ? 'Preparing the introduction…' : 'Introduction') +
                 '</span>' +
                 '<div class="ecom-ctl-dots">' + dots + '</div>' +
             '</div>' +
@@ -1968,7 +1988,14 @@
                           'ecom-ctl-btn--primary" data-action="story-next">' +
                           (last ? 'Finish' : 'Next') + '</button>' +
                       '<button type="button" class="ecom-ctl-btn" ' +
-                          'data-action="story-exit">Exit</button>'
+                          'data-action="story-exit" title="Leave the introduction ' +
+                          'and start building a community">Skip</button>'
+                    : (storyLoading && !storySkipRequested)
+                    // Skippable before it has even started.
+                    ? '<button type="button" class="ecom-ctl-btn" disabled>Preparing…</button>' +
+                      '<button type="button" class="ecom-ctl-btn" ' +
+                          'data-action="story-skip" title="Do not show the ' +
+                          'introduction - start building a community">Skip</button>'
                     : '<button type="button" class="ecom-ctl-btn ' +
                           'ecom-ctl-btn--primary" data-action="story-next">' +
                           'Start the introduction</button>') +
@@ -2386,7 +2413,66 @@
     let optimizerRun = 0;
 
     /** Tell the display what the optimizer is doing and what it found. */
+    // ------------------------------------------------- calculating, on the panel
+    //
+    // The optimizer is quick - seconds for a day - but a cost figure that just
+    // changes, with nothing to say it was being worked out, reads as a number
+    // that was always there. A pill on the panel says a calculation is under
+    // way and which scenario it is on, then that it is done. Attached to the
+    // body, so a re-render of the panel cannot take it away mid-run.
+    let optBusyEl = null;
+    let optBusyTimer = null;
+
+    function paintOptimizerBusy() {
+        if (!document.body || !document.createElement) return;
+        if (!optBusyEl) {
+            optBusyEl = document.createElement('div');
+            optBusyEl.className = 'ecom-opt-busy';
+            optBusyEl.setAttribute('role', 'status');
+            optBusyEl.setAttribute('aria-live', 'polite');
+            document.body.appendChild(optBusyEl);
+        }
+        if (optBusyTimer !== null) { clearTimeout(optBusyTimer); optBusyTimer = null; }
+
+        const running = state.optimizerRunning;
+        const job = state.optimizer;
+        if (running) {
+            const modes = state.optimizerMode === 'both' ? ['separate', 'community'] : [running];
+            const step = modes.indexOf(running) + 1;
+            const seconds = state.optimizerStartedAt
+                ? Math.max(0, Math.round((Date.now() - state.optimizerStartedAt) / 1000)) : 0;
+            optBusyEl.innerHTML =
+                '<span class="ecom-busy-spinner"></span>' +
+                '<span><b>Calculating costs</b> - ' +
+                    esc((OPTIMIZER_MODE_LABELS[running] || running).toLowerCase()) +
+                    (modes.length > 1 ? ' (' + step + ' of ' + modes.length + ')' : '') +
+                    '&hellip; <span class="ecom-opt-busy-time">' + seconds + ' s</span></span>';
+            optBusyEl.className = 'ecom-opt-busy is-on';
+            return;
+        }
+        if (job && job.status === 'error') {
+            optBusyEl.innerHTML = '<span class="ecom-opt-busy-mark is-error">!</span>' +
+                '<span>Cost calculation failed - ' + esc(job.error || 'see the Optimizer tab') + '</span>';
+            optBusyEl.className = 'ecom-opt-busy is-on is-error';
+            optBusyTimer = setTimeout(function () { optBusyEl.className = 'ecom-opt-busy'; }, 6000);
+            return;
+        }
+        if (Object.keys(state.optimizerResults || {}).length &&
+            optBusyEl.classList.contains('is-on')) {
+            optBusyEl.innerHTML = '<span class="ecom-opt-busy-mark">&#10003;</span>' +
+                '<span>Costs updated - see the table</span>';
+            optBusyEl.className = 'ecom-opt-busy is-on is-done';
+            optBusyTimer = setTimeout(function () { optBusyEl.className = 'ecom-opt-busy'; }, 2500);
+            return;
+        }
+        optBusyEl.className = 'ecom-opt-busy';
+    }
+
     function broadcastOptimization() {
+        paintOptimizerBusy();
+        // The KPI panel carries the optimizer's figures too: "calculating…"
+        // while it runs, its numbers when it is done.
+        renderKpis();
         const job = state.optimizer;
         channel.postMessage({
             type: 'ecom_optimization',
@@ -2839,6 +2925,15 @@
             '</div>';
     }
 
+    /** A tile with one of the optimizer's costs, or what it is waiting for. */
+    function optTile(mode, label, tone, hint) {
+        const result = (state.optimizerResults || {})[mode];
+        const cost = result && result.totals ? result.totals.overall_cost : null;
+        const value = state.optimizerRunning ? 'calculating…'
+            : cost != null ? Math.round(cost).toLocaleString() + ' SEK' : 'not run yet';
+        return tile('payments', value, label, tone, hint);
+    }
+
     function row(icon, label, value, hint) {
         return '' +
             '<div class="ecom-kpi-row"' + (hint ? ' title="' + esc(hint) + '"' : '') + '>' +
@@ -2878,20 +2973,6 @@
         return Math.max(0, 1 - (kpis.total_grid_export || 0) / kpis.total_pv_gen) * 100;
     }
 
-    /** Energy bought less energy sold, at the scenario's own prices.
-     *
-     * Energy only - no grid fees, no tax - and only when both prices are fixed:
-     * a price that varies by the hour needs the hourly flows, which the layer
-     * does not carry per hour in a form worth summing here.
-     */
-    function gridBill(kpis) {
-        const grid = (state.working && state.working.grid) || {};
-        const buy = (grid.buying_price || {}).fixed;
-        const sell = (grid.selling_price || {}).fixed;
-        if (!kpis || buy == null || sell == null) return null;
-        return (kpis.total_grid_import || 0) * buy - (kpis.total_grid_export || 0) * sell;
-    }
-
     function signed(value, digits) {
         const text = Math.abs(value).toLocaleString(undefined, {
             minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -2912,17 +2993,6 @@
               get: function (x) { return x.self_sufficiency; },
               show: function (v) { return v.toFixed(1) + ' %'; },
               diff: function (d) { return signed(d, 1) + ' pts'; } },
-            { label: 'Grid import', tone: 'cyan', better: 'down',
-              hint: 'Drawn from the grid over the period.',
-              get: function (x) { return x.total_grid_import; },
-              show: function (v) { return (v / 1000).toFixed(2) + ' MWh'; },
-              diff: function (d) { return signed(d / 1000, 2) + ' MWh'; } },
-            { label: 'Grid export', tone: 'blue', better: null,
-              hint: 'Sent back to the grid. Less is more solar used on site, ' +
-                    'and also less sold.',
-              get: function (x) { return x.total_grid_export; },
-              show: function (v) { return (v / 1000).toFixed(2) + ' MWh'; },
-              diff: function (d) { return signed(d / 1000, 2) + ' MWh'; } },
             { label: 'Solar used on site', tone: 'yellow', better: 'up',
               hint: 'Share of the solar that was used on the campus rather than ' +
                     'exported - including what a building lent to its neighbours.',
@@ -2935,27 +3005,65 @@
               get: function (x) { return x.peak_grid_import_kw; },
               show: function (v) { return Math.round(v).toLocaleString() + ' kW'; },
               diff: function (d) { return signed(d, 0) + ' kW'; } },
-            { label: 'Grid bill', tone: 'green', better: 'down',
-              hint: 'Energy bought less energy sold, at this scenario\'s prices. ' +
-                    'Energy only: no grid fees and no tax.',
-              get: gridBill,
+            // From the optimizer, not the dispatch: its community run against
+            // its "as today" run, which are the same two rows this table has.
+            // Grid import and export used to be the dispatch's figures here,
+            // beside the optimizer's own on the table - two numbers for one
+            // thing. And the grid bill could only be worked out at a fixed
+            // price, so with spot prices it was always a dash.
+            { label: 'Grid import (optimized)', tone: 'cyan', better: 'down', opt: 'grid_import_kwh',
+              hint: 'Bought from the grid, as the optimizer runs the buildings.',
+              show: function (v) { return Math.round(v).toLocaleString() + ' kWh'; },
+              diff: function (d) { return signed(d, 0) + ' kWh'; } },
+            { label: 'Grid export (optimized)', tone: 'blue', better: null, opt: 'grid_export_kwh',
+              hint: 'Sold to the grid, as the optimizer runs the buildings.',
+              show: function (v) { return Math.round(v).toLocaleString() + ' kWh'; },
+              diff: function (d) { return signed(d, 0) + ' kWh'; } },
+            { label: 'Cost (optimized)', tone: 'green', better: 'down', opt: 'overall_cost',
+              hint: 'Everything the optimizer counts: electricity, grid fees and ' +
+                    'subscription, tax and VAT. The difference is what being a ' +
+                    'community saves.',
               show: function (v) { return Math.round(v).toLocaleString() + ' SEK'; },
               diff: function (d) { return signed(d, 0) + ' SEK'; } }
         ];
+
+        // The optimizer's two runs, if both have come back.
+        const optWith = (state.optimizerResults || {}).community;
+        const optAlone = (state.optimizerResults || {}).separate;
+        const optTotals = function (result, key) {
+            return result && result.totals ? result.totals[key] : undefined;
+        };
 
         // One column per measure, one row per way of running the same buildings:
         // with the community, each on its own, and what the difference is. Side by
         // side the two figures can be read straight across, which two numbers
         // folded into a tile could not.
         const cols = metrics.map(function (m) {
+            const have = function (v) {
+                return v !== null && v !== undefined && isFinite(v);
+            };
+            if (m.opt) {
+                // Not run yet, or running now: say which, rather than a dash.
+                if (state.optimizerRunning) return { m: m, pending: 'calculating…' };
+                const a = optTotals(optWith, m.opt);
+                const b = optTotals(optAlone, m.opt);
+                if (!have(a)) return { m: m, pending: 'run the optimizer' };
+                const out = { m: m, mine: m.show(a) };
+                if (have(b)) {
+                    const d = a - b;
+                    const same = Math.abs(d) < 0.5;
+                    out.theirs = m.show(b);
+                    out.diff = same ? 'no difference' : m.diff(d);
+                    out.verdict = same || m.better === null ? 'neutral'
+                        : ((d > 0) === (m.better === 'up') ? 'good' : 'bad');
+                }
+                return out;
+            }
             // The baseline's peak comes from its own sub-object, the rest from
             // its kpis; fold the peak in so every getter reads one shape.
             const mine = m.get(k);
             const theirs = m.get(Object.assign({}, bk,
                 { peak_grid_import_kw: base.peak_grid_import_kw }));
-            const have = function (v) {
-                return v !== null && v !== undefined && isFinite(v);
-            };
 
             if (!have(mine)) {
                 // Not "N/A": that reads as a fault. The usual reason is simply
@@ -2989,6 +3097,13 @@
         const row = function (name, cls, pick) {
             return '<div class="ecom-kpi-rowhead ' + cls + '">' + name + '</div>' +
                 cols.map(function (c) {
+                    if (c.pending) {
+                        // Said once, in the first row; the others stay quiet.
+                        return cell(cls + ' is-pending', c.m.tone,
+                                    cls === 'is-with' ? esc(c.pending) : '',
+                                    'The optimizer works these out. Make a change ' +
+                                    'or press Run in the Optimizer tab.');
+                    }
                     if (c.none) {
                         return cell(cls, c.m.tone, '&ndash;',
                                     'Nothing to measure for this in the community.');
@@ -3060,10 +3175,12 @@
                      'Everything the member buildings consumed over the period.') +
                 tile('wb_sunny', mwh(k.total_pv_gen), 'PV generated', 'yellow',
                      'What the roof arrays produced.') +
-                tile('south', mwh(k.total_grid_import), 'Grid import', 'cyan',
-                     'Drawn from the grid.') +
-                tile('north', mwh(k.total_grid_export), 'Grid export', 'blue',
-                     'Sent back to the grid.') +
+                // The optimizer's costs in place of the dispatch's grid import
+                // and export - the table shows the optimizer's, so these do too.
+                optTile('community', 'Cost as a community', 'cyan',
+                        'Optimized cost of running the buildings as an energy community.') +
+                optTile('separate', 'Cost as today', 'blue',
+                        'Optimized cost of the same buildings each on its own connection.') +
                 tile('recycling', percent(k.self_consumption), 'Self-consumed', 'green',
                      'Share of what the panels made that the community used itself.') +
             '</div>') +
@@ -4563,18 +4680,22 @@
                  'add or remove one at a time.' +
                  (isMember ? '' : ' The building is not a member: while its ' +
                   'equipment is RENTED the community uses it; by default it serves the building itself.')) +
-            // Who uses the equipment of a building outside the community, once
-            // it has any. OWN USE (the default): the building itself - it is not
-            // a member, so none of it is in the community. RENTED: the community
-            // uses it, and the table draws it on this building.
-            // One per kind, so the panels can be rented while the battery stays
-            // with the building, or the other way round.
-            (!isMember
-                ? (coverage > 0 ? ownerBadge(name, 'pv', 'PV', 'panels') : '') +
-                  (battery ? ownerBadge(name, 'battery', 'Battery', 'battery') : '') +
-                  (chargers.length ? ownerBadge(name, 'charger', 'Chargers', 'chargers') : '')
-                : '') +
             '</div>';
+
+        // Who uses the equipment of a building outside the community, once it
+        // has any - a switch per kind, on a line of its own so it reads as a
+        // choice to make rather than a status. OWN USE (the default): the
+        // building itself, which is not a member, so none of it is in the
+        // community. RENTED: the community uses it, it counts in the KPIs and
+        // the optimization, and the table draws its lines.
+        if (!isMember && (coverage > 0 || battery || chargers.length)) {
+            rows += '<div class="ecom-owner-row">' +
+                '<span class="ecom-owner-lead">Not a member - who uses it?</span>' +
+                (coverage > 0 ? ownerBadge(name, 'pv', 'Solar', 'panels') : '') +
+                (battery ? ownerBadge(name, 'battery', 'Battery', 'battery') : '') +
+                (chargers.length ? ownerBadge(name, 'charger', 'Chargers', 'chargers') : '') +
+            '</div>';
+        }
 
         if (coverage > 0 && roofArea(b) > 0) {
             rows += sizer('pv', 'wb_sunny', 'Roof', Math.min(coverage, MAX_ROOF_COVERAGE),
@@ -5328,11 +5449,19 @@
             return;
         }
         if (action === 'story-next') {
+            // Started again after a Skip while the example is still on its way:
+            // let that load carry on rather than ignoring the press.
+            if (state.story < 0 && storyLoading && storySkipRequested) {
+                storySkipRequested = false;
+                render();
+                return;
+            }
             storyGo(state.story + 1 >= STORY.length ? -1 : state.story + 1);
             return;
         }
         if (action === 'story-back') { storyGo(Math.max(0, state.story - 1)); return; }
         if (action === 'story-exit') { storyGo(-1); return; }
+        if (action === 'story-skip') { storySkipRequested = true; render(); return; }
         if (action === 'apply') { applyNow(); return; }
 
         // Jump to the busiest hour or the busiest day of a measured year.
@@ -5461,8 +5590,12 @@
         if (roofOwner) {
             const ownerKind = el.getAttribute('data-owner-kind') || 'pv';
             const key = ownerKind + ':' + roofOwner;
-            if (state.rented[key]) delete state.rented[key];
-            else state.rented[key] = true;
+            // A side of the switch sets that side; anything else flips it.
+            const want = el.getAttribute('data-owner-set');
+            const rent = want ? want === 'rented' : !state.rented[key];
+            if (!!state.rented[key] === rent) return;     // already that way
+            if (rent) state.rented[key] = true;
+            else delete state.rented[key];
             render();
             markDirty();
             return;

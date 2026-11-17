@@ -1018,6 +1018,57 @@
     color: #eab308;
 }
 
+/* Own use / Rented for each kind of equipment on a building outside the
+   community: a two-sided switch on a line of its own under the row, both
+   choices always showing and the one in force lit, so it reads as something
+   to choose rather than a label. */
+.ecom-owner-row {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.7rem;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.15rem 0.3rem 0.4rem 1.8rem;
+}
+.ecom-owner-lead {
+    font-size: 0.78rem;
+    color: #a1a1aa;
+}
+.ecom-owner-switch {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid #52525b;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #232327;
+    font-size: 0.8rem;
+}
+.ecom-owner-kind {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.55rem;
+    border-right: 1px solid #3f3f46;
+    font-weight: 600;
+}
+.ecom-owner-switch.is-pv .ecom-owner-kind { color: #e9f27a; }
+.ecom-owner-switch.is-battery .ecom-owner-kind { color: #ffa585; }
+.ecom-owner-switch.is-charger .ecom-owner-kind { color: #8ff0c8; }
+.ecom-owner-side {
+    padding: 0.32rem 0.7rem;
+    border: none;
+    background: transparent;
+    color: #8b8b93;
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.ecom-owner-side + .ecom-owner-side { border-left: 1px solid #3f3f46; }
+.ecom-owner-side:hover:not(.is-on) { background: #2f2f35; color: #e4e4e7; }
+.ecom-owner-side.is-on.is-own { background: #3f3f46; color: #fafafa; font-weight: 600; }
+.ecom-owner-side.is-on.is-rented { background: rgba(234, 179, 8, 0.22); color: #fde047; font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) {
     .ecom-kit { transition: none; }
 }
@@ -1604,6 +1655,48 @@
 @keyframes ecomSpin {
     to { transform: rotate(360deg); }
 }
+
+/* "Calculating costs" while the optimizer runs: bottom centre of the panel,
+   above everything, in the optimizer's violet so it is not mistaken for the
+   dispatch's own spinner. */
+.ecom-opt-busy {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
+    border: 1px solid rgba(167, 139, 250, 0.6);
+    border-radius: 999px;
+    background: rgba(30, 27, 46, 0.96);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(167, 139, 250, 0.25);
+    color: #ede9fe;
+    font-size: 0.9rem;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 12px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.ecom-opt-busy.is-on { opacity: 1; transform: translate(-50%, 0); }
+.ecom-opt-busy .ecom-busy-spinner { border-top-color: #a78bfa; }
+.ecom-opt-busy b { color: #c4b5fd; }
+.ecom-opt-busy-time { color: #a1a1aa; font-variant-numeric: tabular-nums; }
+.ecom-opt-busy-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #4ade80;
+    color: #052e16;
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+.ecom-opt-busy-mark.is-error { background: #f87171; color: #450a0a; }
+.ecom-opt-busy.is-done { border-color: rgba(74, 222, 128, 0.6); }
+.ecom-opt-busy.is-error { border-color: rgba(248, 113, 113, 0.7); }
 
 /* The projector runs unattended; a reader who cannot see motion still gets
    the text, and the spinner simply stops. */
@@ -2304,6 +2397,15 @@ body:has(#main-panel.ecom-mode) > header h1 { font-size: 1.35rem; }
 .ecom-kpi-compare-head b { color: #e4e4e7; font-weight: 600; }
 
 .ecom-kpi-tiles--compare { margin-bottom: 0; }
+
+/* An optimizer column with no figures yet: "calculating…" or "run the
+   optimizer", said quietly so it does not read as a value. */
+.ecom-kpi-cell.is-pending {
+    color: #8b8b93 !important;
+    font-style: italic;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
 
 .ecom-kpi-cmp {
     padding: 0.5rem 0.7rem 0.55rem;

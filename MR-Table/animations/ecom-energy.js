@@ -3464,6 +3464,14 @@
             }
         }
 
+        // What the lines may carry, by colour: the introduction's yellow step
+        // shows only solar and its red step only the battery, even on a line
+        // from a building that carries both at that hour.
+        const carries = filters.carries || null;
+        if (carries && carries.length) {
+            flowTests.push(['in', ['get', 'kind'], ['literal', carries]]);
+        }
+
         map.setFilter(NODE_LAYER_ID, ['all'].concat(nodeTests));
         map.setFilter(SOLAR_LAYER_ID, ['all'].concat(solarTests));
         applyHaloVisibility(kinds);
