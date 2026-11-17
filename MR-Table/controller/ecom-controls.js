@@ -1819,7 +1819,9 @@
             storyLoading = false;
             if (storySkipRequested) {
                 storySkipRequested = false;
-                setStatus('No members yet - tick a building to start.', 'idle');
+                // Buildings ticked while the example loaded already have their
+                // own dispatch and status; only an empty panel needs this line.
+                if (!memberCount()) setStatus('No members yet - tick a building to start.', 'idle');
                 render();
                 return;
             }
