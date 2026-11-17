@@ -47,9 +47,18 @@ _lock = threading.Lock()
 _cache: dict[str, list[float]] = {}
 
 
+# Shipped with the backend, for a checkout that has no Data/ folder beside it
+# (the interactive_map repo carries the backend but not the measurements).
+_BUNDLED_DIR = Path(__file__).resolve().parents[2] / "data" / "pv"
+
+
 def data_dir() -> Path:
     override = os.environ.get("ECOM_PV_DIR")
-    return Path(override).expanduser() if override else _DEFAULT_DIR
+    if override:
+        return Path(override).expanduser()
+    if _DEFAULT_DIR.is_dir():
+        return _DEFAULT_DIR
+    return _BUNDLED_DIR
 
 
 def _entry_for(plant_name: str) -> Optional[dict]:

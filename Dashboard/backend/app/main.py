@@ -369,6 +369,8 @@ def preview(spec: CommunitySpec) -> dict:
 
 
 SPOT_PRICE_DIR = Path(__file__).resolve().parents[3] / "Data" / "prices"
+# Shipped with the backend, for a checkout with no Data/ folder beside it.
+SPOT_PRICE_BUNDLED = Path(__file__).resolve().parents[1] / "data" / "prices"
 
 
 @app.get("/api/prices/se3/{year}")
@@ -380,6 +382,8 @@ def spot_prices(year: int) -> dict:
     so the prices follow the demand year instead of staying on 2022.
     """
     path = SPOT_PRICE_DIR / f"se3_spot_{year}.csv"
+    if not path.is_file():
+        path = SPOT_PRICE_BUNDLED / f"se3_spot_{year}.csv"
     if not path.is_file():
         raise HTTPException(status_code=404,
                             detail=f"no spot prices for {year}; run "
